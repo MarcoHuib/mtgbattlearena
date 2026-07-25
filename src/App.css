@@ -712,11 +712,7 @@
 }
 
 .player-controls__quick button,
-.player-controls__quick input,
-.player-controls__token-toggle,
-.token-form input,
-.token-form select,
-.token-form button {
+.player-controls__quick input {
   width: 100%;
   min-height: 31px;
   padding: 4px 6px;
@@ -782,35 +778,6 @@
   margin-bottom: 7px;
 }
 
-.token-form {
-  display: grid;
-  gap: 7px;
-  padding: 9px;
-  border: 1px solid rgb(215 182 111 / 20%);
-  border-radius: 7px;
-  background: rgb(0 0 0 / 16%);
-}
-
-.token-form label {
-  display: grid;
-  gap: 3px;
-  color: var(--muted);
-  font-size: 8px;
-  text-align: left;
-}
-
-.token-form__stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.token-form button[type="submit"] {
-  color: #142016;
-  background: var(--gold-bright);
-  font-weight: 800;
-}
-
 .button--rail {
   color: #b8c8bd;
   border-color: rgb(255 255 255 / 9%);
@@ -849,6 +816,7 @@
 }
 
 .zone {
+  position: relative;
   min-width: 0;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -887,7 +855,27 @@ html.card-drag-active .zone--drop-target {
 }
 
 .zone__label strong {
+  margin-left: auto;
   color: rgb(225 235 228 / 70%);
+}
+
+.zone__menu-trigger {
+  width: 25px;
+  height: 22px;
+  margin-left: 3px;
+  padding: 0;
+  color: rgb(225 235 228 / 75%);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.zone__menu-trigger:hover,
+.zone__menu-trigger:focus-visible {
+  color: var(--gold-bright);
+  background: rgb(255 255 255 / 8%);
 }
 
 .zone__cards {
@@ -1345,19 +1333,6 @@ html.card-pointer-active .card.card--tapped {
   font-size: 11px;
 }
 
-.card__state {
-  position: absolute;
-  top: 5px;
-  left: 5px;
-  padding: 3px 5px;
-  border-radius: 999px;
-  color: #102017;
-  background: var(--gold-bright);
-  font-size: 6px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
 .card__counters {
   max-width: calc(100% - 8px);
   position: absolute;
@@ -1383,7 +1358,7 @@ html.card-pointer-active .card.card--tapped {
 
 .card-action-layer {
   position: fixed;
-  z-index: 190;
+  z-index: 6000;
   inset: 0;
 }
 
@@ -2035,5 +2010,470 @@ html.card-pointer-active .card.card--tapped {
 
   .card--tapped:hover {
     transform: rotate(90deg);
+  }
+}
+
+.zone-browser-layer {
+  position: fixed;
+  z-index: 4000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.5rem, 2vw, 2rem);
+  background: rgb(1 10 8 / 78%);
+  backdrop-filter: blur(8px);
+}
+
+.zone-action-layer {
+  position: fixed;
+  z-index: 6100;
+  inset: 0;
+}
+
+.zone-action-menu {
+  position: fixed;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  padding: 0.45rem;
+  color: #edf1ee;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.75rem;
+  background: rgb(35 41 38 / 98%);
+  box-shadow: 0 1.1rem 3rem rgb(0 0 0 / 58%);
+}
+
+.zone-action-menu > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.55rem 0.65rem;
+  color: var(--gold-bright);
+}
+
+.zone-action-menu > header button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: transparent;
+  font-size: 1.35rem;
+}
+
+.zone-action-menu > button,
+.zone-action-menu__amount > button {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  color: inherit;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.zone-action-menu > button > span:first-child {
+  width: 1.35rem;
+  color: #d5ded8;
+  font-size: 1.3rem;
+  text-align: center;
+}
+
+.zone-action-menu > button > span:last-child:not(:first-child) {
+  margin-left: auto;
+}
+
+.zone-action-menu > button:hover,
+.zone-action-menu > button:focus-visible,
+.zone-action-menu__amount > button:hover,
+.zone-action-menu__amount > button:focus-visible {
+  color: #fff;
+  background: rgb(255 255 255 / 11%);
+}
+
+.zone-action-menu__separator {
+  height: 1px;
+  margin: 0.4rem -0.45rem;
+  background: rgb(255 255 255 / 14%);
+}
+
+.zone-action-menu__amount {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem 0.55rem 2.7rem;
+}
+
+.zone-action-menu__amount label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #bdc8c1;
+  font-size: 0.75rem;
+}
+
+.zone-action-menu__amount input {
+  width: 3.5rem;
+  min-height: 2.25rem;
+  padding: 0.3rem;
+  color: #fff;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 0.4rem;
+  background: rgb(0 0 0 / 22%);
+  text-align: center;
+}
+
+.zone-action-menu__amount > button {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgb(255 255 255 / 10%);
+  font-size: 0.75rem;
+}
+
+.zone-action-menu__tokens {
+  max-height: min(52vh, 430px);
+  overflow: auto;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.4rem 0.2rem 0.2rem 2rem;
+}
+
+.zone-action-menu__tokens > button {
+  min-height: 4.25rem;
+  display: grid;
+  grid-template-columns: 3.1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: rgb(0 0 0 / 13%);
+  text-align: left;
+}
+
+.zone-action-menu__tokens > button:hover,
+.zone-action-menu__tokens > button:focus-visible {
+  border-color: rgb(221 184 103 / 55%);
+  background: rgb(221 184 103 / 10%);
+}
+
+.zone-action-menu__tokens img,
+.zone-action-menu__token-fallback {
+  width: 3.1rem;
+  height: 3.8rem;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 0.3rem;
+  background: #17251e;
+}
+
+.zone-action-menu__tokens > button > span:last-child {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.zone-action-menu__tokens strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-action-menu__tokens small {
+  color: var(--gold-bright);
+}
+
+.zone-action-menu__tokens p {
+  margin: 0;
+  padding: 0.85rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.zone-browser {
+  width: min(1180px, 96vw);
+  height: min(850px, 92vh);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  color: var(--paper);
+  border: 1px solid rgb(221 184 103 / 55%);
+  border-radius: 1rem;
+  background: linear-gradient(rgb(8 36 27 / 96%), rgb(3 20 15 / 98%));
+  box-shadow: 0 2rem 6rem rgb(0 0 0 / 58%);
+}
+
+.zone-browser > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.zone-browser h2 {
+  margin: 0.15rem 0 0;
+}
+
+.zone-browser > header button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  font-size: 1.6rem;
+}
+
+.zone-browser__tools,
+.zone-browser__library-tools,
+.zone-browser__selection {
+  display: flex;
+  align-items: end;
+  gap: 0.7rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+}
+
+.zone-browser__tools label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: min(220px, 30vw);
+}
+
+.zone-browser__tools input,
+.zone-browser__tools select,
+.zone-browser__selection select,
+.card-group-overlay input,
+.selection-toolbar__group input,
+.card-action-menu__attachment select {
+  min-height: 2.3rem;
+  padding: 0.4rem 0.55rem;
+  color: var(--paper);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 0.45rem;
+  background: rgb(0 0 0 / 30%);
+}
+
+.segmented-control,
+.card-group-overlay form,
+.card-group-overlay__actions,
+.card-group-overlay__actions div,
+.selection-toolbar__group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.segmented-control button[aria-pressed="true"] {
+  color: #16251d;
+  background: var(--gold);
+}
+
+.zone-browser__library-tools,
+.zone-browser__selection {
+  align-items: center;
+}
+
+.zone-browser__library-tools input[type="number"] {
+  width: 4.5rem;
+}
+
+.zone-browser__library-tools span {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.zone-browser__selection {
+  background: rgb(221 184 103 / 10%);
+}
+
+.zone-browser__cards {
+  overflow: auto;
+  padding: 1.2rem;
+}
+
+.zone-browser__cards--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  align-content: start;
+  gap: 1rem;
+}
+
+.zone-browser__item {
+  position: relative;
+  min-width: 0;
+  padding: 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+}
+
+.zone-browser__item.is-selected {
+  border-color: var(--gold);
+  background: rgb(221 184 103 / 10%);
+}
+
+.zone-browser__item > label {
+  position: absolute;
+  z-index: 3;
+  top: 0.65rem;
+  left: 0.65rem;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 75%);
+}
+
+.zone-browser__cards--grid .zone-browser__item > .card {
+  width: min(100%, 150px);
+  margin-inline: auto;
+}
+
+.zone-browser__item > div:last-child {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.45rem;
+}
+
+.zone-browser__item span,
+.zone-browser__item small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-browser__cards--list {
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+}
+
+.zone-browser__cards--list .zone-browser__item {
+  display: grid;
+  grid-template-columns: 2rem 3.6rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.zone-browser__cards--list .zone-browser__item > label {
+  position: static;
+}
+
+.zone-browser__cards--list .card {
+  width: 3.6rem;
+}
+
+.zone-browser__empty {
+  grid-column: 1 / -1;
+  place-self: center;
+  color: var(--muted);
+}
+
+.card__attachment,
+.card__attachment-count {
+  position: absolute;
+  z-index: 4;
+  left: 0.25rem;
+  max-width: calc(100% - 0.5rem);
+  padding: 0.18rem 0.3rem;
+  overflow: hidden;
+  color: #fff6d7;
+  border: 1px solid rgb(221 184 103 / 45%);
+  border-radius: 0.3rem;
+  background: rgb(4 24 18 / 90%);
+  font-size: 0.52rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card__attachment {
+  bottom: 0.25rem;
+}
+
+.card__attachment-count {
+  top: 0.25rem;
+  right: 0.25rem;
+  left: auto;
+}
+
+.card-action-menu__attachment {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.card-action-menu__attachment label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.battlefield-card-position--grouped::before {
+  position: absolute;
+  z-index: -1;
+  inset: -0.45rem;
+  content: "";
+  border: 1px dashed rgb(221 184 103 / 68%);
+  border-radius: 0.7rem;
+}
+
+.battlefield-card-position--pile {
+  filter: drop-shadow(7px 7px 0 rgb(6 24 18 / 90%))
+    drop-shadow(13px 13px 0 rgb(221 184 103 / 24%));
+}
+
+.card-group-overlay {
+  position: absolute;
+  z-index: 150;
+  width: min(15rem, 32vw);
+  padding: 0.5rem;
+  transform: translate(-50%, calc(-100% - 5.5rem));
+  border: 1px solid rgb(221 184 103 / 48%);
+  border-radius: 0.55rem;
+  background: rgb(3 21 15 / 92%);
+  box-shadow: 0 0.7rem 1.5rem rgb(0 0 0 / 28%);
+}
+
+.card-group-overlay input {
+  min-width: 0;
+  width: 100%;
+}
+
+.card-group-overlay > span {
+  display: block;
+  margin: 0.3rem 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.card-group-overlay button {
+  padding: 0.3rem 0.4rem;
+  font-size: 0.65rem;
+}
+
+.card-group-overlay__actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .zone-browser__tools {
+    overflow-x: auto;
+  }
+
+  .zone-browser__library-tools {
+    flex-wrap: wrap;
+  }
+
+  .zone-browser__library-tools span {
+    width: 100%;
+    margin-left: 0;
   }
 }

@@ -1,8 +1,16 @@
+import { useState } from "react"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { CardInstance, PlayerId, Zone } from "../../game-core/types"
 import { changeLife } from "../game/gameSlice"
 import { PlayerControls } from "./PlayerControls"
+import { ZoneActionMenu } from "./ZoneActionMenu"
 import { ZoneArea } from "./ZoneArea"
+import { ZoneBrowser } from "./ZoneBrowser"
+
+type BrowsableZone = Extract<
+  Zone,
+  "library" | "graveyard" | "exile" | "command"
+>
 
 type PlayerBoardProps = {
   playerId: PlayerId
@@ -12,6 +20,16 @@ type PlayerBoardProps = {
 export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
   const dispatch = useAppDispatch()
   const game = useAppSelector(state => state.game.present)
+  const [browser, setBrowser] = useState<{
+    zone: BrowsableZone
+    search?: boolean
+    topAmount?: number
+  } | null>(null)
+  const [actionMenu, setActionMenu] = useState<{
+    kind: "library" | "battlefield"
+    point: { x: number; y: number }
+    position?: { x: number; y: number }
+  } | null>(null)
   if (!game) return null
   const player = game.players[playerId]
   const isActivePlayer = game.activePlayerId === playerId
@@ -77,6 +95,9 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
             instances={instancesFor("command")}
             definitions={game.cardDefinitionsById}
             compact
+            onOpen={() => {
+              setBrowser({ zone: "command" })
+            }}
           />
           <ZoneArea
             playerId={playerId}
@@ -85,6 +106,9 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
             instances={instancesFor("exile")}
             definitions={game.cardDefinitionsById}
             compact
+            onOpen={() => {
+              setBrowser({ zone: "exile" })
+            }}
           />
         </div>
         <ZoneArea
@@ -93,6 +117,9 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           title="Battlefield"
           instances={instancesFor("battlefield")}
           definitions={game.cardDefinitionsById}
+          onActions={request => {
+            setActionMenu({ kind: "battlefield", ...request })
+          }}
         />
         <ZoneArea
           playerId={playerId}
@@ -112,6 +139,9 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           instances={instancesFor("library")}
           definitions={game.cardDefinitionsById}
           countOnly
+          onActions={request => {
+            setActionMenu({ kind: "library", ...request })
+          }}
         />
         <ZoneArea
           playerId={playerId}
@@ -120,8 +150,42 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           instances={instancesFor("graveyard")}
           definitions={game.cardDefinitionsById}
           compact
+          onOpen={() => {
+            setBrowser({ zone: "graveyard" })
+          }}
         />
       </aside>
+      {browser ? (
+        <ZoneBrowser
+          playerId={playerId}
+          zone={browser.zone}
+          initialSearch={browser.search}
+          initialTopAmount={browser.topAmount}
+          onClose={() => {
+            setBrowser(null)
+          }}
+        />
+      ) : null}
+      {actionMenu ? (
+        <ZoneActionMenu
+          playerId={playerId}
+          kind={actionMenu.kind}
+          point={actionMenu.point}
+          battlefieldPosition={
+            actionMenu.position ? { ...actionMenu.position, z: 0 } : undefined
+          }
+          onBrowseLibrary={options => {
+            setBrowser({
+              zone: "library",
+              search: options?.search,
+              topAmount: options?.topAmount,
+            })
+          }}
+          onClose={() => {
+            setActionMenu(null)
+          }}
+        />
+      ) : null}
     </section>
   )
 }

@@ -39,7 +39,7 @@ De app kan zonder netwerk hydrateren en spelen zodra app-shell en expliciete
 assets aanwezig zijn. Browseropslag blijft onder beleid van de browser vallen;
 de UI meldt daarom eerlijk of de Storage Persistence API toestemming gaf.
 
-Savegames gebruiken vanaf fase 2 schema 4. De hydrator ondersteunt schema 1–3
+Savegames gebruiken vanaf fase 3 schema 5. De hydrator ondersteunt schema 1–4
 en vult nieuwe velden veilig aan. De Dexie-tabellen zelf hoefden niet
 destructief te wijzigen, omdat het versieerbare savegamerecord als geheel wordt
 opgeslagen.

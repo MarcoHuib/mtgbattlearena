@@ -6,8 +6,10 @@ import type { CardDefinition, CardInstance, Zone } from "../../game-core/types"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
 import { resolveCardImage } from "../../persistence/imageResolver"
 import {
+  attach,
   changeStackOrder,
   copyToken,
+  detach,
   moveGameCard,
   moveGameCards,
   setCounter,
@@ -25,6 +27,7 @@ type CardViewProps = {
   definition: CardDefinition
   compact?: boolean
   displayOnly?: boolean
+  disableDrag?: boolean
 }
 
 const zoneLabels: Record<Zone, string> = {
@@ -139,6 +142,7 @@ export const CardView = ({
   definition,
   compact = false,
   displayOnly = false,
+  disableDrag = false,
 }: CardViewProps) => {
   const dispatch = useAppDispatch()
   const online = useOnlineStatus()
@@ -156,6 +160,7 @@ export const CardView = ({
   const [menuPoint, setMenuPoint] = useState<MenuPoint | null>(null)
   const [pointerHeld, setPointerHeld] = useState(false)
   const [customCounter, setCustomCounter] = useState("")
+  const [attachmentTarget, setAttachmentTarget] = useState("")
   const touchHoldTimer = useRef<number | null>(null)
   const touchStart = useRef<MenuPoint | null>(null)
   const lastPointerWasTouch = useRef(false)
@@ -165,16 +170,26 @@ export const CardView = ({
       : instance.instanceId,
     type: "card",
     data: { instanceId: instance.instanceId },
-    disabled: displayOnly,
+    disabled: displayOnly || disableDrag,
   })
   const cardName = activeFace?.name ?? definition.name
   const cardLabel = `${cardName}, ${zoneLabels[instance.zone]}${
     instance.tapped ? ", getapt" : ""
   }`
   const selectedCardIds = useAppSelector(state => state.ui.selectedCardIds)
-  const gameCards = useAppSelector(state => state.game.present?.cardsById)
+  const game = useAppSelector(state => state.game.present)
+  const gameCards = game?.cardsById
   const selected = selectedCardIds.includes(instance.instanceId)
   const destinationPlayer = instance.controllerId
+  const attachedTarget = instance.attachedTo
+    ? gameCards?.[instance.attachedTo]
+    : undefined
+  const attachedTargetName = attachedTarget
+    ? game?.cardDefinitionsById[attachedTarget.definitionId]?.name
+    : undefined
+  const attachedCards = Object.values(gameCards ?? {}).filter(
+    card => card.attachedTo === instance.instanceId,
+  )
 
   useEffect(() => {
     let active = true
@@ -342,6 +357,7 @@ export const CardView = ({
                   type="button"
                   onClick={() => {
                     dispatch(toggleTap({ instanceId: instance.instanceId }))
+                    setMenuPoint(null)
                   }}
                 >
                   <span>↻</span>
@@ -388,6 +404,64 @@ export const CardView = ({
                   >
                     Naar achteren
                   </button>
+                </div>
+              ) : null}
+              {instance.zone === "battlefield" ? (
+                <div className="card-action-menu__attachment">
+                  <label>
+                    <span>Attachment koppelen</span>
+                    <select
+                      value={attachmentTarget}
+                      onChange={event => {
+                        setAttachmentTarget(event.target.value)
+                      }}
+                    >
+                      <option value="">Kies een permanent…</option>
+                      {(
+                        game?.players[instance.controllerId].zones
+                          .battlefield ?? []
+                      )
+                        .filter(
+                          instanceId => instanceId !== instance.instanceId,
+                        )
+                        .map(instanceId => {
+                          const card = gameCards?.[instanceId]
+                          const targetDefinition = card
+                            ? game?.cardDefinitionsById[card.definitionId]
+                            : undefined
+                          return (
+                            <option key={instanceId} value={instanceId}>
+                              {targetDefinition?.name ?? instanceId}
+                            </option>
+                          )
+                        })}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!attachmentTarget}
+                    onClick={() => {
+                      dispatch(
+                        attach({
+                          attachmentId: instance.instanceId,
+                          targetId: attachmentTarget,
+                        }),
+                      )
+                      setAttachmentTarget("")
+                    }}
+                  >
+                    Koppelen
+                  </button>
+                  {instance.attachedTo ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        dispatch(detach({ attachmentId: instance.instanceId }))
+                      }
+                    >
+                      Losmaken van {attachedTargetName ?? "permanent"}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               {definition.token ? (
@@ -535,7 +609,7 @@ export const CardView = ({
         data-card-name={definition.name}
         tabIndex={0}
         onPointerDownCapture={event => {
-          if (!displayOnly && event.button === 0) {
+          if (!displayOnly && !disableDrag && event.button === 0) {
             lastPointerWasTouch.current = event.pointerType === "touch"
             beginPointerSession(
               event.currentTarget,
@@ -645,7 +719,14 @@ export const CardView = ({
             ))}
           </div>
         ) : null}
-        {instance.tapped ? <span className="card__state">Getapt</span> : null}
+        {attachedTargetName ? (
+          <span className="card__attachment">↳ {attachedTargetName}</span>
+        ) : null}
+        {attachedCards.length > 0 ? (
+          <span className="card__attachment-count">
+            {attachedCards.length} gekoppeld
+          </span>
+        ) : null}
       </article>
       {actionMenu}
     </>

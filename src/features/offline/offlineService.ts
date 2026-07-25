@@ -11,6 +11,23 @@ import { updateOfflinePackage } from "./offlineSlice"
 
 const activeDownloads = new Map<string, AbortController>()
 
+export const offlineAssetFetchUrl = (assetUrl: string): string => {
+  try {
+    const url = new URL(assetUrl)
+    if (url.hostname !== "card-images.archidekt.com") return assetUrl
+    const match =
+      /^\/normal\/(front|back)\/[0-9a-f]\/[0-9a-f]\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jpg$/i.exec(
+        url.pathname,
+      )
+    const hash = url.search.slice(1)
+    if (!match || !/^\d+$/.test(hash)) return assetUrl
+    const [, face, cardId] = match
+    return `/api/import/archidekt/image/${cardId}?face=${face}&hash=${hash}`
+  } catch {
+    return assetUrl
+  }
+}
+
 const persistPackage = async (
   record: OfflineBattlePackage,
   dispatch: (action: ReturnType<typeof updateOfflinePackage>) => void,
@@ -35,7 +52,7 @@ const fetchAsset = async (
     timeout.abort()
   }, 15_000)
   try {
-    const response = await fetch(asset.url, {
+    const response = await fetch(offlineAssetFetchUrl(asset.url), {
       mode: "cors",
       signal: AbortSignal.any([signal, timeout.signal]),
     })

@@ -12,13 +12,15 @@ export type BattlefieldPosition = {
 export type TurnPhase =
   "beginning" | "precombat-main" | "combat" | "postcombat-main" | "ending"
 
-export type TokenKind = "creature" | "treasure" | "food" | "clue" | "copy"
+export type TokenKind =
+  "creature" | "treasure" | "food" | "clue" | "copy" | "emblem" | "other"
 
 export type TokenDefinition = {
   kind: TokenKind
   name: string
   power?: number
   toughness?: number
+  source?: "deck" | "custom"
 }
 
 export type CardFaceDefinition = {
@@ -45,6 +47,7 @@ export type CardDefinition = {
   imageRefs: CardImageRef[]
   oracleText?: string
   typeLine?: string
+  manaValue?: number
   token?: TokenDefinition
 }
 
@@ -101,8 +104,17 @@ export type OpeningHandState = {
   kept: boolean
 }
 
+export type CardGroup = {
+  id: string
+  playerId: PlayerId
+  name?: string
+  cardIds: string[]
+  position: BattlefieldPosition
+  collapsed: boolean
+}
+
 export type GameState = {
-  schemaVersion: 4
+  schemaVersion: 5
   id: string
   title: string
   createdAt: string
@@ -115,6 +127,7 @@ export type GameState = {
   players: Record<PlayerId, PlayerState>
   cardDefinitionsById: Record<string, CardDefinition>
   cardsById: Record<string, CardInstance>
+  groupsById: Record<string, CardGroup>
 }
 
 export type GameHistoryState = {
@@ -156,7 +169,7 @@ export type OfflineBattlePackage = {
 }
 
 export type PersistedGame = {
-  schemaVersion: 4
+  schemaVersion: 5
   game: GameState
   past: GameState[]
   future: GameState[]

@@ -4,9 +4,14 @@ import type {
   CardImageRef,
   DeckCard,
   ImportedDeck,
+  TokenKind,
 } from "../game-core/types"
 import { DeckImportError } from "./errors"
-import { archidektDeckSchema, type ArchidektDeckResponse } from "./schema"
+import {
+  archidektDeckSchema,
+  archidektTokenSearchSchema,
+  type ArchidektDeckResponse,
+} from "./schema"
 
 const valueId = (value: string | number | undefined) =>
   value === undefined ? undefined : String(value)
@@ -34,8 +39,64 @@ const scryfallImageUrl = (scryfallId: string, faceIndex?: number): string => {
   return `https://cards.scryfall.io/normal/${face}/${scryfallId[0]}/${scryfallId[1]}/${encodeURIComponent(scryfallId)}.jpg`
 }
 
+const archidektImageUrl = (
+  scryfallId: string,
+  imageHash: string | number,
+): string =>
+  `https://card-images.archidekt.com/normal/front/${scryfallId[0]}/${scryfallId[1]}/${encodeURIComponent(scryfallId)}.jpg?${encodeURIComponent(String(imageHash))}`
+
+const numericStat = (value: string | null | undefined) => {
+  if (!value || !/^-?\d+$/.test(value)) return undefined
+  return Number(value)
+}
+
+const tokenKindFor = (name: string, types: readonly string[]): TokenKind => {
+  const normalizedName = name.toLowerCase()
+  if (normalizedName === "treasure") return "treasure"
+  if (normalizedName === "food") return "food"
+  if (normalizedName === "clue") return "clue"
+  if (normalizedName === "copy") return "copy"
+  if (types.some(type => type.toLowerCase() === "emblem")) return "emblem"
+  if (types.some(type => type.toLowerCase() === "creature")) return "creature"
+  return "other"
+}
+
+const knownKeywordExtras: Record<string, CardDefinition> = {
+  foretell: {
+    id: "207b3d62-2541-4a51-8152-3c54218ab6f7",
+    name: "Foretell",
+    scryfallId: "207b3d62-2541-4a51-8152-3c54218ab6f7",
+    layout: "token",
+    faces: [
+      {
+        name: "Foretell",
+        typeLine: "Card",
+        oracleText:
+          "Place foretold cards here. You may cast them later for their foretell cost.",
+        imageUrl:
+          "https://card-images.archidekt.com/normal/front/2/0/207b3d62-2541-4a51-8152-3c54218ab6f7.jpg?1783906140",
+      },
+    ],
+    imageRefs: [
+      {
+        assetKey: "207b3d62-2541-4a51-8152-3c54218ab6f7:0:normal",
+        faceIndex: 0,
+        variant: "normal",
+        url: "https://card-images.archidekt.com/normal/front/2/0/207b3d62-2541-4a51-8152-3c54218ab6f7.jpg?1783906140",
+      },
+    ],
+    typeLine: "Card",
+    token: {
+      kind: "other",
+      name: "Foretell",
+      source: "deck",
+    },
+  },
+}
+
 const toDefinition = (
   item: ArchidektDeckResponse["cards"][number],
+  tokenSource?: "deck",
 ): CardDefinition => {
   const raw = item.card
   const oracle = raw.oracleCard
@@ -62,6 +123,12 @@ const toDefinition = (
       ? scryfallId
       : undefined
   const rawFaces = raw.card_faces ?? oracle?.cardFaces ?? oracle?.faces
+  const archidektFrontImage =
+    imageId &&
+    raw.scryfallImageHash !== null &&
+    raw.scryfallImageHash !== undefined
+      ? archidektImageUrl(imageId, raw.scryfallImageHash)
+      : undefined
   const faces: CardFaceDefinition[] =
     rawFaces && rawFaces.length > 0
       ? rawFaces.map((face, faceIndex) => ({
@@ -85,6 +152,7 @@ const toDefinition = (
             imageUrl:
               raw.imageUri ??
               raw.image_uris?.normal ??
+              archidektFrontImage ??
               (imageId ? scryfallImageUrl(imageId) : undefined),
           },
         ]
@@ -101,6 +169,10 @@ const toDefinition = (
       : [],
   )
 
+  const types = oracle?.types ?? []
+  const isToken =
+    oracle?.layout === "token" ||
+    types.some(type => type.toLowerCase() === "token")
   return {
     id,
     name,
@@ -112,7 +184,66 @@ const toDefinition = (
     imageRefs,
     oracleText: oracle?.text,
     typeLine: typeLineFromParts(oracle ?? {}),
+    manaValue: raw.manaValue ?? raw.cmc ?? oracle?.manaValue ?? oracle?.cmc,
+    token: isToken
+      ? {
+          kind: tokenKindFor(name, types),
+          name,
+          power: numericStat(oracle?.power),
+          toughness: numericStat(oracle?.toughness),
+          source: tokenSource ?? "deck",
+        }
+      : undefined,
   }
+}
+
+export const extractArchidektTokenIds = (rawValue: unknown): string[] => {
+  const result = archidektDeckSchema.safeParse(rawValue)
+  if (!result.success) return []
+  return [
+    ...new Set(
+      result.data.cards.flatMap(item =>
+        (item.card.oracleCard?.tokens ?? []).map(String),
+      ),
+    ),
+  ]
+}
+
+export const deriveArchidektDeckExtras = (
+  rawValue: unknown,
+): CardDefinition[] => {
+  const result = archidektDeckSchema.safeParse(rawValue)
+  if (!result.success) return []
+  const keywords = new Set(
+    result.data.cards.flatMap(item =>
+      (item.card.oracleCard?.keywords ?? []).map(keyword =>
+        keyword.trim().toLowerCase(),
+      ),
+    ),
+  )
+  return [...keywords].flatMap(keyword => {
+    const definition = knownKeywordExtras[keyword]
+    return definition ? [structuredClone(definition)] : []
+  })
+}
+
+export const normalizeArchidektTokens = (
+  rawValue: unknown,
+): CardDefinition[] => {
+  const result = archidektTokenSearchSchema.safeParse(rawValue)
+  if (!result.success) {
+    throw new DeckImportError(
+      "INVALID_RESPONSE",
+      "Archidekt gaf onleesbare tokendata terug.",
+      result.error.issues
+        .slice(0, 5)
+        .map(issue => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; "),
+    )
+  }
+  return result.data.results.map(card =>
+    toDefinition({ quantity: 1, card, categories: [] }, "deck"),
+  )
 }
 
 export const normalizeArchidektDeck = (

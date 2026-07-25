@@ -35,7 +35,7 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern:
-              /^https:\/\/(?:api\.scryfall\.com\/cards\/|cards\.scryfall\.io\/).+/i,
+              /^https:\/\/(?:api\.scryfall\.com\/cards\/|cards\.scryfall\.io\/|card-images\.archidekt\.com\/).+/i,
             handler: "CacheFirst",
             options: {
               cacheName: "mtg-battle-runtime-images-v1",
@@ -57,6 +57,31 @@ export default defineConfig({
   server: {
     open: true,
     proxy: {
+      "/api/import/archidekt/image": {
+        target: "https://card-images.archidekt.com",
+        changeOrigin: true,
+        rewrite: requestPath => {
+          const requestUrl = new URL(requestPath, "http://localhost")
+          const match =
+            /^\/api\/import\/archidekt\/image\/([0-9a-f-]{36})$/i.exec(
+              requestUrl.pathname,
+            )
+          const cardId = match?.[1] ?? ""
+          const face =
+            requestUrl.searchParams.get("face") === "back" ? "back" : "front"
+          const hash = requestUrl.searchParams.get("hash") ?? ""
+          return `/normal/${face}/${cardId[0] ?? ""}/${cardId[1] ?? ""}/${cardId}.jpg?${encodeURIComponent(hash)}`
+        },
+      },
+      "/api/import/archidekt/tokens": {
+        target: "https://archidekt.com",
+        changeOrigin: true,
+        rewrite: requestPath => {
+          const requestUrl = new URL(requestPath, "http://localhost")
+          const ids = requestUrl.searchParams.get("ids") ?? ""
+          return `/api/cards/v2/?oracleCardIds=${encodeURIComponent(ids)}&includeTokens&unique`
+        },
+      },
       "/api/import/archidekt": {
         target: "https://archidekt.com",
         changeOrigin: true,

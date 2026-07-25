@@ -1,5 +1,6 @@
 import type {
   BattlefieldPosition,
+  CardGroup,
   CardInstance,
   DeckSnapshot,
   GameState,
@@ -117,7 +118,7 @@ export const createGame = (
   })
 
   const game: GameState = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: options.createId("game"),
     title: `${decks[0].name} vs. ${decks[1].name}`,
     createdAt: options.now,
@@ -133,6 +134,7 @@ export const createGame = (
     players,
     cardDefinitionsById,
     cardsById,
+    groupsById: {},
   }
 
   return drawOpeningHands(game, 7, options.now)
@@ -283,6 +285,7 @@ export const moveCard = (
     updatedAt: now,
     players: clonePlayersWithZones(game.players),
     cardsById: { ...game.cardsById },
+    groupsById: { ...game.groupsById },
   }
   removeCardFromZones(next, instanceId)
   next.players[playerId].zones[zone].push(instanceId)
@@ -300,6 +303,26 @@ export const moveCard = (
     tapped: zone === "battlefield" ? card.tapped : false,
     isCommander: zone === "command" ? true : card.isCommander,
     position: zone === "battlefield" ? position : undefined,
+    attachedTo:
+      zone === "battlefield" && card.zone === "battlefield"
+        ? card.attachedTo
+        : undefined,
+  }
+  if (zone !== "battlefield") {
+    for (const [otherId, otherCard] of Object.entries(next.cardsById)) {
+      if (otherCard.attachedTo === instanceId) {
+        next.cardsById[otherId] = { ...otherCard, attachedTo: undefined }
+      }
+    }
+    for (const [groupId, group] of Object.entries(next.groupsById)) {
+      if (!group.cardIds.includes(instanceId)) continue
+      const cardIds = group.cardIds.filter(id => id !== instanceId)
+      if (cardIds.length === 0) {
+        next.groupsById = Object.fromEntries(
+          Object.entries(next.groupsById).filter(([id]) => id !== groupId),
+        )
+      } else next.groupsById[groupId] = { ...group, cardIds }
+    }
   }
   return next
 }
@@ -699,6 +722,7 @@ export const createToken = (
           name,
           power: options.power,
           toughness: options.toughness,
+          source: "custom",
         },
       },
     },
@@ -727,6 +751,59 @@ export const createToken = (
             ...game.players[options.playerId].zones.battlefield,
             instanceId,
           ],
+        },
+      },
+    },
+  }
+}
+
+type CreateKnownTokenOptions = {
+  playerId: PlayerId
+  definitionId: string
+  instanceId: string
+  position?: BattlefieldPosition
+  now?: string
+}
+
+export const createKnownToken = (
+  game: GameState,
+  options: CreateKnownTokenOptions,
+): GameState => {
+  const definition = game.cardDefinitionsById[options.definitionId]
+  if (
+    !definition?.token ||
+    game.cardsById[options.instanceId] ||
+    !options.definitionId.startsWith(`${options.playerId}:`)
+  ) {
+    return game
+  }
+  const player = game.players[options.playerId]
+  const instance: CardInstance = {
+    instanceId: options.instanceId,
+    definitionId: options.definitionId,
+    ownerId: options.playerId,
+    controllerId: options.playerId,
+    zone: "battlefield",
+    tapped: false,
+    faceDown: false,
+    activeFaceIndex: 0,
+    counters: {},
+    position: options.position,
+  }
+  return {
+    ...game,
+    updatedAt: options.now ?? new Date().toISOString(),
+    cardsById: {
+      ...game.cardsById,
+      [instance.instanceId]: instance,
+    },
+    players: {
+      ...game.players,
+      [options.playerId]: {
+        ...player,
+        zones: {
+          ...player.zones,
+          battlefield: [...player.zones.battlefield, instance.instanceId],
         },
       },
     },
@@ -779,4 +856,278 @@ export const duplicateToken = (
       },
     },
   }
+}
+
+export const topLibraryCards = (
+  game: GameState,
+  playerId: PlayerId,
+  amount: number,
+): string[] =>
+  game.players[playerId].zones.library
+    .slice(-Math.max(0, Math.floor(amount)))
+    .reverse()
+
+export const moveCardToLibraryPosition = (
+  game: GameState,
+  instanceId: string,
+  playerId: PlayerId,
+  position: "top" | "bottom",
+  now = new Date().toISOString(),
+): GameState => {
+  const moved = moveCard(game, instanceId, playerId, "library", undefined, now)
+  if (moved === game) return game
+  const library = moved.players[playerId].zones.library.filter(
+    id => id !== instanceId,
+  )
+  if (position === "top") library.push(instanceId)
+  else library.unshift(instanceId)
+  return {
+    ...moved,
+    players: {
+      ...moved.players,
+      [playerId]: {
+        ...moved.players[playerId],
+        zones: { ...moved.players[playerId].zones, library },
+      },
+    },
+  }
+}
+
+const attachmentChainContains = (
+  game: GameState,
+  startId: string,
+  soughtId: string,
+): boolean => {
+  const visited = new Set<string>()
+  let currentId: string | undefined = startId
+  while (currentId && !visited.has(currentId)) {
+    if (currentId === soughtId) return true
+    visited.add(currentId)
+    currentId = game.cardsById[currentId]?.attachedTo
+  }
+  return false
+}
+
+export const attachCard = (
+  game: GameState,
+  attachmentId: string,
+  targetId: string,
+  now = new Date().toISOString(),
+): GameState => {
+  const attachment = game.cardsById[attachmentId]
+  const target = game.cardsById[targetId]
+  if (
+    !attachment ||
+    !target ||
+    attachmentId === targetId ||
+    attachment.zone !== "battlefield" ||
+    target.zone !== "battlefield" ||
+    attachment.controllerId !== target.controllerId ||
+    attachmentChainContains(game, targetId, attachmentId)
+  ) {
+    return game
+  }
+  return {
+    ...game,
+    updatedAt: now,
+    cardsById: {
+      ...game.cardsById,
+      [attachmentId]: { ...attachment, attachedTo: targetId },
+    },
+  }
+}
+
+export const detachCard = (
+  game: GameState,
+  attachmentId: string,
+  now = new Date().toISOString(),
+): GameState => {
+  const attachment = game.cardsById[attachmentId]
+  if (!attachment?.attachedTo) return game
+  return {
+    ...game,
+    updatedAt: now,
+    cardsById: {
+      ...game.cardsById,
+      [attachmentId]: { ...attachment, attachedTo: undefined },
+    },
+  }
+}
+
+const groupPositionFor = (
+  game: GameState,
+  cardIds: readonly string[],
+): BattlefieldPosition => {
+  const positions = cardIds.flatMap(id => {
+    const position = game.cardsById[id]?.position
+    return position ? [position] : []
+  })
+  if (positions.length === 0) return { x: 0.5, y: 0.5, z: 1 }
+  return {
+    x: positions.reduce((sum, item) => sum + item.x, 0) / positions.length,
+    y: positions.reduce((sum, item) => sum + item.y, 0) / positions.length,
+    z: Math.max(...positions.map(item => item.z)),
+  }
+}
+
+const removeCardsFromExistingGroups = (
+  groupsById: Record<string, CardGroup>,
+  cardIds: readonly string[],
+) => {
+  const removed = new Set(cardIds)
+  const next: Record<string, CardGroup> = {}
+  for (const [groupId, group] of Object.entries(groupsById)) {
+    const remaining = group.cardIds.filter(id => !removed.has(id))
+    if (remaining.length === 0) continue
+    next[groupId] =
+      remaining.length === group.cardIds.length
+        ? group
+        : { ...group, cardIds: remaining }
+  }
+  return next
+}
+
+export const createCardGroup = (
+  game: GameState,
+  options: {
+    groupId: string
+    playerId: PlayerId
+    cardIds: readonly string[]
+    name?: string
+  },
+  now = new Date().toISOString(),
+): GameState => {
+  if (game.groupsById[options.groupId]) return game
+  const cardIds = [...new Set(options.cardIds)].filter(id => {
+    const card = game.cardsById[id]
+    return (
+      card?.zone === "battlefield" && card.controllerId === options.playerId
+    )
+  })
+  if (cardIds.length < 2) return game
+  const groupsById = removeCardsFromExistingGroups(game.groupsById, cardIds)
+  const normalizedName = options.name?.trim()
+  groupsById[options.groupId] = {
+    id: options.groupId,
+    playerId: options.playerId,
+    name: normalizedName === "" ? undefined : normalizedName,
+    cardIds,
+    position: groupPositionFor(game, cardIds),
+    collapsed: false,
+  }
+  return { ...game, updatedAt: now, groupsById }
+}
+
+export const updateCardGroup = (
+  game: GameState,
+  groupId: string,
+  changes: { name?: string; collapsed?: boolean },
+  now = new Date().toISOString(),
+): GameState => {
+  const group = game.groupsById[groupId]
+  if (!group) return game
+  return {
+    ...game,
+    updatedAt: now,
+    groupsById: {
+      ...game.groupsById,
+      [groupId]: {
+        ...group,
+        name:
+          changes.name === undefined
+            ? group.name
+            : changes.name.trim() || undefined,
+        collapsed: changes.collapsed ?? group.collapsed,
+      },
+    },
+  }
+}
+
+export const moveCardGroup = (
+  game: GameState,
+  groupId: string,
+  position: BattlefieldPosition,
+  now = new Date().toISOString(),
+): GameState => {
+  const group = game.groupsById[groupId]
+  if (!group) return game
+  const deltaX = position.x - group.position.x
+  const deltaY = position.y - group.position.y
+  const deltaZ = position.z - group.position.z
+  const cardsById = { ...game.cardsById }
+  for (const cardId of group.cardIds) {
+    const card = cardsById[cardId]
+    if (card?.zone !== "battlefield") continue
+    const currentPosition = card.position ?? group.position
+    cardsById[cardId] = {
+      ...card,
+      position: {
+        x: Math.max(0, Math.min(1, currentPosition.x + deltaX)),
+        y: Math.max(0, Math.min(1, currentPosition.y + deltaY)),
+        z: Math.max(0, currentPosition.z + deltaZ),
+      },
+    }
+  }
+  return {
+    ...game,
+    updatedAt: now,
+    cardsById,
+    groupsById: {
+      ...game.groupsById,
+      [groupId]: { ...group, position },
+    },
+  }
+}
+
+export const addCardsToGroup = (
+  game: GameState,
+  groupId: string,
+  cardIds: readonly string[],
+  now = new Date().toISOString(),
+): GameState => {
+  const group = game.groupsById[groupId]
+  if (!group) return game
+  const additions = [...new Set(cardIds)].filter(id => {
+    const card = game.cardsById[id]
+    return card?.zone === "battlefield" && card.controllerId === group.playerId
+  })
+  if (additions.length === 0) return game
+  const groupsById = removeCardsFromExistingGroups(game.groupsById, additions)
+  groupsById[groupId] = {
+    ...group,
+    cardIds: [...new Set([...group.cardIds, ...additions])],
+  }
+  return { ...game, updatedAt: now, groupsById }
+}
+
+export const removeCardsFromGroup = (
+  game: GameState,
+  groupId: string,
+  cardIds: readonly string[],
+  now = new Date().toISOString(),
+): GameState => {
+  const group = game.groupsById[groupId]
+  if (!group) return game
+  const removed = new Set(cardIds)
+  const remaining = group.cardIds.filter(id => !removed.has(id))
+  const groupsById = { ...game.groupsById }
+  const nextGroups =
+    remaining.length === 0
+      ? Object.fromEntries(
+          Object.entries(groupsById).filter(([id]) => id !== groupId),
+        )
+      : { ...groupsById, [groupId]: { ...group, cardIds: remaining } }
+  return { ...game, updatedAt: now, groupsById: nextGroups }
+}
+
+export const dissolveCardGroup = (
+  game: GameState,
+  groupId: string,
+  now = new Date().toISOString(),
+): GameState => {
+  if (!game.groupsById[groupId]) return game
+  const groupsById = Object.fromEntries(
+    Object.entries(game.groupsById).filter(([id]) => id !== groupId),
+  )
+  return { ...game, updatedAt: now, groupsById }
 }

@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test"
-import { archidektFixture } from "../src/archidekt/fixtures"
+import {
+  archidektFixture,
+  archidektTokenFixture,
+} from "../src/archidekt/fixtures"
 
 const pixel = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/4cWQGQAAAABJRU5ErkJggg==",
@@ -11,7 +14,19 @@ test("herstelt een gedownloade battle volledig offline", async ({
   context,
 }) => {
   await page.route("**/api/import/archidekt/*", async route => {
-    const deckId = route.request().url().split("/").at(-1)
+    const url = new URL(route.request().url())
+    if (url.pathname.includes("/image/")) {
+      await route.fulfill({ contentType: "image/png", body: pixel })
+      return
+    }
+    if (url.pathname.endsWith("/tokens")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(archidektTokenFixture),
+      })
+      return
+    }
+    const deckId = url.pathname.split("/").at(-1)
     const fixture = structuredClone(archidektFixture)
     if (deckId === "222") {
       const background = fixture.cards[1]
@@ -33,6 +48,13 @@ test("herstelt een gedownloade battle volledig offline", async ({
   })
   await page.route("https://cards.test/**", async route => {
     await route.fulfill({ contentType: "image/png", body: pixel })
+  })
+  await page.route("https://card-images.archidekt.com/**", async route => {
+    await route.fulfill({
+      contentType: "image/png",
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: pixel,
+    })
   })
 
   await page.goto("/")
@@ -174,6 +196,29 @@ test("herstelt een gedownloade battle volledig offline", async ({
     "src",
     "/magic-card-back.webp",
   )
+  await playerOneBoard
+    .getByRole("button", { name: "Library-acties openen" })
+    .click()
+  const libraryActions = page.getByRole("dialog", { name: "Libraryacties" })
+  const libraryActionsBox = await libraryActions.boundingBox()
+  expect(libraryActionsBox?.x).toBeGreaterThanOrEqual(0)
+  expect(
+    (libraryActionsBox?.x ?? 0) + (libraryActionsBox?.width ?? 0),
+  ).toBeLessThanOrEqual(viewport?.width ?? 0)
+  await libraryActions.getByRole("button", { name: /Bekijk library/ }).click()
+  const libraryBrowser = page.getByRole("dialog", {
+    name: "Library bekijken",
+  })
+  await expect(libraryBrowser).toBeVisible()
+  await libraryBrowser.getByLabel("Zoek op kaartnaam").fill("Forest Memory")
+  await expect(libraryBrowser.getByText(/Forest Memory/).first()).toBeVisible()
+  await libraryBrowser.getByRole("button", { name: "Lijst" }).click()
+  await expect(libraryBrowser.locator(".zone-browser__cards")).toHaveClass(
+    /zone-browser__cards--list/,
+  )
+  await page.keyboard.press("Escape")
+  await expect(libraryBrowser).not.toBeVisible()
+
   const hand = playerOneBoard.locator(".zone--hand")
   await expect(hand.locator(".card")).toHaveCount(7)
   const card = hand.locator(".card").first()
@@ -362,8 +407,14 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(battlefieldCard.getByText("+1/+1 ×1")).toBeVisible()
   await page.getByRole("button", { name: "Kaartacties sluiten" }).click()
 
-  await battlefieldCard.dblclick()
+  await battlefieldCard.click({ button: "right" })
+  const tapMenu = page.getByRole("dialog", {
+    name: `Kaartacties voor ${cardName}`,
+  })
+  await tapMenu.getByRole("button", { name: "Tappen" }).click()
+  await expect(tapMenu).not.toBeVisible()
   await expect(battlefieldCard).toHaveClass(/card--tapped/)
+  await expect(battlefieldCard.getByText("Getapt")).toHaveCount(0)
   await page.mouse.move(0, 0)
   await expect
     .poll(() =>
@@ -544,12 +595,20 @@ test("herstelt een gedownloade battle volledig offline", async ({
     playerOneBoard.locator(".commander-tracker").nth(1).getByText("1"),
   ).toBeVisible()
 
-  await playerOneBoard.getByRole("button", { name: "+ Token" }).click()
-  const tokenForm = playerOneBoard.getByRole("form", {
-    name: "Token maken voor Verdant Resolve",
+  await battlefield.click({
+    button: "right",
+    position: { x: 120, y: 120 },
   })
-  await tokenForm.getByLabel("Type").selectOption("treasure")
-  await tokenForm.getByRole("button", { name: "Token maken" }).click()
+  const battlefieldMenu = page.getByRole("dialog", {
+    name: "Battlefieldacties",
+  })
+  await expect(battlefieldMenu).toBeVisible()
+  const battlefieldMenuBox = await battlefieldMenu.boundingBox()
+  expect(battlefieldMenuBox?.y).toBeGreaterThanOrEqual(0)
+  expect(
+    (battlefieldMenuBox?.y ?? 0) + (battlefieldMenuBox?.height ?? 0),
+  ).toBeLessThanOrEqual(viewport?.height ?? 0)
+  await battlefieldMenu.getByRole("button", { name: /Treasure/ }).click()
   const treasureTokens = battlefield.locator(
     '.card[data-card-name="Treasure"]:not([data-dnd-placeholder])',
   )
@@ -640,6 +699,6 @@ test("herstelt een gedownloade battle volledig offline", async ({
     page.locator(`[data-card-name="${cardName}"] img`).first(),
   ).toBeVisible()
   await expect(treasureTokens).toHaveCount(2)
-  await expect(treasureTokens.first().locator(".card__fallback")).toBeVisible()
+  await expect(treasureTokens.first().locator(".card__art img")).toBeVisible()
   await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
 })

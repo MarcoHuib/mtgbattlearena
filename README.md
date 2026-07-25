@@ -90,10 +90,13 @@ npm run preview      # productiebuild lokaal bekijken
 - Elke speler begint met 40 leven en houdt poison, commander tax per commander
   en ontvangen commander damage per commander bij. Partner- en
   Background-decks behouden beide commanders als afzonderlijke instanties.
-- Creature-, Treasure-, Food-, Clue- en Copy-tokens kunnen lokaal worden
-  gemaakt. Naam en eventuele power/toughness zijn handmatig instelbaar;
-  tokens zonder afbeelding gebruiken een volledige tekstuele fallback.
-  Tokens kunnen worden gedupliceerd.
+- De import neemt bekende tokenkaarten uit het deck mee. Rechtermuisklik op
+  lege battlefieldruimte opent **Tafelacties**, waar tokens met hun echte
+  kaartafbeelding vanaf Archidekts kaart-CDN en eventuele power/toughness
+  gekozen worden. Tokens kunnen vervolgens worden gedupliceerd; oudere
+  fallbacktokens blijven leesbaar. De Foretell-helper wordt daarnaast afgeleid
+  uit het gevalideerde deckkeyword, omdat Archidekt die niet als gewone
+  token-ID terugstuurt.
 - Naast snelle `+1/+1`- en `-1/-1`-acties ondersteunt het kaartmenu vrij
   benoemde counters met verhogen en verlagen.
 - Alle blijvende fase-2-gegevens vallen onder dezelfde undo/redo- en
@@ -103,10 +106,38 @@ npm run preview      # productiebuild lokaal bekijken
 ### Belangrijkste bediening
 
 - Slepen: kaart of geselecteerde groep definitief verplaatsen.
+
+## Fase 3 — zonebeheer, attachments en groepen
+
+- Library, graveyard, exile en command zone hebben een toegankelijke
+  zonebrowser. Deze biedt grid- en lijstweergave, zoeken op naam, typefilter,
+  sorteren op naam of mana value en multiselect voor veilige zoneacties.
+- De library blijft als compacte stapel op tafel. In de browser kun je bewust
+  de bovenste X kaarten bekijken, kaarten bovenop of onderop plaatsen en na een
+  zoekactie expliciet kiezen of je schudt. Zoeken schudt nooit automatisch. Het
+  zonelabel heeft nog maar één actiemenuknop; hetzelfde menu opent met
+  rechtermuisklik op de library.
+- Battlefieldkaarten kunnen handmatig als attachment aan een ander permanent
+  worden gekoppeld. Meerdere attachments zijn mogelijk; cycli worden geweigerd.
+  Als een betrokken kaart het battlefield verlaat, wordt alleen de
+  administratieve koppeling verwijderd. Er worden geen Magic-regels uitgevoerd.
+- Twee of meer geselecteerde permanents kunnen als duurzame, benoemde groep
+  worden opgeslagen. Groepen kunnen worden in- en uitgeklapt, als geheel worden
+  verplaatst, uitgebreid, verkleind en opgeheven. De kaarten blijven gewone
+  battlefieldinstances en vormen geen nieuwe zone.
+- Alle duurzame acties lopen via Redux en doen mee met autosave, undo en redo.
+  Dialogstatus, zoekfilters en tijdelijke browserselecties blijven lokale
+  UI-state.
 - Dubbelklik: battlefieldkaart exact 90 graden tappen/untappen.
 - Rechtermuisklik / `Shift+F10`: volledig kaartactiemenu.
+- Tappen of untappen vanuit het kaartmenu sluit dat menu direct. De
+  tapstatus wordt alleen door de 90°-rotatie getoond, zonder extra badge.
+- Rechtermuisklik op de library: trekken, draw X, mill X, zoeken, top-X bekijken
+  en schudden. De knop met drie puntjes biedt hetzelfde zonder rechtermuisklik.
+- Rechtermuisklik op lege battlefieldruimte: tafelacties en bekende decktokens
+  toevoegen op de aangeklikte positie.
 - Ctrl/⌘-klik of tik: kaart aan de multiselect toevoegen of eruit verwijderen.
-- Spelerrail: trek/mill/schud/untap, poison, commanderregistratie en tokens.
+- Spelerrail: trek/mill/schud/untap, poison en commanderregistratie.
 
 ## Architectuur
 
@@ -134,7 +165,7 @@ genormaliseerd en spelerzones bevatten alleen instance-ID's. Reducers benaderen
 IndexedDB of Cache API nooit direct; listener middleware en services gebruiken
 repositoryinterfaces.
 
-De actuele savegame heeft schemaversie 4. Hydratie migreert versies 1–3 en
+De actuele savegame heeft schemaversie 5. Hydratie migreert versies 1–4 en
 voegt veilige defaults toe voor fase, poison en commanderregistratie. Tokens,
 counters, actieve kaartzijde, vrije posities, tax en damage staan in de
 duurzame game-state; multiselect en lopende pointerinteractie niet.
@@ -164,9 +195,13 @@ UI meldt wanneer de browser geen persistente opslag garandeert.
 ## Import-Worker
 
 `worker/archidekt-worker.js` accepteert alleen
-`GET /api/import/archidekt/:numeriekDeckId`, gebruikt een timeout en
-responslimiet, cachet kort en vertaalt upstreamfouten naar een stabiel
-JSON-formaat. Er zijn geen secrets nodig.
+`GET /api/import/archidekt/:numeriekDeckId` en de begrensde tokenroute
+`GET /api/import/archidekt/tokens?ids=…`. Voor offlinepakketten bestaat ook de
+strikt gevalideerde afbeeldingsroute
+`GET /api/import/archidekt/image/:uuid?face=…&hash=…`; deze kan alleen naar het
+vaste Archidekt-CDN-pad. De Worker gebruikt een timeout en responslimiet, cachet
+kort en vertaalt upstreamfouten naar een stabiel formaat. Er zijn geen secrets
+nodig.
 
 Voor een eigen Cloudflare-account:
 
@@ -181,12 +216,14 @@ Deployment zelf is niet uitgevoerd en vereist eigen Cloudflare-toegang.
 ## Huidige beperkingen
 
 - Alleen openbare Archidekt-decks worden ondersteund.
-- Tokenafbeeldingen en automatische tokenafleiding uit oracletekst zijn nog
-  niet aanwezig; handmatig gemaakte tokens gebruiken bewust een fallback.
+- Bekende tokens worden afgeleid uit de expliciete Archidekt-tokenverwijzingen,
+  niet uit vrije oracletekst. Reeds geïmporteerde decks moeten opnieuw worden
+  geïmporteerd om de nieuwe tokenlijst te krijgen. Als Archidekt geen tokenkaart
+  levert, blijft een functionele lege toestand beschikbaar.
 - Commander damage en tax worden handmatig bijgehouden; de app past geen
   Commander-regels of verliescondities automatisch toe.
 - Multiselect ondersteunt samen verplaatsen en enkele snelle acties, maar nog
-  geen lasso-selectie, attachments of permanente kaartgroepen.
+  geen lasso-selectie.
 - Oudere battles zonder opgeslagen battlefieldposities krijgen eerst een
   veilige automatische spreiding; na verslepen wordt de vrije positie duurzaam
   opgeslagen.

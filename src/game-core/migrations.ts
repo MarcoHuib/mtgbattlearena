@@ -26,7 +26,7 @@ const versionThreeGameSchema = z
     }),
   })
   .loose()
-const currentGameSchema = z
+const versionFourGameSchema = z
   .object({
     schemaVersion: z.literal(4),
     activePlayerId: playerIdSchema,
@@ -42,6 +42,14 @@ const currentGameSchema = z
       "player-1": openingHandStateSchema,
       "player-2": openingHandStateSchema,
     }),
+  })
+  .loose()
+const currentGameSchema = z
+  .object({
+    schemaVersion: z.literal(5),
+    activePlayerId: playerIdSchema,
+    turnNumber: z.number().int().positive(),
+    groupsById: z.record(z.string(), z.unknown()),
   })
   .loose()
 
@@ -66,7 +74,11 @@ const versionThreePersistedGameSchema = persistedGameSchema(
   3,
   versionThreeGameSchema,
 )
-const currentPersistedGameSchema = persistedGameSchema(4, currentGameSchema)
+const versionFourPersistedGameSchema = persistedGameSchema(
+  4,
+  versionFourGameSchema,
+)
+const currentPersistedGameSchema = persistedGameSchema(5, currentGameSchema)
 
 const keptOpeningHands: GameState["openingHands"] = {
   "player-1": { mulliganCount: 0, kept: true },
@@ -110,11 +122,12 @@ const migrateGame = (
 ): GameState =>
   ({
     ...addCommanderDefaults(game),
-    schemaVersion: 4,
+    schemaVersion: 5,
     activePlayerId: game.activePlayerId ?? "player-1",
     turnNumber: game.turnNumber ?? 1,
     phase: "beginning",
     openingHands,
+    groupsById: {},
   }) as GameState
 
 const migrateLegacyRecord = (
@@ -126,7 +139,7 @@ const migrateLegacyRecord = (
   },
   openingHandsFor: (game: LegacyGame) => GameState["openingHands"],
 ): PersistedGame => ({
-  schemaVersion: 4,
+  schemaVersion: 5,
   game: migrateGame(record.game, openingHandsFor(record.game)),
   past: record.past.map(game => migrateGame(game, openingHandsFor(game))),
   future: record.future.map(game => migrateGame(game, openingHandsFor(game))),
@@ -137,9 +150,55 @@ const existingOpeningHands = (game: LegacyGame): GameState["openingHands"] =>
   (game.openingHands as GameState["openingHands"]) ??
   structuredClone(keptOpeningHands)
 
+const migrateVersionFourGame = (game: LegacyGame): GameState => {
+  const cardsById = {
+    ...((game.cardsById as GameState["cardsById"] | undefined) ?? {}),
+  }
+  for (const [instanceId, card] of Object.entries(cardsById)) {
+    const target = card.attachedTo ? cardsById[card.attachedTo] : undefined
+    if (
+      card.attachedTo &&
+      (card.zone !== "battlefield" ||
+        target?.zone !== "battlefield" ||
+        card.attachedTo === instanceId)
+    ) {
+      cardsById[instanceId] = { ...card, attachedTo: undefined }
+    }
+  }
+  for (const [instanceId, card] of Object.entries(cardsById)) {
+    const visited = new Set([instanceId])
+    let targetId = card.attachedTo
+    while (targetId) {
+      if (visited.has(targetId)) {
+        cardsById[instanceId] = { ...card, attachedTo: undefined }
+        break
+      }
+      visited.add(targetId)
+      targetId = cardsById[targetId]?.attachedTo
+    }
+  }
+  return {
+    ...(game as unknown as Omit<GameState, "schemaVersion" | "groupsById">),
+    schemaVersion: 5,
+    cardsById,
+    groupsById: {},
+  }
+}
+
 export const hydratePersistedGame = (value: unknown): PersistedGame => {
   const current = currentPersistedGameSchema.safeParse(value)
   if (current.success) return current.data as PersistedGame
+
+  const versionFour = versionFourPersistedGameSchema.safeParse(value)
+  if (versionFour.success) {
+    return {
+      schemaVersion: 5,
+      game: migrateVersionFourGame(versionFour.data.game),
+      past: versionFour.data.past.map(migrateVersionFourGame),
+      future: versionFour.data.future.map(migrateVersionFourGame),
+      savedAt: versionFour.data.savedAt,
+    }
+  }
 
   const versionThree = versionThreePersistedGameSchema.safeParse(value)
   if (versionThree.success) {

@@ -1,6 +1,11 @@
 import { commanderDefinitions, deckCardCount } from "../game-core/decks"
-import { normalizeArchidektDeck } from "./adapter"
-import { archidektFixture } from "./fixtures"
+import {
+  deriveArchidektDeckExtras,
+  extractArchidektTokenIds,
+  normalizeArchidektDeck,
+  normalizeArchidektTokens,
+} from "./adapter"
+import { archidektFixture, archidektTokenFixture } from "./fixtures"
 
 describe("normalizeArchidektDeck", () => {
   it("ondersteunt de huidige Archidekt-vorm met naam en types in oracleCard", () => {
@@ -43,7 +48,7 @@ describe("normalizeArchidektDeck", () => {
       typeLine: "Creature — Rat",
     })
     expect(deck.definitions[0]?.imageRefs[0]?.url).toBe(
-      "https://cards.scryfall.io/normal/front/6/d/6dccdaba-7504-4df6-a079-d7fe450934ab.jpg",
+      "https://card-images.archidekt.com/normal/front/6/d/6dccdaba-7504-4df6-a079-d7fe450934ab.jpg?1783919017",
     )
     expect(deck.cards[0]?.isCommander).toBe(true)
   })
@@ -83,5 +88,30 @@ describe("normalizeArchidektDeck", () => {
     ]
     const deck = normalizeArchidektDeck(fixture, "12345")
     expect(deck.definitions[1]?.imageRefs).toHaveLength(2)
+  })
+
+  it("extraheert bekende tokens en normaliseert hun kaartafbeeldingen", () => {
+    expect(extractArchidektTokenIds(archidektFixture)).toEqual(["21038"])
+
+    const [treasure] = normalizeArchidektTokens(archidektTokenFixture)
+    expect(treasure).toMatchObject({
+      name: "Treasure",
+      token: {
+        kind: "treasure",
+        name: "Treasure",
+        source: "deck",
+      },
+    })
+    expect(treasure?.imageRefs[0]?.url).toBe(
+      "https://card-images.archidekt.com/normal/front/f/9/f909bd95-58a1-4299-9570-87724145fc85.jpg?1783902798",
+    )
+    const [foretell] = deriveArchidektDeckExtras(archidektFixture)
+    expect(foretell).toMatchObject({
+      name: "Foretell",
+      token: { source: "deck" },
+    })
+    expect(foretell?.imageRefs[0]?.url).toBe(
+      "https://card-images.archidekt.com/normal/front/2/0/207b3d62-2541-4a51-8152-3c54218ab6f7.jpg?1783906140",
+    )
   })
 })

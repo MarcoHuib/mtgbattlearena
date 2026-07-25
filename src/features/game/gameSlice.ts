@@ -1,19 +1,28 @@
 import { createSlice, current, type PayloadAction } from "@reduxjs/toolkit"
 import {
+  addCardsToGroup,
   advancePhase,
   advanceTurn,
+  attachCard,
   changeCommanderDamage,
   changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
+  createCardGroup,
+  createKnownToken,
   createToken,
+  detachCard,
+  dissolveCardGroup,
   drawCards,
   duplicateToken,
   keepOpeningHand,
   millCards,
   moveCard,
+  moveCardGroup,
+  moveCardToLibraryPosition,
   moveCards,
   mulliganOpeningHand,
+  removeCardsFromGroup,
   seededRandom,
   setCardCounter,
   setCardStackOrder,
@@ -22,6 +31,7 @@ import {
   toggleCardTapped,
   toggleCardsTapped,
   untapAllCards,
+  updateCardGroup,
 } from "../../game-core/game"
 import type {
   BattlefieldPosition,
@@ -106,6 +116,95 @@ export const gameSlice = createSlice({
       }>,
     ) {
       applyGameChange(state, game => moveCards(game, action.payload.moves))
+    },
+    moveCardInLibrary(
+      state,
+      action: PayloadAction<{
+        instanceId: string
+        playerId: PlayerId
+        position: "top" | "bottom"
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        moveCardToLibraryPosition(
+          game,
+          action.payload.instanceId,
+          action.payload.playerId,
+          action.payload.position,
+        ),
+      )
+    },
+    attach(
+      state,
+      action: PayloadAction<{ attachmentId: string; targetId: string }>,
+    ) {
+      applyGameChange(state, game =>
+        attachCard(game, action.payload.attachmentId, action.payload.targetId),
+      )
+    },
+    detach(state, action: PayloadAction<{ attachmentId: string }>) {
+      applyGameChange(state, game =>
+        detachCard(game, action.payload.attachmentId),
+      )
+    },
+    createGroup(
+      state,
+      action: PayloadAction<{
+        groupId: string
+        playerId: PlayerId
+        cardIds: string[]
+        name?: string
+      }>,
+    ) {
+      applyGameChange(state, game => createCardGroup(game, action.payload))
+    },
+    updateGroup(
+      state,
+      action: PayloadAction<{
+        groupId: string
+        name?: string
+        collapsed?: boolean
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        updateCardGroup(game, action.payload.groupId, action.payload),
+      )
+    },
+    moveGroup(
+      state,
+      action: PayloadAction<{
+        groupId: string
+        position: BattlefieldPosition
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        moveCardGroup(game, action.payload.groupId, action.payload.position),
+      )
+    },
+    addToGroup(
+      state,
+      action: PayloadAction<{ groupId: string; cardIds: string[] }>,
+    ) {
+      applyGameChange(state, game =>
+        addCardsToGroup(game, action.payload.groupId, action.payload.cardIds),
+      )
+    },
+    removeFromGroup(
+      state,
+      action: PayloadAction<{ groupId: string; cardIds: string[] }>,
+    ) {
+      applyGameChange(state, game =>
+        removeCardsFromGroup(
+          game,
+          action.payload.groupId,
+          action.payload.cardIds,
+        ),
+      )
+    },
+    dissolveGroup(state, action: PayloadAction<{ groupId: string }>) {
+      applyGameChange(state, game =>
+        dissolveCardGroup(game, action.payload.groupId),
+      )
     },
     toggleTap(state, action: PayloadAction<{ instanceId: string }>) {
       applyGameChange(state, game =>
@@ -271,6 +370,17 @@ export const gameSlice = createSlice({
         }),
       )
     },
+    addKnownToken(
+      state,
+      action: PayloadAction<{
+        playerId: PlayerId
+        definitionId: string
+        instanceId: string
+        position?: BattlefieldPosition
+      }>,
+    ) {
+      applyGameChange(state, game => createKnownToken(game, action.payload))
+    },
     copyToken(
       state,
       action: PayloadAction<{ instanceId: string; duplicateId: string }>,
@@ -299,7 +409,10 @@ export const gameSlice = createSlice({
 })
 
 export const {
+  addKnownToken,
+  addToGroup,
   addToken,
+  attach,
   changeDamage,
   changeLife,
   changePoison,
@@ -307,16 +420,22 @@ export const {
   changeTax,
   closeBattle,
   copyToken,
+  createGroup,
+  detach,
+  dissolveGroup,
   drawCard,
   hydrateBattle,
   keepHand,
   mill,
   moveCard: moveGameCard,
+  moveCardInLibrary,
   moveCards: moveGameCards,
+  moveGroup,
   mulliganHand,
   nextPhase,
   nextTurn,
   redo,
+  removeFromGroup,
   setCounter,
   shufflePlayerLibrary,
   startGame,
@@ -325,4 +444,5 @@ export const {
   toggleSelectedTap,
   undo,
   untapAll,
+  updateGroup,
 } = gameSlice.actions

@@ -1,28 +1,42 @@
-import { archidektFixture } from "../archidekt/fixtures"
-import { normalizeArchidektDeck } from "../archidekt/adapter"
+import { archidektFixture, archidektTokenFixture } from "../archidekt/fixtures"
+import {
+  normalizeArchidektDeck,
+  normalizeArchidektTokens,
+} from "../archidekt/adapter"
 import { createDeckSnapshot } from "./decks"
 import {
+  addCardsToGroup,
   advancePhase,
   advanceTurn,
+  attachCard,
   changeCommanderDamage,
   changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
   createGame,
+  createCardGroup,
+  createKnownToken,
   createToken,
+  detachCard,
+  dissolveCardGroup,
   duplicateToken,
   keepOpeningHand,
   millCards,
   moveCard,
+  moveCardGroup,
+  moveCardToLibraryPosition,
   moveCards,
   mulliganOpeningHand,
+  removeCardsFromGroup,
   setCardCounter,
   setCardStackOrder,
   shuffle,
   shuffleLibrary,
   switchCardFace,
   toggleCardTapped,
+  topLibraryCards,
   untapAllCards,
+  updateCardGroup,
 } from "./game"
 
 const makeGame = () => {
@@ -320,4 +334,145 @@ describe("game-core", () => {
       )
     },
   )
+
+  it("maakt een bekend decktoken met dezelfde definitie en afbeelding", () => {
+    const imported = normalizeArchidektDeck(archidektFixture, "12345")
+    const definitions = [
+      ...imported.definitions,
+      ...normalizeArchidektTokens(archidektTokenFixture),
+    ]
+    const deck = createDeckSnapshot({ ...imported, definitions }, "tokens")
+    let id = 0
+    const initial = createGame([deck, deck], {
+      random: () => 0.5,
+      createId: prefix => `${prefix}-${(id += 1)}`,
+      now: "2026-01-01T00:00:00.000Z",
+    })
+    const definition = Object.values(initial.cardDefinitionsById).find(
+      item => item.id.startsWith("player-1:") && item.token?.source === "deck",
+    )!
+    const withToken = createKnownToken(initial, {
+      playerId: "player-1",
+      definitionId: definition.id,
+      instanceId: "known-token",
+      position: { x: 0.25, y: 0.75, z: 4 },
+    })
+
+    expect(withToken.cardsById["known-token"]).toMatchObject({
+      definitionId: definition.id,
+      zone: "battlefield",
+      position: { x: 0.25, y: 0.75, z: 4 },
+    })
+    expect(
+      withToken.cardDefinitionsById[definition.id]?.imageRefs[0]?.url,
+    ).toBe(
+      "https://card-images.archidekt.com/normal/front/f/9/f909bd95-58a1-4299-9570-87724145fc85.jpg?1783902798",
+    )
+  })
+
+  it("bekijkt top-X en plaatst kaarten expliciet boven- of onderop", () => {
+    const initial = makeGame()
+    const library = initial.players["player-1"].zones.library
+    expect(topLibraryCards(initial, "player-1", 2)).toEqual(
+      library.slice(-2).reverse(),
+    )
+    const cardId = initial.players["player-1"].zones.hand[0]!
+    const onTop = moveCardToLibraryPosition(initial, cardId, "player-1", "top")
+    expect(onTop.players["player-1"].zones.library.at(-1)).toBe(cardId)
+    const onBottom = moveCardToLibraryPosition(
+      onTop,
+      cardId,
+      "player-1",
+      "bottom",
+    )
+    expect(onBottom.players["player-1"].zones.library[0]).toBe(cardId)
+  })
+
+  it("maakt, wijzigt en verwijdert attachments zonder cycli", () => {
+    const initial = makeGame()
+    const [first, second, third] = initial.players["player-1"].zones.hand
+    const battlefield = moveCards(
+      initial,
+      [first!, second!, third!].map((instanceId, index) => ({
+        instanceId,
+        playerId: "player-1" as const,
+        zone: "battlefield" as const,
+        position: { x: 0.2 + index * 0.2, y: 0.4, z: index },
+      })),
+    )
+    const firstAttached = attachCard(battlefield, first!, second!)
+    const multiple = attachCard(firstAttached, third!, second!)
+    const changed = attachCard(multiple, first!, third!)
+    const cycle = attachCard(changed, third!, first!)
+    expect(multiple.cardsById[first!]?.attachedTo).toBe(second)
+    expect(multiple.cardsById[third!]?.attachedTo).toBe(second)
+    expect(changed.cardsById[first!]?.attachedTo).toBe(third)
+    expect(cycle).toBe(changed)
+    expect(
+      detachCard(changed, first!).cardsById[first!]?.attachedTo,
+    ).toBeUndefined()
+  })
+
+  it("ruimt attachment- en groepsverwijzingen op wanneer een kaart vertrekt", () => {
+    const initial = makeGame()
+    const [first, second] = initial.players["player-1"].zones.hand
+    const battlefield = moveCards(
+      initial,
+      [first!, second!].map((instanceId, index) => ({
+        instanceId,
+        playerId: "player-1" as const,
+        zone: "battlefield" as const,
+        position: { x: 0.3 + index * 0.2, y: 0.5, z: index },
+      })),
+    )
+    const attached = attachCard(battlefield, first!, second!)
+    const grouped = createCardGroup(attached, {
+      groupId: "group",
+      playerId: "player-1",
+      cardIds: [first!, second!],
+    })
+    const moved = moveCard(grouped, second!, "player-1", "graveyard")
+    expect(moved.cardsById[first!]?.attachedTo).toBeUndefined()
+    expect(moved.groupsById.group?.cardIds).toEqual([first])
+  })
+
+  it("beheert duurzame groepen en verplaatst kaarten gezamenlijk", () => {
+    const initial = makeGame()
+    const [first, second, third] = initial.players["player-1"].zones.hand
+    const battlefield = moveCards(
+      initial,
+      [first!, second!, third!].map((instanceId, index) => ({
+        instanceId,
+        playerId: "player-1" as const,
+        zone: "battlefield" as const,
+        position: { x: 0.2 + index * 0.1, y: 0.4, z: index + 1 },
+      })),
+    )
+    const created = createCardGroup(battlefield, {
+      groupId: "lands",
+      playerId: "player-1",
+      cardIds: [first!, second!],
+      name: "Lands",
+    })
+    const expanded = addCardsToGroup(created, "lands", [third!])
+    const named = updateCardGroup(expanded, "lands", {
+      name: "Mana",
+      collapsed: true,
+    })
+    const moved = moveCardGroup(named, "lands", {
+      x: 0.7,
+      y: 0.7,
+      z: 10,
+    })
+    const reduced = removeCardsFromGroup(moved, "lands", [third!])
+    const dissolved = dissolveCardGroup(reduced, "lands")
+    expect(named.groupsById.lands).toMatchObject({
+      name: "Mana",
+      collapsed: true,
+      cardIds: [first, second, third],
+    })
+    expect(moved.cardsById[first!]?.position?.x).toBeGreaterThan(0.5)
+    expect(reduced.groupsById.lands?.cardIds).toEqual([first, second])
+    expect(dissolved.groupsById.lands).toBeUndefined()
+  })
 })

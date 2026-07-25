@@ -10,9 +10,9 @@ test("migreert een versie 1-savegame met veilige beurtdefaults", () => {
   }
   const hydrated = hydratePersistedGame(JSON.parse(JSON.stringify(stored)))
   expect(hydrated).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
     game: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: "game",
       activePlayerId: "player-1",
       turnNumber: 1,
@@ -43,9 +43,9 @@ test("hervat een versie 2-battle zonder opnieuw een openingshand te vragen", () 
   }
 
   expect(hydratePersistedGame(stored)).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
     game: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       activePlayerId: "player-2",
       turnNumber: 4,
       phase: "beginning",
@@ -92,9 +92,9 @@ test("migreert versie 3 met commander- en poisondefaults zonder zones te verliez
   }
 
   expect(hydratePersistedGame(stored)).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
     game: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       phase: "beginning",
       players: {
         "player-1": {
@@ -144,6 +144,8 @@ test("behoudt fase-2-data bij serialisatie en hydratatie", () => {
 
   const hydrated = hydratePersistedGame(stored)
   expect(hydrated.game).toMatchObject({
+    schemaVersion: 5,
+    groupsById: {},
     phase: "combat",
     players: {
       "player-1": {
@@ -157,6 +159,49 @@ test("behoudt fase-2-data bij serialisatie en hydratatie", () => {
         counters: { shield: 2 },
         position: { x: 0.42, y: 0.73, z: 9 },
       },
+    },
+  })
+})
+
+test("migreert versie 4 naar groepen en ruimt ongeldige attachments op", () => {
+  const card = {
+    instanceId: "card",
+    definitionId: "definition",
+    ownerId: "player-1",
+    controllerId: "player-1",
+    zone: "graveyard",
+    tapped: false,
+    faceDown: false,
+    activeFaceIndex: 0,
+    counters: {},
+    attachedTo: "missing",
+  }
+  const stored = {
+    schemaVersion: 4,
+    game: {
+      schemaVersion: 4,
+      id: "game",
+      activePlayerId: "player-1",
+      turnNumber: 1,
+      phase: "beginning",
+      openingHands: {
+        "player-1": { mulliganCount: 0, kept: true },
+        "player-2": { mulliganCount: 0, kept: true },
+      },
+      cardsById: { card },
+    },
+    past: [],
+    future: [],
+    savedAt: "2026-01-05T00:00:00.000Z",
+  }
+
+  const hydrated = hydratePersistedGame(stored)
+  expect(hydrated).toMatchObject({
+    schemaVersion: 5,
+    game: {
+      schemaVersion: 5,
+      groupsById: {},
+      cardsById: { card: { attachedTo: undefined } },
     },
   })
 })

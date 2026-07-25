@@ -14,9 +14,40 @@ export default {
     }
 
     const url = new URL(request.url)
+    const isTokenRequest = url.pathname === "/api/import/archidekt/tokens"
+    const imageMatch =
+      /^\/api\/import\/archidekt\/image\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
+        url.pathname,
+      )
+    const imageId = imageMatch?.[1]
+    const imageFace = url.searchParams.get("face")
+    const imageHash = url.searchParams.get("hash")
+    const isImageRequest = imageId !== undefined
+    if (
+      isImageRequest &&
+      ((imageFace !== "front" && imageFace !== "back") ||
+        !imageHash ||
+        !/^\d+$/.test(imageHash))
+    ) {
+      return jsonError(
+        400,
+        "INVALID_IMAGE_REFERENCE",
+        "Ongeldige afbeeldingsverwijzing.",
+      )
+    }
+    const requestedTokenIds = (url.searchParams.get("ids") ?? "").split(",")
+    const tokenIds = isTokenRequest ? [...new Set(requestedTokenIds)] : []
+    if (
+      isTokenRequest &&
+      (tokenIds.length === 0 ||
+        tokenIds.length > 100 ||
+        tokenIds.some(id => !/^\d+$/.test(id)))
+    ) {
+      return jsonError(400, "INVALID_TOKEN_IDS", "Ongeldige token-ID's.")
+    }
     const match = /^\/api\/import\/archidekt\/(\d+)$/.exec(url.pathname)
     const deckId = match?.[1]
-    if (!deckId || deckId === "0") {
+    if (!isTokenRequest && !isImageRequest && (!deckId || deckId === "0")) {
       return jsonError(400, "INVALID_DECK_ID", "Ongeldig deck-ID.")
     }
 
@@ -28,16 +59,18 @@ export default {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
     try {
-      const upstream = await fetch(
-        `https://archidekt.com/api/decks/${deckId}/`,
-        {
-          headers: {
-            Accept: "application/json",
-            "User-Agent": "MTGBattleMode/1.0",
-          },
-          signal: controller.signal,
+      const upstreamUrl = isTokenRequest
+        ? `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`
+        : isImageRequest
+          ? `https://card-images.archidekt.com/normal/${imageFace}/${imageId[0]}/${imageId[1]}/${imageId}.jpg?${imageHash}`
+          : `https://archidekt.com/api/decks/${deckId}/`
+      const upstream = await fetch(upstreamUrl, {
+        headers: {
+          Accept: isImageRequest ? "image/*" : "application/json",
+          "User-Agent": "MTGBattleMode/1.0",
         },
-      )
+        signal: controller.signal,
+      })
       if (upstream.status === 404) {
         return jsonError(404, "NOT_FOUND", "Deck niet gevonden.")
       }
@@ -61,7 +94,9 @@ export default {
       }
       const response = new Response(payload, {
         headers: {
-          "Content-Type": "application/json; charset=utf-8",
+          "Content-Type": isImageRequest
+            ? (upstream.headers.get("Content-Type") ?? "image/jpeg")
+            : "application/json; charset=utf-8",
           "Cache-Control": "public, max-age=120, s-maxage=600",
         },
       })

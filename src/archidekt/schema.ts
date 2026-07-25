@@ -41,6 +41,12 @@ const oracleCardSchema = z
     subTypes: z.array(z.string()).optional(),
     superTypes: z.array(z.string()).optional(),
     layout: z.string().optional(),
+    cmc: z.number().nonnegative().optional(),
+    manaValue: z.number().nonnegative().optional(),
+    power: z.string().nullish(),
+    toughness: z.string().nullish(),
+    keywords: z.array(z.string()).optional(),
+    tokens: z.array(identifierSchema).optional(),
     cardFaces: z.array(cardFaceSchema).optional(),
     faces: z.array(cardFaceSchema).optional(),
   })
@@ -52,10 +58,19 @@ const externalCardSchema = z
     uid: identifierSchema.optional(),
     name: z.string().nullish(),
     displayName: z.string().nullish(),
+    scryfallImageHash: identifierSchema.nullish(),
     oracleCard: oracleCardSchema.optional(),
     imageUri: z.url().nullish(),
     image_uris: z.object({ normal: z.url().nullish() }).loose().nullish(),
     card_faces: z.array(cardFaceSchema).optional(),
+    cmc: z.number().nonnegative().optional(),
+    manaValue: z.number().nonnegative().optional(),
+  })
+  .loose()
+
+export const archidektTokenSearchSchema = z
+  .object({
+    results: z.array(externalCardSchema),
   })
   .loose()
 

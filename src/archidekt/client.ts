@@ -1,9 +1,28 @@
 import type { ImportedDeck } from "../game-core/types"
-import { normalizeArchidektDeck } from "./adapter"
+import {
+  deriveArchidektDeckExtras,
+  extractArchidektTokenIds,
+  normalizeArchidektDeck,
+  normalizeArchidektTokens,
+} from "./adapter"
 import { DeckImportError } from "./errors"
 import { parseArchidektDeckId } from "./url"
 
 const IMPORT_BASE = "/api/import/archidekt"
+
+const withUniqueDefinitions = (
+  deck: ImportedDeck,
+  definitions: ImportedDeck["definitions"],
+): ImportedDeck => ({
+  ...deck,
+  definitions: [
+    ...deck.definitions,
+    ...definitions.filter(
+      candidate =>
+        !deck.definitions.some(definition => definition.id === candidate.id),
+    ),
+  ],
+})
 
 export type DeckImporter = (
   url: string,
@@ -43,7 +62,34 @@ export const importArchidektDeck: DeckImporter = async (url, signal) => {
         "Archidekt is nu niet bereikbaar. Probeer het later opnieuw.",
       )
     }
-    return normalizeArchidektDeck(await response.json(), deckId)
+    const rawDeck: unknown = await response.json()
+    const deck = normalizeArchidektDeck(rawDeck, deckId)
+    const deckWithExtras = withUniqueDefinitions(
+      deck,
+      deriveArchidektDeckExtras(rawDeck),
+    )
+    const tokenIds = extractArchidektTokenIds(rawDeck)
+    if (tokenIds.length === 0) return deckWithExtras
+
+    try {
+      const tokenResponse = await fetch(
+        `${IMPORT_BASE}/tokens?ids=${encodeURIComponent(tokenIds.join(","))}`,
+        {
+          headers: { Accept: "application/json" },
+          signal: combinedSignal,
+        },
+      )
+      if (!tokenResponse.ok) {
+        return deckWithExtras
+      }
+      const tokenDefinitions = normalizeArchidektTokens(
+        await tokenResponse.json(),
+      )
+      return withUniqueDefinitions(deckWithExtras, tokenDefinitions)
+    } catch (error) {
+      if (combinedSignal.aborted) throw error
+      return deckWithExtras
+    }
   } catch (error) {
     if (error instanceof DeckImportError) {
       if (error.details) {

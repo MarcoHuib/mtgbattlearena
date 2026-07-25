@@ -13,6 +13,8 @@ export const archidektFixture = {
           oracleId: "oracle-commander-1",
           typeLine: "Legendary Creature — Serpent",
           text: "You may play an additional land on each of your turns.",
+          keywords: ["Landfall", "Foretell"],
+          tokens: [21_038],
         },
       },
     },
@@ -30,5 +32,30 @@ export const archidektFixture = {
         },
       },
     })),
+  ],
+}
+
+export const archidektTokenFixture = {
+  count: 1,
+  results: [
+    {
+      id: 9001,
+      uid: "f909bd95-58a1-4299-9570-87724145fc85",
+      name: "Treasure",
+      scryfallImageHash: "1783902798",
+      oracleCard: {
+        id: 21_038,
+        uid: "oracle-token-treasure-1",
+        name: "Treasure",
+        layout: "token",
+        power: null,
+        toughness: null,
+        text: "{T}, Sacrifice this artifact: Add one mana of any color.",
+        superTypes: [],
+        types: ["Token", "Artifact"],
+        subTypes: ["Treasure"],
+        faces: [],
+      },
+    },
   ],
 }
