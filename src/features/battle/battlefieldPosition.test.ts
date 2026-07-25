@@ -1,0 +1,104 @@
+import {
+  cardBoundsAtPointer,
+  correctionForRelativePoint,
+  dragCorrectionAfterScale,
+  dragAnchorFromPointer,
+  dragAnchorFromRelativePoint,
+  fallbackBattlefieldPosition,
+  positionFromDrop,
+  relativePointInRectangle,
+  safeBattlefieldPosition,
+} from "./battlefieldPosition"
+
+test("lijnt hetzelfde relatieve grijppunt opnieuw met de pointer uit", () => {
+  const relativePoint = relativePointInRectangle(
+    { left: 100, top: 50, width: 225, height: 150 },
+    { x: 280, y: 140 },
+  )
+
+  expect(relativePoint).toEqual({ x: 0.8, y: 0.6 })
+  expect(
+    correctionForRelativePoint(
+      { left: 400, top: 200, width: 150, height: 100 },
+      { x: 610, y: 290 },
+      relativePoint,
+    ),
+  ).toEqual({ x: 90, y: 30 })
+})
+
+test("houdt een vastgepakt punt onder de cursor wanneer hoverzoom verdwijnt", () => {
+  const correction = dragCorrectionAfterScale(
+    { left: 100, top: 50, width: 225, height: 150 },
+    { x: 280, y: 140 },
+    { x: 1.5, y: 1.5 },
+  )
+
+  expect(correction.x).toBeCloseTo(22.5)
+  expect(correction.y).toBeCloseTo(5)
+})
+
+test("behoudt tijdens slepen exact het vastgepakte punt in de kaart", () => {
+  const anchor = dragAnchorFromPointer(
+    { left: 100, top: 50, width: 150, height: 225 },
+    { x: 130, y: 95 },
+    { x: 1.5, y: 1.5 },
+  )
+
+  expect(anchor).toEqual({
+    offsetX: -30,
+    offsetY: -45,
+    width: 100,
+    height: 150,
+  })
+  expect(cardBoundsAtPointer({ x: 700, y: 400 }, anchor)).toEqual({
+    left: 680,
+    top: 370,
+    width: 100,
+    height: 150,
+  })
+})
+
+test("bouwt een draganker vanuit hetzelfde relatieve grijppunt", () => {
+  const anchor = dragAnchorFromRelativePoint(
+    { left: 400, top: 200, width: 150, height: 100 },
+    { x: 0.8, y: 0.6 },
+  )
+
+  expect(anchor.offsetX).toBeCloseTo(45)
+  expect(anchor.offsetY).toBeCloseTo(10)
+  expect(anchor.width).toBe(150)
+  expect(anchor.height).toBe(100)
+})
+
+test("normaliseert een drop ten opzichte van het battlefield", () => {
+  expect(
+    positionFromDrop(
+      { left: 460, top: 260, width: 80, height: 120 },
+      { left: 100, top: 100, width: 800, height: 400 },
+      4,
+    ),
+  ).toEqual({ x: 0.5, y: 0.55, z: 4 })
+})
+
+test("houdt een gedropte kaart volledig binnen het battlefield", () => {
+  expect(
+    positionFromDrop(
+      { left: 40, top: 30, width: 100, height: 140 },
+      { left: 100, top: 100, width: 500, height: 350 },
+      2,
+    ),
+  ).toEqual({ x: 0.1, y: 0.2, z: 2 })
+})
+
+test("spreidt oude kaarten zonder opgeslagen positie veilig uit", () => {
+  expect(fallbackBattlefieldPosition(0, 4)).toEqual({
+    x: 1 / 6,
+    y: 0.25,
+    z: 1,
+  })
+  expect(safeBattlefieldPosition({ x: 2, y: -1, z: -3 })).toEqual({
+    x: 1,
+    y: 0,
+    z: 0,
+  })
+})

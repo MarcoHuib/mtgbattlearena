@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Battle Mode">
+  <rect width="512" height="512" rx="116" fill="#07110e"/>
+  <path d="M108 68h182c80 0 130 39 130 101 0 44-23 73-60 89 49 14 77 49 77 91 0 65-54 105-144 105H108V68Zm92 75v79h77c31 0 48-15 48-40 0-26-18-39-53-39h-72Zm0 150v86h87c37 0 55-15 55-43 0-29-20-43-60-43h-82Z" fill="#d7b66f"/>
+  <path d="M88 256h336" stroke="#ae5d4f" stroke-width="18" opacity=".8"/>
+</svg>

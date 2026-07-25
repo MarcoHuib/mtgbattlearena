@@ -1,38 +1,90 @@
 import type { Action, ThunkAction } from "@reduxjs/toolkit"
-import { combineSlices, configureStore } from "@reduxjs/toolkit"
-import { setupListeners } from "@reduxjs/toolkit/query"
-import { counterSlice } from "../features/counter/counterSlice"
-import { quotesApiSlice } from "../features/quotes/quotesApiSlice"
+import {
+  combineSlices,
+  configureStore,
+  createListenerMiddleware,
+  isAnyOf,
+} from "@reduxjs/toolkit"
+import { gameSlice } from "../features/game/gameSlice"
+import {
+  changeLife,
+  drawCard,
+  keepHand,
+  moveGameCard,
+  mulliganHand,
+  nextTurn,
+  redo,
+  setCounter,
+  startGame,
+  toggleTap,
+  undo,
+} from "../features/game/gameSlice"
+import { offlineSlice } from "../features/offline/offlineSlice"
+import { setupSlice } from "../features/setup/setupSlice"
+import { uiSlice } from "../features/ui/uiSlice"
+import { setSaveError, setSaved, setSaving } from "../features/ui/uiSlice"
+import type { PersistedGame } from "../game-core/types"
+import { repositories } from "../persistence/database"
 
-// `combineSlices` automatically combines the reducers using
-// their `reducerPath`s, therefore we no longer need to call `combineReducers`.
-const rootReducer = combineSlices(counterSlice, quotesApiSlice)
-// Infer the `RootState` type from the root reducer
+const rootReducer = combineSlices(setupSlice, gameSlice, offlineSlice, uiSlice)
 export type RootState = ReturnType<typeof rootReducer>
 
-// The store setup is wrapped in `makeStore` to allow reuse
-// when setting up tests that need the same store config
-export const makeStore = (preloadedState?: Partial<RootState>) => {
-  const store = configureStore({
+const autosaveListener = createListenerMiddleware()
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined
+
+autosaveListener.startListening({
+  matcher: isAnyOf(
+    startGame,
+    drawCard,
+    keepHand,
+    mulliganHand,
+    moveGameCard,
+    toggleTap,
+    setCounter,
+    nextTurn,
+    changeLife,
+    undo,
+    redo,
+  ),
+  effect: async (_action, listenerApi) => {
+    listenerApi.dispatch(setSaving())
+    if (autosaveTimer) clearTimeout(autosaveTimer)
+    await new Promise<void>(resolve => {
+      autosaveTimer = setTimeout(resolve, 250)
+    })
+    const state = listenerApi.getState() as RootState
+    if (!state.game.present) return
+    const savedAt = new Date().toISOString()
+    const record: PersistedGame = {
+      schemaVersion: 3,
+      game: state.game.present,
+      past: state.game.past,
+      future: state.game.future,
+      savedAt,
+    }
+    try {
+      await repositories.games.save(record)
+      listenerApi.dispatch(setSaved(savedAt))
+    } catch {
+      listenerApi.dispatch(
+        setSaveError(
+          "Automatisch opslaan mislukte. Laat dit tabblad open en probeer opnieuw.",
+        ),
+      )
+    }
+  },
+})
+
+export const makeStore = (preloadedState?: Partial<RootState>) =>
+  configureStore({
     reducer: rootReducer,
-    // Adding the api middleware enables caching, invalidation, polling,
-    // and other useful features of `rtk-query`.
-    middleware: getDefaultMiddleware => {
-      return getDefaultMiddleware().concat(quotesApiSlice.middleware)
-    },
+    middleware: getDefaultMiddleware =>
+      getDefaultMiddleware().prepend(autosaveListener.middleware),
     preloadedState,
   })
-  // configure listeners using the provided defaults
-  // optional, but required for `refetchOnFocus`/`refetchOnReconnect` behaviors
-  setupListeners(store.dispatch)
-  return store
-}
 
 export const store = makeStore()
-
-// Infer the type of `store`
 export type AppStore = typeof store
-// Infer the `AppDispatch` type from the store itself
 export type AppDispatch = AppStore["dispatch"]
 export type AppThunk<ThunkReturnType = void> = ThunkAction<
   ThunkReturnType,

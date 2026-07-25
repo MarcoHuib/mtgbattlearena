@@ -1,154 +1,113 @@
-import { act, screen } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { beforeEach, vi } from "vitest"
 import { App } from "./App"
+import { archidektFixture } from "./archidekt/fixtures"
 import { renderWithProviders } from "./utils/test-utils"
 
-test("App should have correct initial render", () => {
-  renderWithProviders(<App />)
-
-  const countLabel = screen.getByLabelText<HTMLLabelElement>("Count")
-
-  const incrementValueInput = screen.getByLabelText<HTMLInputElement>(
-    "Set increment amount",
-  )
-
-  // The app should be rendered correctly
-  expect(screen.getByText(/learn/i)).toBeInTheDocument()
-
-  // Initial state: count should be 0, incrementValue should be 2
-  expect(countLabel).toHaveTextContent("0")
-  expect(incrementValueInput).toHaveValue(2)
-})
-
-test("Increment value and Decrement value should work as expected", async () => {
-  const { user } = renderWithProviders(<App />)
-
-  const countLabel = screen.getByLabelText<HTMLLabelElement>("Count")
-
-  const incrementValueButton =
-    screen.getByLabelText<HTMLButtonElement>("Increment value")
-
-  const decrementValueButton =
-    screen.getByLabelText<HTMLButtonElement>("Decrement value")
-
-  // Click on "+" => Count should be 1
-  await user.click(incrementValueButton)
-  expect(countLabel).toHaveTextContent("1")
-
-  // Click on "-" => Count should be 0
-  await user.click(decrementValueButton)
-  expect(countLabel).toHaveTextContent("0")
-})
-
-test("Add Amount should work as expected", async () => {
-  const { user } = renderWithProviders(<App />)
-
-  const countLabel = screen.getByLabelText<HTMLLabelElement>("Count")
-
-  const incrementValueInput = screen.getByLabelText<HTMLInputElement>(
-    "Set increment amount",
-  )
-
-  const addAmountButton = screen.getByText<HTMLButtonElement>("Add Amount")
-
-  // "Add Amount" button is clicked => Count should be 2
-  await user.click(addAmountButton)
-  expect(countLabel).toHaveTextContent("2")
-
-  // incrementValue is 2, click on "Add Amount" => Count should be 4
-  await user.clear(incrementValueInput)
-  await user.type(incrementValueInput, "2")
-  await user.click(addAmountButton)
-  expect(countLabel).toHaveTextContent("4")
-
-  // [Negative number] incrementValue is -1, click on "Add Amount" => Count should be 3
-  await user.clear(incrementValueInput)
-  await user.type(incrementValueInput, "-1")
-  await user.click(addAmountButton)
-  expect(countLabel).toHaveTextContent("3")
-})
-
-it("Add Async should work as expected", async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true })
-
-  const { user } = renderWithProviders(<App />)
-
-  const addAsyncButton = screen.getByText<HTMLButtonElement>("Add Async")
-
-  const countLabel = screen.getByLabelText<HTMLLabelElement>("Count")
-
-  const incrementValueInput = screen.getByLabelText<HTMLInputElement>(
-    "Set increment amount",
-  )
-
-  await user.click(addAsyncButton)
-
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(500)
+beforeEach(() => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(input => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    if (url.includes("/api/import/archidekt/")) {
+      const deckId = url.split("/").at(-1)
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ...archidektFixture,
+            name: deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+    }
+    return Promise.resolve(new Response(null, { status: 503 }))
   })
-
-  // "Add Async" button is clicked => Count should be 2
-  expect(countLabel).toHaveTextContent("2")
-
-  await user.clear(incrementValueInput)
-  await user.type(incrementValueInput, "2")
-
-  await user.click(addAsyncButton)
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(500)
-  })
-
-  // incrementValue is 2, click on "Add Async" => Count should be 4
-  expect(countLabel).toHaveTextContent("4")
-
-  await user.clear(incrementValueInput)
-  await user.type(incrementValueInput, "-1")
-  await user.click(addAsyncButton)
-
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(500)
-  })
-
-  // [Negative number] incrementValue is -1, click on "Add Async" => Count should be 3
-  expect(countLabel).toHaveTextContent("3")
-
-  vi.useRealTimers()
 })
 
-test("Add If Odd should work as expected", async () => {
-  const { user } = renderWithProviders(<App />)
+test("importeert twee decks, start een battle en verplaatst via het actiemenu", async () => {
+  const { user, store } = renderWithProviders(<App />)
 
-  const countLabel = screen.getByLabelText<HTMLLabelElement>("Count")
+  expect(
+    await screen.findByRole("heading", { name: "Leg je battle klaar." }),
+  ).toBeInTheDocument()
 
-  const addIfOddButton = screen.getByText<HTMLButtonElement>("Add If Odd")
-
-  const incrementValueInput = screen.getByLabelText<HTMLInputElement>(
-    "Set increment amount",
+  const inputs = screen.getAllByLabelText("Openbare Archidekt-URL")
+  await user.type(inputs[0]!, "https://archidekt.com/decks/111/verdant")
+  await user.click(
+    screen.getAllByRole("button", { name: "Deck importeren" })[0]!,
   )
+  expect(await screen.findByText("Verdant Resolve")).toBeInTheDocument()
+  await user.type(inputs[1]!, "https://archidekt.com/decks/222/tidal")
+  await user.click(screen.getByRole("button", { name: "Deck importeren" }))
 
-  const incrementValueButton =
-    screen.getByLabelText<HTMLButtonElement>("Increment value")
+  expect(await screen.findByText("Tidal Memory")).toBeInTheDocument()
+  const start = screen.getByRole("button", { name: "Battle starten" })
+  await waitFor(() => expect(start).toBeEnabled())
+  await user.click(start)
 
-  // "Add If Odd" button is clicked => Count should stay 0
-  await user.click(addIfOddButton)
-  expect(countLabel).toHaveTextContent("0")
+  expect(
+    await screen.findByText("Verdant Resolve vs. Tidal Memory"),
+  ).toBeInTheDocument()
+  expect(
+    store.getState().game.present?.players["player-1"].zones.hand,
+  ).toHaveLength(7)
+  expect(
+    screen.getByRole("dialog", {
+      name: "Openingshand van Verdant Resolve",
+    }),
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole("button", { name: "Deze hand houden" }))
+  expect(
+    screen.getByRole("dialog", {
+      name: "Openingshand van Tidal Memory",
+    }),
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole("button", { name: "Deze hand houden" }))
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
 
-  // Click on "+" => Count should be updated to 1
-  await user.click(incrementValueButton)
-  expect(countLabel).toHaveTextContent("1")
+  const firstCardId =
+    store.getState().game.present?.players["player-1"].zones.hand[0]
+  const firstCard = firstCardId
+    ? store.getState().game.present?.cardsById[firstCardId]
+    : undefined
+  const definition = firstCard
+    ? store.getState().game.present?.cardDefinitionsById[firstCard.definitionId]
+    : undefined
+  expect(definition).toBeDefined()
 
-  // "Add If Odd" button is clicked => Count should be updated to 3
-  await user.click(addIfOddButton)
-  expect(countLabel).toHaveTextContent("3")
+  const card = within(
+    screen.getByLabelText("Speelveld van Verdant Resolve"),
+  ).getByLabelText(`${definition?.name ?? ""}, Hand`)
 
-  // incrementValue is 1, click on "Add If Odd" => Count should be updated to 4
-  await user.clear(incrementValueInput)
-  await user.type(incrementValueInput, "1")
-  await user.click(addIfOddButton)
-  expect(countLabel).toHaveTextContent("4")
+  card.focus()
+  fireEvent.keyDown(card, { key: "F10", shiftKey: true })
+  expect(
+    screen.getByRole("dialog", {
+      name: `Kaartacties voor ${definition?.name ?? ""}`,
+    }),
+  ).toBeInTheDocument()
 
-  // click on "Add If Odd" => Count should stay 4
-  await user.clear(incrementValueInput)
-  await user.type(incrementValueInput, "-1")
-  await user.click(addIfOddButton)
-  expect(countLabel).toHaveTextContent("4")
+  await user.selectOptions(
+    screen.getByLabelText(`Verplaats ${definition?.name ?? ""}`),
+    "battlefield",
+  )
+  expect(store.getState().game.present?.cardDefinitionsById).toBe(
+    store.getState().game.past.at(-1)?.cardDefinitionsById,
+  )
+  expect(
+    store.getState().game.present?.players["player-1"].zones.battlefield,
+  ).toContain(firstCardId)
+
+  await waitFor(
+    () => {
+      expect(store.getState().ui.saveStatus).toBe("saved")
+    },
+    {
+      timeout: 2_000,
+    },
+  )
 })

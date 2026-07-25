@@ -12,6 +12,7 @@ const eslintConfig = config(
     ignores: [
       "**/*.snap",
       "**/dist/",
+      "**/dev-dist/",
       "**/.yalc/",
       "**/build/",
       "**/temp/",
@@ -19,6 +20,9 @@ const eslintConfig = config(
       "**/.tmp/",
       "**/.yarn/",
       "**/coverage/",
+      "**/playwright-report/",
+      "**/test-results/",
+      "worker/**",
     ],
   },
   {
@@ -75,6 +79,32 @@ const eslintConfig = config(
           ],
         },
       ],
+      "@typescript-eslint/no-unnecessary-condition": [0],
+      "@typescript-eslint/restrict-template-expressions": [
+        2,
+        {
+          allowNumber: true,
+        },
+      ],
+    },
+  },
+  {
+    files: ["eslint.config.js"],
+    rules: {
+      "@typescript-eslint/no-deprecated": [0],
+    },
+  },
+  {
+    files: ["**/*.test.ts", "**/*.test.tsx", "e2e/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": [0],
+      "@typescript-eslint/no-unnecessary-type-assertion": [0],
+    },
+  },
+  {
+    files: ["src/features/offline/offlineService.ts"],
+    rules: {
+      "@typescript-eslint/no-invalid-void-type": [0],
     },
   },
 

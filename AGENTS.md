@@ -678,3 +678,16 @@ De eerste betekenisvolle mijlpaal is een end-to-end verticale slice waarin de ge
 9. zonder netwerk de app en battle opnieuw kan openen.
 
 Optimaliseer pas daarna richting uitgebreide counters, tokens, commander damage, multiselect, groepen en een native app.
+
+## Visuele richting
+
+Gebruik de referentieafbeelding `docs/reference/mtg-duelist-layout.png` als inspiratie voor de ruimtelijke opzet van de battle-interface.
+
+Deze referentie is geen pixel-perfect voorbeeld dat letterlijk moet worden gekopieerd. Gebruik hem alleen om de globale compositie, zoneplaatsing en het gevoel van diepte te begrijpen.
+
+De battle-interface moet:
+- ruim en luchtig aanvoelen;
+- visuele diepte gebruiken om meer speelruimte te suggereren;
+- het midden van het battlefield vrij houden voor kaarten;
+- nevenzones compact en logisch aan de randen plaatsen;
+- gespiegeld en overzichtelijk werken voor twee spelers.
