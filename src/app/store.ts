@@ -7,17 +7,30 @@ import {
 } from "@reduxjs/toolkit"
 import { gameSlice } from "../features/game/gameSlice"
 import {
+  addToken,
+  changeDamage,
   changeLife,
+  changePoison,
+  changeStackOrder,
+  changeTax,
+  copyToken,
   drawCard,
   keepHand,
+  mill,
   moveGameCard,
+  moveGameCards,
   mulliganHand,
+  nextPhase,
   nextTurn,
   redo,
   setCounter,
+  shufflePlayerLibrary,
   startGame,
+  switchFace,
   toggleTap,
+  toggleSelectedTap,
   undo,
+  untapAll,
 } from "../features/game/gameSlice"
 import { offlineSlice } from "../features/offline/offlineSlice"
 import { setupSlice } from "../features/setup/setupSlice"
@@ -35,14 +48,27 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined
 autosaveListener.startListening({
   matcher: isAnyOf(
     startGame,
+    addToken,
+    copyToken,
     drawCard,
+    mill,
     keepHand,
     mulliganHand,
     moveGameCard,
+    moveGameCards,
     toggleTap,
+    toggleSelectedTap,
     setCounter,
+    switchFace,
+    changeStackOrder,
+    shufflePlayerLibrary,
+    untapAll,
+    nextPhase,
     nextTurn,
     changeLife,
+    changePoison,
+    changeTax,
+    changeDamage,
     undo,
     redo,
   ),
@@ -56,7 +82,7 @@ autosaveListener.startListening({
     if (!state.game.present) return
     const savedAt = new Date().toISOString()
     const record: PersistedGame = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       game: state.game.present,
       past: state.game.past,
       future: state.game.future,

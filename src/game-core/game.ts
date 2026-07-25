@@ -6,6 +6,8 @@ import type {
   PlayerId,
   PlayerState,
   PlayerZones,
+  TokenKind,
+  TurnPhase,
   Zone,
 } from "./types"
 
@@ -51,6 +53,9 @@ const makePlayer = (playerId: PlayerId, deck: DeckSnapshot): PlayerState => ({
   name: deck.name,
   deckSnapshotId: deck.id,
   life: 40,
+  poison: 0,
+  commanderTax: {},
+  commanderDamage: {},
   zones: emptyZones(),
 })
 
@@ -95,9 +100,13 @@ export const createGame = (
           faceDown: false,
           activeFaceIndex: 0,
           counters: {},
+          isCommander: entry.isCommander,
         }
         cardsById[instanceId] = instance
         players[playerId].zones[zone].push(instanceId)
+        if (entry.isCommander) {
+          players[playerId].commanderTax[instanceId] = 0
+        }
       }
     }
 
@@ -108,13 +117,14 @@ export const createGame = (
   })
 
   const game: GameState = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: options.createId("game"),
     title: `${decks[0].name} vs. ${decks[1].name}`,
     createdAt: options.now,
     updatedAt: options.now,
     activePlayerId: "player-1",
     turnNumber: 1,
+    phase: "beginning",
     openingHands: {
       "player-1": { mulliganCount: 0, kept: false },
       "player-2": { mulliganCount: 0, kept: false },
@@ -134,13 +144,15 @@ export const drawCards = (
   amount: number,
   now = new Date().toISOString(),
 ): GameState => {
+  const normalizedAmount = Math.max(0, Math.floor(amount))
+  if (normalizedAmount === 0) return game
   const next: GameState = {
     ...game,
     updatedAt: now,
     players: clonePlayersWithZones(game.players),
     cardsById: { ...game.cardsById },
   }
-  for (let count = 0; count < amount; count += 1) {
+  for (let count = 0; count < normalizedAmount; count += 1) {
     const instanceId = next.players[playerId].zones.library.pop()
     if (!instanceId) break
     next.players[playerId].zones.hand.push(instanceId)
@@ -274,14 +286,56 @@ export const moveCard = (
   }
   removeCardFromZones(next, instanceId)
   next.players[playerId].zones[zone].push(instanceId)
+  if (zone === "command") {
+    const owner = next.players[card.ownerId]
+    owner.commanderTax = {
+      ...owner.commanderTax,
+      [instanceId]: owner.commanderTax[instanceId] ?? 0,
+    }
+  }
   next.cardsById[instanceId] = {
     ...card,
     zone,
     controllerId: playerId,
     tapped: zone === "battlefield" ? card.tapped : false,
+    isCommander: zone === "command" ? true : card.isCommander,
     position: zone === "battlefield" ? position : undefined,
   }
   return next
+}
+
+export type CardMove = {
+  instanceId: string
+  playerId: PlayerId
+  zone: Zone
+  position?: BattlefieldPosition
+}
+
+export const moveCards = (
+  game: GameState,
+  moves: readonly CardMove[],
+  now = new Date().toISOString(),
+): GameState => {
+  const uniqueMoves = [
+    ...new Map(
+      moves
+        .filter(move => game.cardsById[move.instanceId] !== undefined)
+        .map(move => [move.instanceId, move]),
+    ).values(),
+  ]
+  if (uniqueMoves.length === 0) return game
+  return uniqueMoves.reduce(
+    (currentGame, move) =>
+      moveCard(
+        currentGame,
+        move.instanceId,
+        move.playerId,
+        move.zone,
+        move.position,
+        now,
+      ),
+    game,
+  )
 }
 
 export const toggleCardTapped = (
@@ -299,6 +353,23 @@ export const toggleCardTapped = (
       [instanceId]: { ...card, tapped: !card.tapped },
     },
   }
+}
+
+export const toggleCardsTapped = (
+  game: GameState,
+  instanceIds: readonly string[],
+  now = new Date().toISOString(),
+): GameState => {
+  const battlefieldCards = [...new Set(instanceIds)].filter(
+    instanceId => game.cardsById[instanceId]?.zone === "battlefield",
+  )
+  if (battlefieldCards.length === 0) return game
+  const cardsById = { ...game.cardsById }
+  for (const instanceId of battlefieldCards) {
+    const card = cardsById[instanceId]
+    if (card) cardsById[instanceId] = { ...card, tapped: !card.tapped }
+  }
+  return { ...game, updatedAt: now, cardsById }
 }
 
 export const setCardCounter = (
@@ -330,6 +401,152 @@ export const setCardCounter = (
   }
 }
 
+export const switchCardFace = (
+  game: GameState,
+  instanceId: string,
+  now = new Date().toISOString(),
+): GameState => {
+  const card = game.cardsById[instanceId]
+  const definition = card
+    ? game.cardDefinitionsById[card.definitionId]
+    : undefined
+  if (!card || !definition || definition.faces.length < 2) return game
+  return {
+    ...game,
+    updatedAt: now,
+    cardsById: {
+      ...game.cardsById,
+      [instanceId]: {
+        ...card,
+        activeFaceIndex: (card.activeFaceIndex + 1) % definition.faces.length,
+      },
+    },
+  }
+}
+
+export const setCardStackOrder = (
+  game: GameState,
+  instanceId: string,
+  direction: "front" | "back",
+  now = new Date().toISOString(),
+): GameState => {
+  const card = game.cardsById[instanceId]
+  if (card?.zone !== "battlefield") return game
+  const positions = game.players[card.controllerId].zones.battlefield.map(
+    id => game.cardsById[id]?.position?.z ?? 0,
+  )
+  const cardsById = { ...game.cardsById }
+  if (direction === "back") {
+    for (const otherId of game.players[card.controllerId].zones.battlefield) {
+      if (otherId === instanceId) continue
+      const other = cardsById[otherId]
+      if (!other) continue
+      cardsById[otherId] = {
+        ...other,
+        position: {
+          x: other.position?.x ?? 0.5,
+          y: other.position?.y ?? 0.5,
+          z: (other.position?.z ?? 0) + 1,
+        },
+      }
+    }
+  }
+  return {
+    ...game,
+    updatedAt: now,
+    cardsById: {
+      ...cardsById,
+      [instanceId]: {
+        ...card,
+        position: {
+          x: card.position?.x ?? 0.5,
+          y: card.position?.y ?? 0.5,
+          z: direction === "front" ? Math.max(0, ...positions) + 1 : 0,
+        },
+      },
+    },
+  }
+}
+
+export const untapAllCards = (
+  game: GameState,
+  playerId: PlayerId,
+  now = new Date().toISOString(),
+): GameState => {
+  const tappedCards = game.players[playerId].zones.battlefield.filter(
+    instanceId => game.cardsById[instanceId]?.tapped,
+  )
+  if (tappedCards.length === 0) return game
+  const cardsById = { ...game.cardsById }
+  for (const instanceId of tappedCards) {
+    const card = cardsById[instanceId]
+    if (card) cardsById[instanceId] = { ...card, tapped: false }
+  }
+  return { ...game, updatedAt: now, cardsById }
+}
+
+export const millCards = (
+  game: GameState,
+  playerId: PlayerId,
+  amount: number,
+  now = new Date().toISOString(),
+): GameState => {
+  const normalizedAmount = Math.max(0, Math.floor(amount))
+  if (normalizedAmount === 0) return game
+  const moves: CardMove[] = []
+  const library = game.players[playerId].zones.library
+  for (
+    let offset = 0;
+    offset < Math.min(normalizedAmount, library.length);
+    offset += 1
+  ) {
+    const instanceId = library[library.length - 1 - offset]
+    if (instanceId) moves.push({ instanceId, playerId, zone: "graveyard" })
+  }
+  return moveCards(game, moves, now)
+}
+
+export const shuffleLibrary = (
+  game: GameState,
+  playerId: PlayerId,
+  random: RandomSource,
+  now = new Date().toISOString(),
+): GameState => ({
+  ...game,
+  updatedAt: now,
+  players: {
+    ...game.players,
+    [playerId]: {
+      ...game.players[playerId],
+      zones: {
+        ...game.players[playerId].zones,
+        library: shuffle(game.players[playerId].zones.library, random),
+      },
+    },
+  },
+})
+
+const turnPhases: TurnPhase[] = [
+  "beginning",
+  "precombat-main",
+  "combat",
+  "postcombat-main",
+  "ending",
+]
+
+export const advancePhase = (
+  game: GameState,
+  now = new Date().toISOString(),
+): GameState => {
+  const currentIndex = turnPhases.indexOf(game.phase)
+  if (currentIndex === turnPhases.length - 1) return advanceTurn(game, now)
+  return {
+    ...game,
+    updatedAt: now,
+    phase: turnPhases[currentIndex + 1] ?? "beginning",
+  }
+}
+
 export const advanceTurn = (
   game: GameState,
   now = new Date().toISOString(),
@@ -349,6 +566,7 @@ export const advanceTurn = (
       updatedAt: now,
       activePlayerId,
       turnNumber: game.turnNumber + 1,
+      phase: "beginning",
       cardsById,
     },
     activePlayerId,
@@ -373,3 +591,192 @@ export const changePlayerLife = (
     },
   },
 })
+
+export const changePlayerPoison = (
+  game: GameState,
+  playerId: PlayerId,
+  delta: number,
+  now = new Date().toISOString(),
+): GameState => ({
+  ...game,
+  updatedAt: now,
+  players: {
+    ...game.players,
+    [playerId]: {
+      ...game.players[playerId],
+      poison: Math.max(0, game.players[playerId].poison + delta),
+    },
+  },
+})
+
+export const changeCommanderTax = (
+  game: GameState,
+  playerId: PlayerId,
+  commanderId: string,
+  delta: number,
+  now = new Date().toISOString(),
+): GameState => {
+  const commander = game.cardsById[commanderId]
+  if (commander?.ownerId !== playerId) return game
+  const player = game.players[playerId]
+  const value = Math.max(0, (player.commanderTax[commanderId] ?? 0) + delta)
+  return {
+    ...game,
+    updatedAt: now,
+    players: {
+      ...game.players,
+      [playerId]: {
+        ...player,
+        commanderTax: { ...player.commanderTax, [commanderId]: value },
+      },
+    },
+  }
+}
+
+export const changeCommanderDamage = (
+  game: GameState,
+  damagedPlayerId: PlayerId,
+  commanderId: string,
+  delta: number,
+  now = new Date().toISOString(),
+): GameState => {
+  const commander = game.cardsById[commanderId]
+  if (!commander || commander.ownerId === damagedPlayerId) return game
+  const player = game.players[damagedPlayerId]
+  const value = Math.max(0, (player.commanderDamage[commanderId] ?? 0) + delta)
+  return {
+    ...game,
+    updatedAt: now,
+    players: {
+      ...game.players,
+      [damagedPlayerId]: {
+        ...player,
+        commanderDamage: {
+          ...player.commanderDamage,
+          [commanderId]: value,
+        },
+      },
+    },
+  }
+}
+
+type CreateTokenOptions = {
+  playerId: PlayerId
+  kind: TokenKind
+  name: string
+  power?: number
+  toughness?: number
+  position?: BattlefieldPosition
+  createId: IdFactory
+  now?: string
+}
+
+export const createToken = (
+  game: GameState,
+  options: CreateTokenOptions,
+): GameState => {
+  const name = options.name.trim() || "Token"
+  const definitionId = options.createId("token-definition")
+  const instanceId = options.createId("token")
+  const now = options.now ?? new Date().toISOString()
+  const typeLine =
+    options.kind === "creature" || options.kind === "copy"
+      ? "Token Creature"
+      : `Token Artifact — ${name}`
+  return {
+    ...game,
+    updatedAt: now,
+    cardDefinitionsById: {
+      ...game.cardDefinitionsById,
+      [definitionId]: {
+        id: definitionId,
+        name,
+        typeLine,
+        faces: [{ name, typeLine }],
+        imageRefs: [],
+        token: {
+          kind: options.kind,
+          name,
+          power: options.power,
+          toughness: options.toughness,
+        },
+      },
+    },
+    cardsById: {
+      ...game.cardsById,
+      [instanceId]: {
+        instanceId,
+        definitionId,
+        ownerId: options.playerId,
+        controllerId: options.playerId,
+        zone: "battlefield",
+        tapped: false,
+        faceDown: false,
+        activeFaceIndex: 0,
+        counters: {},
+        position: options.position,
+      },
+    },
+    players: {
+      ...game.players,
+      [options.playerId]: {
+        ...game.players[options.playerId],
+        zones: {
+          ...game.players[options.playerId].zones,
+          battlefield: [
+            ...game.players[options.playerId].zones.battlefield,
+            instanceId,
+          ],
+        },
+      },
+    },
+  }
+}
+
+export const duplicateToken = (
+  game: GameState,
+  instanceId: string,
+  createId: IdFactory,
+  now = new Date().toISOString(),
+): GameState => {
+  const token = game.cardsById[instanceId]
+  const definition = token
+    ? game.cardDefinitionsById[token.definitionId]
+    : undefined
+  if (!token || !definition?.token) return game
+  const duplicateId = createId("token")
+  const position = token.position
+    ? {
+        x: Math.min(1, token.position.x + 0.04),
+        y: Math.min(1, token.position.y + 0.04),
+        z: token.position.z + 1,
+      }
+    : undefined
+  return {
+    ...game,
+    updatedAt: now,
+    cardsById: {
+      ...game.cardsById,
+      [duplicateId]: {
+        ...token,
+        instanceId: duplicateId,
+        tapped: false,
+        counters: {},
+        position,
+      },
+    },
+    players: {
+      ...game.players,
+      [token.controllerId]: {
+        ...game.players[token.controllerId],
+        zones: {
+          ...game.players[token.controllerId].zones,
+          battlefield: [
+            ...game.players[token.controllerId].zones.battlefield,
+            duplicateId,
+          ],
+        },
+      },
+    },
+  }
+}

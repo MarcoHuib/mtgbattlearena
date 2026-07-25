@@ -7,6 +7,7 @@ export type UiState = {
   lastSavedAt: string | null
   saveError: string | null
   restored: boolean
+  selectedCardIds: string[]
 }
 
 const initialState: UiState = {
@@ -16,6 +17,7 @@ const initialState: UiState = {
   lastSavedAt: null,
   saveError: null,
   restored: false,
+  selectedCardIds: [],
 }
 
 export const uiSlice = createSlice({
@@ -28,6 +30,7 @@ export const uiSlice = createSlice({
     showSetup(state) {
       state.screen = "setup"
       state.restored = false
+      state.selectedCardIds = []
     },
     showBattle(
       state,
@@ -35,6 +38,7 @@ export const uiSlice = createSlice({
     ) {
       state.screen = "battle"
       state.restored = action.payload?.restored ?? false
+      state.selectedCardIds = []
     },
     setSaving(state) {
       state.saveStatus = "saving"
@@ -49,14 +53,31 @@ export const uiSlice = createSlice({
       state.saveStatus = "error"
       state.saveError = action.payload
     },
+    toggleCardSelection(state, action: PayloadAction<string>) {
+      const index = state.selectedCardIds.indexOf(action.payload)
+      if (index >= 0) {
+        state.selectedCardIds.splice(index, 1)
+      } else {
+        state.selectedCardIds.push(action.payload)
+      }
+    },
+    clearCardSelection(state) {
+      state.selectedCardIds = []
+    },
+    setCardSelection(state, action: PayloadAction<string[]>) {
+      state.selectedCardIds = [...new Set(action.payload)]
+    },
   },
 })
 
 export const {
+  clearCardSelection,
   setBootStatus,
   setSaveError,
   setSaved,
   setSaving,
+  setCardSelection,
   showBattle,
   showSetup,
+  toggleCardSelection,
 } = uiSlice.actions

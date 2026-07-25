@@ -1,11 +1,20 @@
 import { useDraggable } from "@dnd-kit/react"
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { CardDefinition, CardInstance, Zone } from "../../game-core/types"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
 import { resolveCardImage } from "../../persistence/imageResolver"
-import { moveGameCard, setCounter, toggleTap } from "../game/gameSlice"
+import {
+  changeStackOrder,
+  copyToken,
+  moveGameCard,
+  moveGameCards,
+  setCounter,
+  switchFace,
+  toggleTap,
+} from "../game/gameSlice"
+import { clearCardSelection, toggleCardSelection } from "../ui/uiSlice"
 import {
   dragCorrectionAfterScale,
   relativePointInRectangle,
@@ -113,8 +122,8 @@ const counterTypes = [
 ] as const
 
 const getMenuStyle = ({ x, y }: MenuPoint): CSSProperties => {
-  const width = Math.min(280, window.innerWidth - 24)
-  const height = 430
+  const width = Math.min(310, window.innerWidth - 24)
+  const height = 620
   const top = Math.max(
     12,
     Math.min(y - 28, window.innerHeight - Math.min(height, window.innerHeight)),
@@ -133,7 +142,11 @@ export const CardView = ({
 }: CardViewProps) => {
   const dispatch = useAppDispatch()
   const online = useOnlineStatus()
-  const imageRef = definition.imageRefs[instance.activeFaceIndex]
+  const activeFace =
+    definition.faces[instance.activeFaceIndex] ?? definition.faces[0]
+  const imageRef = definition.imageRefs.find(
+    image => image.faceIndex === instance.activeFaceIndex,
+  )
   const imageAssetKey = imageRef?.assetKey
   const remoteImageUrl = imageRef?.url
   const [imageUrl, setImageUrl] = useState<string | null>(
@@ -142,6 +155,10 @@ export const CardView = ({
   const [imageFailed, setImageFailed] = useState(false)
   const [menuPoint, setMenuPoint] = useState<MenuPoint | null>(null)
   const [pointerHeld, setPointerHeld] = useState(false)
+  const [customCounter, setCustomCounter] = useState("")
+  const touchHoldTimer = useRef<number | null>(null)
+  const touchStart = useRef<MenuPoint | null>(null)
+  const lastPointerWasTouch = useRef(false)
   const { ref, isDragging } = useDraggable({
     id: displayOnly
       ? `display-only-${instance.instanceId}`
@@ -150,12 +167,13 @@ export const CardView = ({
     data: { instanceId: instance.instanceId },
     disabled: displayOnly,
   })
-  const cardLabel = `${definition.name}, ${zoneLabels[instance.zone]}${
+  const cardName = activeFace?.name ?? definition.name
+  const cardLabel = `${cardName}, ${zoneLabels[instance.zone]}${
     instance.tapped ? ", getapt" : ""
   }`
-  const owner = useAppSelector(
-    state => state.game.present?.cardsById[instance.instanceId]?.ownerId,
-  )
+  const selectedCardIds = useAppSelector(state => state.ui.selectedCardIds)
+  const gameCards = useAppSelector(state => state.game.present?.cardsById)
+  const selected = selectedCardIds.includes(instance.instanceId)
   const destinationPlayer = instance.controllerId
 
   useEffect(() => {
@@ -204,29 +222,56 @@ export const CardView = ({
     }
   }, [pointerHeld])
 
+  useEffect(
+    () => () => {
+      if (touchHoldTimer.current !== null) {
+        window.clearTimeout(touchHoldTimer.current)
+      }
+    },
+    [],
+  )
+
   const options = useMemo(
     () =>
       (
         [
-          "battlefield",
+          "library",
           "hand",
+          "battlefield",
           "graveyard",
           "exile",
-          ...(owner === instance.ownerId ? ["command" as const] : []),
+          "command",
         ] as Zone[]
       ).filter(zone => zone !== instance.zone),
-    [instance.ownerId, instance.zone, owner],
+    [instance.zone],
   )
 
   const performAction = (value: string) => {
     if (value) {
-      dispatch(
-        moveGameCard({
-          instanceId: instance.instanceId,
-          playerId: destinationPlayer,
-          zone: value as Zone,
-        }),
+      const selectedInstances = selectedCardIds.filter(
+        instanceId =>
+          gameCards?.[instanceId]?.controllerId === destinationPlayer,
       )
+      if (selected && selectedInstances.length > 1) {
+        dispatch(
+          moveGameCards({
+            moves: selectedInstances.map(instanceId => ({
+              instanceId,
+              playerId: destinationPlayer,
+              zone: value as Zone,
+            })),
+          }),
+        )
+        dispatch(clearCardSelection())
+      } else {
+        dispatch(
+          moveGameCard({
+            instanceId: instance.instanceId,
+            playerId: destinationPlayer,
+            zone: value as Zone,
+          }),
+        )
+      }
     }
     setMenuPoint(null)
   }
@@ -244,6 +289,13 @@ export const CardView = ({
   const counters = Object.entries(instance.counters).filter(
     ([, value]) => value > 0,
   )
+  const cancelTouchHold = () => {
+    if (touchHoldTimer.current !== null) {
+      window.clearTimeout(touchHoldTimer.current)
+      touchHoldTimer.current = null
+    }
+    touchStart.current = null
+  }
   const actionMenu =
     menuPoint && !isDragging
       ? createPortal(
@@ -278,6 +330,12 @@ export const CardView = ({
                   ×
                 </button>
               </header>
+              {selected && selectedCardIds.length > 1 ? (
+                <p className="card-action-menu__selection">
+                  Actie geldt voor {selectedCardIds.length} geselecteerde
+                  kaarten wanneer mogelijk.
+                </p>
+              ) : null}
               {instance.zone === "battlefield" ? (
                 <button
                   className="card-action-menu__primary"
@@ -288,6 +346,65 @@ export const CardView = ({
                 >
                   <span>↻</span>
                   {instance.tapped ? "Untappen" : "Tappen"}
+                </button>
+              ) : null}
+              {definition.faces.length > 1 ? (
+                <button
+                  className="card-action-menu__primary"
+                  type="button"
+                  onClick={() => {
+                    dispatch(switchFace({ instanceId: instance.instanceId }))
+                  }}
+                >
+                  <span>◫</span>
+                  Toon volgende kaartzijde
+                </button>
+              ) : null}
+              {instance.zone === "battlefield" ? (
+                <div className="card-action-menu__row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dispatch(
+                        changeStackOrder({
+                          instanceId: instance.instanceId,
+                          direction: "front",
+                        }),
+                      )
+                    }}
+                  >
+                    Naar voren
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dispatch(
+                        changeStackOrder({
+                          instanceId: instance.instanceId,
+                          direction: "back",
+                        }),
+                      )
+                    }}
+                  >
+                    Naar achteren
+                  </button>
+                </div>
+              ) : null}
+              {definition.token ? (
+                <button
+                  className="card-action-menu__primary"
+                  type="button"
+                  onClick={() => {
+                    dispatch(
+                      copyToken({
+                        instanceId: instance.instanceId,
+                        duplicateId: `token-${crypto.randomUUID()}`,
+                      }),
+                    )
+                  }}
+                >
+                  <span>⧉</span>
+                  Token dupliceren
                 </button>
               ) : null}
               <label className="card-action-menu__move">
@@ -343,6 +460,56 @@ export const CardView = ({
                       </div>
                     )
                   })}
+                  {counters
+                    .filter(
+                      ([counter]) =>
+                        !counterTypes.some(type => type.key === counter),
+                    )
+                    .map(([counter, value]) => (
+                      <div className="counter-control" key={counter}>
+                        <span>{counter}</span>
+                        <button
+                          type="button"
+                          aria-label={`Verwijder ${counter}-counter van ${definition.name}`}
+                          onClick={() => {
+                            changeCounter(counter, -1)
+                          }}
+                        >
+                          −
+                        </button>
+                        <strong>{value}</strong>
+                        <button
+                          type="button"
+                          aria-label={`Voeg ${counter}-counter toe aan ${definition.name}`}
+                          onClick={() => {
+                            changeCounter(counter, 1)
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    ))}
+                  <form
+                    className="custom-counter"
+                    onSubmit={event => {
+                      event.preventDefault()
+                      if (!customCounter.trim()) return
+                      changeCounter(customCounter, 1)
+                      setCustomCounter("")
+                    }}
+                  >
+                    <label>
+                      <span>Benoemde counter</span>
+                      <input
+                        value={customCounter}
+                        placeholder="bijv. shield"
+                        onChange={event => {
+                          setCustomCounter(event.target.value)
+                        }}
+                      />
+                    </label>
+                    <button type="submit">Toevoegen</button>
+                  </form>
                 </div>
               ) : null}
             </section>
@@ -359,22 +526,55 @@ export const CardView = ({
           instance.tapped ? "card--tapped" : ""
         } ${isDragging ? "card--dragging" : ""} ${
           pointerHeld ? "card--pointer-held" : ""
-        }`}
+        } ${selected ? "card--selected" : ""}`}
         aria-label={cardLabel}
         aria-expanded={displayOnly ? undefined : menuPoint !== null}
         aria-haspopup={displayOnly ? undefined : "dialog"}
         aria-keyshortcuts={displayOnly ? undefined : "Shift+F10"}
+        aria-pressed={displayOnly ? undefined : selected}
         data-card-name={definition.name}
         tabIndex={0}
         onPointerDownCapture={event => {
           if (!displayOnly && event.button === 0) {
+            lastPointerWasTouch.current = event.pointerType === "touch"
             beginPointerSession(
               event.currentTarget,
               { x: event.clientX, y: event.clientY },
               instance.tapped,
             )
             setPointerHeld(true)
+            if (event.pointerType === "touch") {
+              touchStart.current = { x: event.clientX, y: event.clientY }
+              touchHoldTimer.current = window.setTimeout(() => {
+                setMenuPoint({ x: event.clientX, y: event.clientY })
+                touchHoldTimer.current = null
+              }, 650)
+            }
           }
+        }}
+        onPointerMoveCapture={event => {
+          const start = touchStart.current
+          if (
+            start &&
+            Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8
+          ) {
+            cancelTouchHold()
+          }
+        }}
+        onPointerUpCapture={cancelTouchHold}
+        onPointerCancel={cancelTouchHold}
+        onClick={event => {
+          if (
+            !displayOnly &&
+            (lastPointerWasTouch.current ||
+              event.ctrlKey ||
+              event.metaKey ||
+              event.shiftKey)
+          ) {
+            event.preventDefault()
+            dispatch(toggleCardSelection(instance.instanceId))
+          }
+          lastPointerWasTouch.current = false
         }}
         onDoubleClick={() => {
           if (!displayOnly && instance.zone === "battlefield") {
@@ -407,7 +607,7 @@ export const CardView = ({
           {imageUrl && !imageFailed ? (
             <img
               src={imageUrl}
-              alt={definition.name}
+              alt={cardName}
               draggable={false}
               loading="lazy"
               onError={event => {
@@ -421,10 +621,18 @@ export const CardView = ({
             />
           ) : (
             <div className="card__fallback">
-              <span>{definition.name}</span>
+              <span>{cardName}</span>
               <small>
-                {definition.typeLine ?? "Kaartafbeelding niet beschikbaar"}
+                {activeFace?.typeLine ??
+                  definition.typeLine ??
+                  "Kaartafbeelding niet beschikbaar"}
               </small>
+              {definition.token?.power !== undefined &&
+              definition.token.toughness !== undefined ? (
+                <strong>
+                  {definition.token.power}/{definition.token.toughness}
+                </strong>
+              ) : null}
             </div>
           )}
         </div>

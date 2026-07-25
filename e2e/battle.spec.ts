@@ -513,12 +513,80 @@ test("herstelt een gedownloade battle volledig offline", async ({
     .toBe("none")
   await expect(hand.locator(".card")).toHaveCount(7)
 
+  await page.getByRole("button", { name: "Volgende fase" }).click()
+  await expect(page.getByRole("button", { name: /^Next turn:/ })).toContainText(
+    "Eerste hoofdfase",
+  )
+
+  await playerOneBoard
+    .getByRole("button", { name: "Verhoog poison van Verdant Resolve" })
+    .click()
+  await expect(
+    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1"),
+  ).toBeVisible()
+
+  await playerOneBoard.getByText("Commander tax").click()
+  await playerOneBoard
+    .getByRole("button", {
+      name: "Verhoog commander tax van Aesi, Tyrant of Gyre Strait",
+    })
+    .click()
+  await expect(
+    playerOneBoard.locator(".commander-tracker").first().getByText("2"),
+  ).toBeVisible()
+  await playerOneBoard.getByText("Commander damage").click()
+  await playerOneBoard
+    .getByRole("button", {
+      name: "Verhoog commander damage door Aesi, Tyrant of Gyre Strait",
+    })
+    .click()
+  await expect(
+    playerOneBoard.locator(".commander-tracker").nth(1).getByText("1"),
+  ).toBeVisible()
+
+  await playerOneBoard.getByRole("button", { name: "+ Token" }).click()
+  const tokenForm = playerOneBoard.getByRole("form", {
+    name: "Token maken voor Verdant Resolve",
+  })
+  await tokenForm.getByLabel("Type").selectOption("treasure")
+  await tokenForm.getByRole("button", { name: "Token maken" }).click()
+  const treasureTokens = battlefield.locator(
+    '.card[data-card-name="Treasure"]:not([data-dnd-placeholder])',
+  )
+  await expect(treasureTokens).toHaveCount(1)
+  await treasureTokens.first().click({ button: "right" })
+  await page.getByLabel("Benoemde counter").fill("shield")
+  await page.getByRole("button", { name: "Toevoegen" }).click()
+  await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
+  await page.getByRole("button", { name: "Token dupliceren" }).click()
+  await expect(treasureTokens).toHaveCount(2)
+  await page.getByRole("button", { name: "Kaartacties sluiten" }).click()
+
+  const multiSelectCards = hand.locator(".card")
+  await multiSelectCards.nth(0).click({ modifiers: ["Meta"] })
+  await multiSelectCards.nth(1).click({ modifiers: ["Meta"] })
+  await expect(page.getByText("2 geselecteerd")).toBeVisible()
+  await page
+    .getByLabel("Verplaats geselecteerde kaarten")
+    .selectOption("graveyard")
+  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)
+  await expect(page.getByText("2 geselecteerd")).not.toBeVisible()
+
   await page
     .getByRole("button", { name: /Verlaag leven van Verdant Resolve/ })
     .click()
   await expect(
     page.getByLabel("Levenspunten Verdant Resolve").getByText("39"),
   ).toBeVisible()
+  await expect(page.getByRole("button", { name: /^Next turn:/ })).toContainText(
+    "Eerste hoofdfase",
+  )
+  await expect(
+    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1"),
+  ).toBeVisible()
+  await expect(treasureTokens).toHaveCount(2)
+  await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
+  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)
   await expect(page.getByText(/Lokaal opgeslagen/)).toBeVisible()
 
   await page.reload()
@@ -526,6 +594,23 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(
     page.getByLabel("Levenspunten Verdant Resolve").getByText("39"),
   ).toBeVisible()
+  await expect(page.getByRole("button", { name: /^Next turn:/ })).toContainText(
+    "Eerste hoofdfase",
+  )
+  await expect(
+    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1"),
+  ).toBeVisible()
+  await playerOneBoard.getByText("Commander tax").click()
+  await expect(
+    playerOneBoard.locator(".commander-tracker").first().getByText("2"),
+  ).toBeVisible()
+  await playerOneBoard.getByText("Commander damage").click()
+  await expect(
+    playerOneBoard.locator(".commander-tracker").nth(1).getByText("1"),
+  ).toBeVisible()
+  await expect(treasureTokens).toHaveCount(2)
+  await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
+  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)
   await expect(positionedCard).toHaveAttribute(
     "data-position-x",
     movedPositionX ?? "",
@@ -554,4 +639,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(
     page.locator(`[data-card-name="${cardName}"] img`).first(),
   ).toBeVisible()
+  await expect(treasureTokens).toHaveCount(2)
+  await expect(treasureTokens.first().locator(".card__fallback")).toBeVisible()
+  await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
 })

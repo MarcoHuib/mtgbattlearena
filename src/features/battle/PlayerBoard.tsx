@@ -1,6 +1,7 @@
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { CardInstance, PlayerId, Zone } from "../../game-core/types"
 import { changeLife } from "../game/gameSlice"
+import { PlayerControls } from "./PlayerControls"
 import { ZoneArea } from "./ZoneArea"
 
 type PlayerBoardProps = {
@@ -64,6 +65,7 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
             +
           </button>
         </div>
+        <PlayerControls playerId={playerId} />
       </aside>
 
       <div className="board-surface">

@@ -32,7 +32,7 @@ npm run build        # TypeScript en productie-PWA-build
 npm run preview      # productiebuild lokaal bekijken
 ```
 
-## Eerste verticale slice
+## Fase 1 — local-first verticale slice
 
 - Twee afzonderlijke Archidekt-URL's valideren en importeren.
 - Ruwe externe data runtime valideren en normaliseren naar `ImportedDeck`.
@@ -69,6 +69,45 @@ npm run preview      # productiebuild lokaal bekijken
   downloaden, annuleren en mislukte assets opnieuw proberen.
 - PWA-app-shell met zichtbare updateprompt en tekstuele kaartfallbacks.
 
+## Fase 2 — Commander-playtest
+
+- Alle zes zones zijn bruikbaar: library, hand, battlefield, graveyard, exile
+  en command zone. Het kaartmenu kan een kaart naar iedere andere zone
+  verplaatsen.
+- Kaarten blijven vrij en genormaliseerd op het battlefield staan. Met
+  Ctrl/⌘-klik of een tik selecteer je meerdere kaarten; de selectiebalk
+  verplaatst ze samen. Een geselecteerde kaart kan daar ook worden
+  getapt/untapt, naar voren of achteren gezet en van een snelle
+  `+1/+1`-counter worden voorzien.
+- Rechtermuisklik of `Shift+F10` opent het volledige kaartmenu. Op touch zijn
+  selectie en de selectiebalk de zichtbare alternatieven voor essentiële
+  acties.
+- Dubbelzijdige kaarten kunnen van actieve zijde wisselen. Alle zijden blijven
+  onderdeel van een expliciet offlinepakket.
+- Per speler zijn draw, draw X, mill X, shuffle en untap all beschikbaar.
+  **Volgende fase** doorloopt beginfase, beide hoofdfasen, combat en eindfase;
+  **Next turn** wisselt de actieve speler, untapt en trekt automatisch.
+- Elke speler begint met 40 leven en houdt poison, commander tax per commander
+  en ontvangen commander damage per commander bij. Partner- en
+  Background-decks behouden beide commanders als afzonderlijke instanties.
+- Creature-, Treasure-, Food-, Clue- en Copy-tokens kunnen lokaal worden
+  gemaakt. Naam en eventuele power/toughness zijn handmatig instelbaar;
+  tokens zonder afbeelding gebruiken een volledige tekstuele fallback.
+  Tokens kunnen worden gedupliceerd.
+- Naast snelle `+1/+1`- en `-1/-1`-acties ondersteunt het kaartmenu vrij
+  benoemde counters met verhogen en verlagen.
+- Alle blijvende fase-2-gegevens vallen onder dezelfde undo/redo- en
+  autosaveketen. Selectie en pointerpositie zijn bewust vluchtig en worden niet
+  duurzaam opgeslagen.
+
+### Belangrijkste bediening
+
+- Slepen: kaart of geselecteerde groep definitief verplaatsen.
+- Dubbelklik: battlefieldkaart exact 90 graden tappen/untappen.
+- Rechtermuisklik / `Shift+F10`: volledig kaartactiemenu.
+- Ctrl/⌘-klik of tik: kaart aan de multiselect toevoegen of eruit verwijderen.
+- Spelerrail: trek/mill/schud/untap, poison, commanderregistratie en tokens.
+
 ## Architectuur
 
 De code blijft bewust één Vite-app; er is voor deze slice geen monorepo
@@ -94,6 +133,11 @@ Kaartdefinities en fysieke kaartinstanties zijn gescheiden. `cardsById` is
 genormaliseerd en spelerzones bevatten alleen instance-ID's. Reducers benaderen
 IndexedDB of Cache API nooit direct; listener middleware en services gebruiken
 repositoryinterfaces.
+
+De actuele savegame heeft schemaversie 4. Hydratie migreert versies 1–3 en
+voegt veilige defaults toe voor fase, poison en commanderregistratie. Tokens,
+counters, actieve kaartzijde, vrije posities, tax en damage staan in de
+duurzame game-state; multiselect en lopende pointerinteractie niet.
 
 Zie [ADR 001](docs/architecture/001-local-first-boundaries.md) voor het
 onderscheid tussen Redux, duurzame opslag, tijdelijke cache en expliciete
@@ -137,8 +181,12 @@ Deployment zelf is niet uitgevoerd en vereist eigen Cloudflare-toegang.
 ## Huidige beperkingen
 
 - Alleen openbare Archidekt-decks worden ondersteund.
-- Kaarttoken-afleiding, commander damage, commander tax en vrij benoembare
-  custom counters volgen in latere slices.
+- Tokenafbeeldingen en automatische tokenafleiding uit oracletekst zijn nog
+  niet aanwezig; handmatig gemaakte tokens gebruiken bewust een fallback.
+- Commander damage en tax worden handmatig bijgehouden; de app past geen
+  Commander-regels of verliescondities automatisch toe.
+- Multiselect ondersteunt samen verplaatsen en enkele snelle acties, maar nog
+  geen lasso-selectie, attachments of permanente kaartgroepen.
 - Oudere battles zonder opgeslagen battlefieldposities krijgen eerst een
   veilige automatische spreiding; na verslepen wordt de vrije positie duurzaam
   opgeslagen.

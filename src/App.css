@@ -505,6 +505,44 @@
   white-space: nowrap;
 }
 
+.button--phase {
+  min-height: 42px;
+  color: var(--gold-bright);
+  border-color: rgb(215 182 111 / 25%);
+  background: rgb(215 182 111 / 7%);
+}
+
+.selection-toolbar {
+  position: sticky;
+  z-index: 18;
+  top: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 20px;
+  border-bottom: 1px solid rgb(215 182 111 / 24%);
+  background: rgb(9 21 16 / 96%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 24%);
+}
+
+.selection-toolbar strong,
+.selection-toolbar small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.selection-toolbar select,
+.selection-toolbar button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: #17251e;
+}
+
 .battle-table {
   min-width: 1040px;
   overflow: visible;
@@ -514,9 +552,9 @@
 }
 
 .player-board {
-  min-height: 560px;
+  min-height: 650px;
   display: grid;
-  grid-template-columns: 170px minmax(680px, 1fr) 160px;
+  grid-template-columns: 210px minmax(680px, 1fr) 150px;
   grid-template-areas: "player surface pile";
   position: relative;
   isolation: isolate;
@@ -562,7 +600,7 @@
 }
 
 .player-board--opponent {
-  grid-template-columns: 160px minmax(680px, 1fr) 170px;
+  grid-template-columns: 150px minmax(680px, 1fr) 210px;
   grid-template-areas: "pile surface player";
   background:
     linear-gradient(
@@ -579,9 +617,9 @@
   grid-area: player;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 20px;
-  padding: 24px;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 20px;
   border-right: 1px solid rgb(255 255 255 / 7%);
   background: rgb(4 14 10 / 34%);
 }
@@ -590,6 +628,11 @@
   border-right: 0;
   border-left: 1px solid rgb(255 255 255 / 7%);
   text-align: right;
+}
+
+.player-board--opponent .player-controls,
+.player-board--opponent .commander-tracker {
+  text-align: left;
 }
 
 .player-rail h2 {
@@ -656,6 +699,118 @@
   text-transform: uppercase;
 }
 
+.player-controls {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.player-controls__quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.player-controls__quick button,
+.player-controls__quick input,
+.player-controls__token-toggle,
+.token-form input,
+.token-form select,
+.token-form button {
+  width: 100%;
+  min-height: 31px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: #cfdbd3;
+  background: rgb(255 255 255 / 4%);
+  font-size: 9px;
+}
+
+.player-controls__quick label {
+  display: block;
+}
+
+.player-controls__quick input {
+  text-align: center;
+}
+
+.status-counter {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 25px 24px 25px;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.status-counter > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-counter button {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--gold-bright);
+  background: rgb(255 255 255 / 4%);
+}
+
+.status-counter strong {
+  text-align: center;
+}
+
+.commander-tracker {
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgb(0 0 0 / 12%);
+}
+
+.commander-tracker summary {
+  color: #b9c7be;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.commander-tracker[open] summary {
+  margin-bottom: 7px;
+}
+
+.token-form {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid rgb(215 182 111 / 20%);
+  border-radius: 7px;
+  background: rgb(0 0 0 / 16%);
+}
+
+.token-form label {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 8px;
+  text-align: left;
+}
+
+.token-form__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.token-form button[type="submit"] {
+  color: #142016;
+  background: var(--gold-bright);
+  font-weight: 800;
+}
+
 .button--rail {
   color: #b8c8bd;
   border-color: rgb(255 255 255 / 9%);
@@ -706,6 +861,16 @@
   border-color: var(--gold);
   background: rgb(238 207 135 / 11%) !important;
   box-shadow: inset 0 0 28px rgb(238 207 135 / 9%);
+}
+
+html.card-drag-active .zone {
+  border-color: rgb(238 207 135 / 24%);
+  background: rgb(238 207 135 / 3%);
+}
+
+html.card-drag-active .zone--drop-target {
+  border-color: var(--gold);
+  background: rgb(238 207 135 / 14%) !important;
 }
 
 .zone__label {
@@ -773,7 +938,7 @@
 }
 
 .battlefield-card-position {
-  width: 108px;
+  width: clamp(108px, 6.5vw, 122px);
   position: absolute;
   transform: translate(-50%, -50%);
 }
@@ -977,6 +1142,18 @@
   cursor: grab;
 }
 
+.zone--battlefield .card {
+  --card-width: clamp(108px, 6.5vw, 122px);
+}
+
+.card--selected {
+  outline: 3px solid #7ed7a4;
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 6px rgb(126 215 164 / 14%),
+    0 11px 18px rgb(0 0 0 / 28%);
+}
+
 .card:hover,
 .card:focus-visible {
   z-index: 40;
@@ -1158,6 +1335,16 @@ html.card-pointer-active .card.card--tapped {
   line-height: 1.3;
 }
 
+.card__fallback strong {
+  z-index: 1;
+  align-self: end;
+  padding: 3px 5px;
+  border-radius: 5px;
+  color: var(--ink);
+  background: rgb(0 0 0 / 38%);
+  font-size: 11px;
+}
+
 .card__state {
   position: absolute;
   top: 5px;
@@ -1265,6 +1452,33 @@ html.card-pointer-active .card.card--tapped {
   text-align: left;
 }
 
+.card-action-menu__primary + .card-action-menu__primary {
+  margin-top: 6px;
+}
+
+.card-action-menu__selection {
+  margin: -5px 0 10px;
+  color: #9fcab2;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.card-action-menu__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.card-action-menu__row button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 4%);
+  font-size: 10px;
+}
+
 .card-action-menu__primary span {
   font-size: 18px;
 }
@@ -1339,6 +1553,43 @@ html.card-pointer-active .card.card--tapped {
 
 .counter-control strong {
   text-align: center;
+}
+
+.custom-counter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+  margin-top: 5px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.custom-counter label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.custom-counter input {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: #17251e;
+}
+
+.custom-counter button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgb(215 182 111 / 24%);
+  border-radius: 6px;
+  color: var(--gold-bright);
+  background: rgb(215 182 111 / 7%);
+  font-size: 9px;
 }
 
 @keyframes card-action-in {
@@ -1659,6 +1910,37 @@ html.card-pointer-active .card.card--tapped {
   .battle-header .status-bar {
     margin-left: auto;
   }
+
+  .selection-toolbar {
+    top: 0;
+  }
+
+  .battle-table {
+    min-width: 960px;
+  }
+
+  .player-board {
+    grid-template-columns: 180px minmax(645px, 1fr) 135px;
+  }
+
+  .player-board--opponent {
+    grid-template-columns: 135px minmax(645px, 1fr) 180px;
+  }
+
+  .player-rail,
+  .pile-rail {
+    padding: 14px;
+  }
+
+  .board-surface {
+    grid-template-columns: 105px minmax(0, 1fr);
+    padding-inline: 14px;
+  }
+
+  .player-board--opponent .board-surface {
+    grid-template-columns: minmax(0, 1fr) 105px;
+    padding-inline: 14px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1741,5 +2023,17 @@ html.card-pointer-active .card.card--tapped {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+@media (hover: none) {
+  .card:hover {
+    transform: none;
+    box-shadow: 0 11px 18px rgb(0 0 0 / 28%);
+    outline: 0;
+  }
+
+  .card--tapped:hover {
+    transform: rotate(90deg);
   }
 }

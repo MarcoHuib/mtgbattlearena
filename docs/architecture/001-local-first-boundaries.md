@@ -2,7 +2,7 @@
 
 ## Status
 
-Geaccepteerd voor de eerste verticale slice.
+Geaccepteerd en uitgebreid voor fase 2.
 
 ## Context
 
@@ -18,6 +18,9 @@ hetzelfde zijn als een tijdelijke browsercache.
   zones bevatten alleen instance-ID's.
 - Redux beheert de actieve battle, geschiedenis, setupstatus en zichtbare
   offlinevoortgang. Reducers spreken IndexedDB en Cache API niet aan.
+- Multiselect staat in gedeelde, vluchtige UI-state. Kaartposities, tokens,
+  counters, actieve kaartzijde, poison, commander tax en commander damage
+  staan juist in de duurzame game-state.
 - Listener middleware schrijft relevante Redux-acties gedebouncet als
   versieerbare `PersistedGame` naar een `GameRepository`.
 - Dexie implementeert repositoryinterfaces voor decks, games,
@@ -35,3 +38,8 @@ hetzelfde zijn als een tijdelijke browsercache.
 De app kan zonder netwerk hydrateren en spelen zodra app-shell en expliciete
 assets aanwezig zijn. Browseropslag blijft onder beleid van de browser vallen;
 de UI meldt daarom eerlijk of de Storage Persistence API toestemming gaf.
+
+Savegames gebruiken vanaf fase 2 schema 4. De hydrator ondersteunt schema 1–3
+en vult nieuwe velden veilig aan. De Dexie-tabellen zelf hoefden niet
+destructief te wijzigen, omdat het versieerbare savegamerecord als geheel wordt
+opgeslagen.

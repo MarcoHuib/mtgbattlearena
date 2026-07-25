@@ -1,20 +1,34 @@
 import { createSlice, current, type PayloadAction } from "@reduxjs/toolkit"
 import {
+  advancePhase,
   advanceTurn,
+  changeCommanderDamage,
+  changeCommanderTax,
   changePlayerLife,
+  changePlayerPoison,
+  createToken,
   drawCards,
+  duplicateToken,
   keepOpeningHand,
+  millCards,
   moveCard,
+  moveCards,
   mulliganOpeningHand,
   seededRandom,
   setCardCounter,
+  setCardStackOrder,
+  shuffleLibrary,
+  switchCardFace,
   toggleCardTapped,
+  toggleCardsTapped,
+  untapAllCards,
 } from "../../game-core/game"
 import type {
   BattlefieldPosition,
   GameHistoryState,
   GameState,
   PlayerId,
+  TokenKind,
   Zone,
 } from "../../game-core/types"
 
@@ -80,9 +94,27 @@ export const gameSlice = createSlice({
         ),
       )
     },
+    moveCards(
+      state,
+      action: PayloadAction<{
+        moves: {
+          instanceId: string
+          playerId: PlayerId
+          zone: Zone
+          position?: BattlefieldPosition
+        }[]
+      }>,
+    ) {
+      applyGameChange(state, game => moveCards(game, action.payload.moves))
+    },
     toggleTap(state, action: PayloadAction<{ instanceId: string }>) {
       applyGameChange(state, game =>
         toggleCardTapped(game, action.payload.instanceId),
+      )
+    },
+    toggleSelectedTap(state, action: PayloadAction<{ instanceIds: string[] }>) {
+      applyGameChange(state, game =>
+        toggleCardsTapped(game, action.payload.instanceIds),
       )
     },
     setCounter(
@@ -101,6 +133,51 @@ export const gameSlice = createSlice({
           action.payload.value,
         ),
       )
+    },
+    switchFace(state, action: PayloadAction<{ instanceId: string }>) {
+      applyGameChange(state, game =>
+        switchCardFace(game, action.payload.instanceId),
+      )
+    },
+    changeStackOrder(
+      state,
+      action: PayloadAction<{
+        instanceId: string
+        direction: "front" | "back"
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        setCardStackOrder(
+          game,
+          action.payload.instanceId,
+          action.payload.direction,
+        ),
+      )
+    },
+    mill(state, action: PayloadAction<{ playerId: PlayerId; amount: number }>) {
+      applyGameChange(state, game =>
+        millCards(game, action.payload.playerId, action.payload.amount),
+      )
+    },
+    shufflePlayerLibrary(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; seed: number }>,
+    ) {
+      applyGameChange(state, game =>
+        shuffleLibrary(
+          game,
+          action.payload.playerId,
+          seededRandom(action.payload.seed),
+        ),
+      )
+    },
+    untapAll(state, action: PayloadAction<{ playerId: PlayerId }>) {
+      applyGameChange(state, game =>
+        untapAllCards(game, action.payload.playerId),
+      )
+    },
+    nextPhase(state) {
+      applyGameChange(state, game => advancePhase(game))
     },
     nextTurn(state) {
       applyGameChange(state, game => advanceTurn(game))
@@ -130,6 +207,82 @@ export const gameSlice = createSlice({
         changePlayerLife(game, action.payload.playerId, action.payload.delta),
       )
     },
+    changePoison(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; delta: number }>,
+    ) {
+      applyGameChange(state, game =>
+        changePlayerPoison(game, action.payload.playerId, action.payload.delta),
+      )
+    },
+    changeTax(
+      state,
+      action: PayloadAction<{
+        playerId: PlayerId
+        commanderId: string
+        delta: number
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        changeCommanderTax(
+          game,
+          action.payload.playerId,
+          action.payload.commanderId,
+          action.payload.delta,
+        ),
+      )
+    },
+    changeDamage(
+      state,
+      action: PayloadAction<{
+        damagedPlayerId: PlayerId
+        commanderId: string
+        delta: number
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        changeCommanderDamage(
+          game,
+          action.payload.damagedPlayerId,
+          action.payload.commanderId,
+          action.payload.delta,
+        ),
+      )
+    },
+    addToken(
+      state,
+      action: PayloadAction<{
+        playerId: PlayerId
+        kind: TokenKind
+        name: string
+        power?: number
+        toughness?: number
+        position?: BattlefieldPosition
+        definitionId: string
+        instanceId: string
+      }>,
+    ) {
+      let idIndex = 0
+      const ids = [action.payload.definitionId, action.payload.instanceId]
+      applyGameChange(state, game =>
+        createToken(game, {
+          ...action.payload,
+          createId: () => ids[idIndex++] ?? action.payload.instanceId,
+        }),
+      )
+    },
+    copyToken(
+      state,
+      action: PayloadAction<{ instanceId: string; duplicateId: string }>,
+    ) {
+      applyGameChange(state, game =>
+        duplicateToken(
+          game,
+          action.payload.instanceId,
+          () => action.payload.duplicateId,
+        ),
+      )
+    },
     undo(state) {
       const previous = state.past.pop()
       if (!previous || !state.present) return
@@ -146,17 +299,30 @@ export const gameSlice = createSlice({
 })
 
 export const {
+  addToken,
+  changeDamage,
   changeLife,
+  changePoison,
+  changeStackOrder,
+  changeTax,
   closeBattle,
+  copyToken,
   drawCard,
   hydrateBattle,
   keepHand,
+  mill,
   moveCard: moveGameCard,
+  moveCards: moveGameCards,
   mulliganHand,
+  nextPhase,
   nextTurn,
   redo,
   setCounter,
+  shufflePlayerLibrary,
   startGame,
+  switchFace,
   toggleTap,
+  toggleSelectedTap,
   undo,
+  untapAll,
 } = gameSlice.actions

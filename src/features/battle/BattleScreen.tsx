@@ -7,9 +7,17 @@ import { useRef } from "react"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
-import type { PlayerId, Zone } from "../../game-core/types"
-import { moveGameCard, nextTurn, redo, undo } from "../game/gameSlice"
+import type { PlayerId, TurnPhase, Zone } from "../../game-core/types"
+import {
+  moveGameCard,
+  moveGameCards,
+  nextPhase,
+  nextTurn,
+  redo,
+  undo,
+} from "../game/gameSlice"
 import { setOfflinePanel } from "../offline/offlineSlice"
+import { clearCardSelection } from "../ui/uiSlice"
 import { OfflinePanel } from "../offline/OfflinePanel"
 import {
   cardBoundsAtPointer,
@@ -22,6 +30,7 @@ import {
 } from "./battlefieldPosition"
 import { OpeningHandDialog } from "./OpeningHandDialog"
 import { PlayerBoard } from "./PlayerBoard"
+import { SelectionToolbar } from "./SelectionToolbar"
 
 type BattleScreenProps = {
   onNewBattle: () => void
@@ -40,10 +49,19 @@ const transformScale = (element: Element) => {
   }
 }
 
+const phaseLabels: Record<TurnPhase, string> = {
+  beginning: "Beginfase",
+  "precombat-main": "Eerste hoofdfase",
+  combat: "Gevecht",
+  "postcombat-main": "Tweede hoofdfase",
+  ending: "Eindfase",
+}
+
 export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
   const dispatch = useAppDispatch()
   const dragAnchor = useRef<DragAnchor | null>(null)
   const game = useAppSelector(state => state.game)
+  const selectedCardIds = useAppSelector(state => state.ui.selectedCardIds)
   const restored = useAppSelector(state => state.ui.restored)
   const offline = useAppSelector(state => state.offline.current)
   const activePlayer = game.present?.players[game.present.activePlayerId]
@@ -59,6 +77,7 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
     : null
 
   const handleDragStart = (event: DragStartEvent) => {
+    document.documentElement.classList.add("card-drag-active")
     const pointer = pointerFromEvent(event.operation.activatorEvent)
     const sourceElement = event.operation.source?.element
     if (!pointer || !sourceElement) {
@@ -98,6 +117,7 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
+    document.documentElement.classList.remove("card-drag-active")
     if (event.canceled || openingPlayerId) {
       dragAnchor.current = null
       return
@@ -161,14 +181,60 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
             )
           : undefined
 
-    dispatch(
-      moveGameCard({
-        instanceId: sourceData.instanceId,
-        playerId,
-        zone,
-        position,
-      }),
-    )
+    const sourceCard = game.present?.cardsById[sourceData.instanceId]
+    const moveSelection =
+      selectedCardIds.includes(sourceData.instanceId) &&
+      selectedCardIds.length > 1
+        ? selectedCardIds.filter(
+            instanceId =>
+              game.present?.cardsById[instanceId]?.controllerId ===
+              sourceCard?.controllerId,
+          )
+        : []
+
+    if (moveSelection.length > 1) {
+      const sourcePosition = sourceCard?.position
+      const sourceSelectionIndex = moveSelection.indexOf(sourceData.instanceId)
+      dispatch(
+        moveGameCards({
+          moves: moveSelection.map((instanceId, index) => {
+            const card = game.present?.cardsById[instanceId]
+            const offsetX =
+              card?.position && sourcePosition
+                ? card.position.x - sourcePosition.x
+                : (index - sourceSelectionIndex) * 0.07
+            const offsetY =
+              card?.position && sourcePosition
+                ? card.position.y - sourcePosition.y
+                : (index - sourceSelectionIndex) * 0.035
+            const relativePosition =
+              zone === "battlefield" && position
+                ? {
+                    x: Math.max(0, Math.min(1, position.x + offsetX)),
+                    y: Math.max(0, Math.min(1, position.y + offsetY)),
+                    z: position.z + index,
+                  }
+                : undefined
+            return {
+              instanceId,
+              playerId,
+              zone,
+              position: relativePosition,
+            }
+          }),
+        }),
+      )
+      dispatch(clearCardSelection())
+    } else {
+      dispatch(
+        moveGameCard({
+          instanceId: sourceData.instanceId,
+          playerId,
+          zone,
+          position,
+        }),
+      )
+    }
   }
 
   return (
@@ -194,9 +260,20 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
           >
             <span>
               Beurt {game.present?.turnNumber ?? 1} ·{" "}
+              {game.present ? phaseLabels[game.present.phase] : "Beginfase"} ·{" "}
               {activePlayer?.name ?? "Speler"}
             </span>
             Next turn →
+          </button>
+          <button
+            className="button button--phase"
+            type="button"
+            disabled={!game.present || openingPlayerId !== null}
+            onClick={() => {
+              dispatch(nextPhase())
+            }}
+          >
+            Volgende fase
           </button>
           <button
             className="icon-button"
@@ -240,6 +317,7 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
           </button>
         </nav>
       </header>
+      <SelectionToolbar />
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="battle-table">
           <PlayerBoard playerId="player-2" orientation="opponent" />
