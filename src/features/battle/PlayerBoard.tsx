@@ -1,7 +1,6 @@
 import { useState } from "react"
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
+import { useAppSelector } from "../../app/hooks"
 import type { CardInstance, PlayerId, Zone } from "../../game-core/types"
-import { changeLife } from "../game/gameSlice"
 import { PlayerControls } from "./PlayerControls"
 import { ZoneActionMenu } from "./ZoneActionMenu"
 import { ZoneArea } from "./ZoneArea"
@@ -18,7 +17,6 @@ type PlayerBoardProps = {
 }
 
 export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
-  const dispatch = useAppDispatch()
   const game = useAppSelector(state => state.game.present)
   const [browser, setBrowser] = useState<{
     zone: BrowsableZone
@@ -43,7 +41,7 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
     <section
       className={`player-board player-board--${orientation} ${
         isActivePlayer ? "player-board--active" : ""
-      }`}
+      } ${player.disabled ? "player-board--disabled" : ""}`}
       aria-label={`Speelveld van ${player.name}`}
     >
       <aside className="player-rail">
@@ -52,36 +50,6 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
             {orientation === "self" ? "Speler één" : "Speler twee"}
           </span>
           <h2>{player.name}</h2>
-          {isActivePlayer ? (
-            <span className="turn-indicator">Aan de beurt</span>
-          ) : null}
-        </div>
-        <div
-          className="life-control"
-          aria-label={`Levenspunten ${player.name}`}
-        >
-          <button
-            type="button"
-            aria-label={`Verlaag leven van ${player.name}`}
-            onClick={() => {
-              dispatch(changeLife({ playerId, delta: -1 }))
-            }}
-          >
-            −
-          </button>
-          <span>
-            <strong>{player.life}</strong>
-            <small>leven</small>
-          </span>
-          <button
-            type="button"
-            aria-label={`Verhoog leven van ${player.name}`}
-            onClick={() => {
-              dispatch(changeLife({ playerId, delta: 1 }))
-            }}
-          >
-            +
-          </button>
         </div>
         <PlayerControls playerId={playerId} />
       </aside>

@@ -12,6 +12,7 @@ import {
   addKnownToken,
   drawCard,
   mill,
+  mulliganHand,
   shufflePlayerLibrary,
   untapAll,
 } from "../game/gameSlice"
@@ -254,6 +255,15 @@ export const ZoneActionMenu = ({
               }}
             >
               <span aria-hidden="true">⤨</span> Schud library
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                dispatch(mulliganHand({ playerId, seed: randomSeed() }))
+                onClose()
+              }}
+            >
+              <span aria-hidden="true">↻</span> Mulligan
             </button>
           </>
         ) : (

@@ -7,15 +7,8 @@ import { useRef } from "react"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
-import type { PlayerId, TurnPhase, Zone } from "../../game-core/types"
-import {
-  moveGameCard,
-  moveGameCards,
-  nextPhase,
-  nextTurn,
-  redo,
-  undo,
-} from "../game/gameSlice"
+import type { PlayerId, Zone } from "../../game-core/types"
+import { moveGameCard, moveGameCards, redo, undo } from "../game/gameSlice"
 import { setOfflinePanel } from "../offline/offlineSlice"
 import { clearCardSelection } from "../ui/uiSlice"
 import { OfflinePanel } from "../offline/OfflinePanel"
@@ -29,6 +22,7 @@ import {
   type DragAnchor,
 } from "./battlefieldPosition"
 import { OpeningHandDialog } from "./OpeningHandDialog"
+import { MatchStatusBar } from "./MatchStatusBar"
 import { PlayerBoard } from "./PlayerBoard"
 import { SelectionToolbar } from "./SelectionToolbar"
 
@@ -49,14 +43,6 @@ const transformScale = (element: Element) => {
   }
 }
 
-const phaseLabels: Record<TurnPhase, string> = {
-  beginning: "Beginfase",
-  "precombat-main": "Eerste hoofdfase",
-  combat: "Gevecht",
-  "postcombat-main": "Tweede hoofdfase",
-  ending: "Eindfase",
-}
-
 export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
   const dispatch = useAppDispatch()
   const dragAnchor = useRef<DragAnchor | null>(null)
@@ -64,10 +50,6 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
   const selectedCardIds = useAppSelector(state => state.ui.selectedCardIds)
   const restored = useAppSelector(state => state.ui.restored)
   const offline = useAppSelector(state => state.offline.current)
-  const activePlayer = game.present?.players[game.present.activePlayerId]
-  const nextPlayerId =
-    game.present?.activePlayerId === "player-1" ? "player-2" : "player-1"
-  const nextPlayer = game.present?.players[nextPlayerId]
   const openingPlayerId: PlayerId | null = game.present
     ? !game.present.openingHands["player-1"].kept
       ? "player-1"
@@ -250,32 +232,6 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
         <StatusBar />
         <nav className="battle-actions" aria-label="Battleacties">
           <button
-            className="button button--next-turn"
-            type="button"
-            disabled={!game.present || openingPlayerId !== null}
-            aria-label={`Next turn: ${nextPlayer?.name ?? "volgende speler"}`}
-            onClick={() => {
-              dispatch(nextTurn())
-            }}
-          >
-            <span>
-              Beurt {game.present?.turnNumber ?? 1} ·{" "}
-              {game.present ? phaseLabels[game.present.phase] : "Beginfase"} ·{" "}
-              {activePlayer?.name ?? "Speler"}
-            </span>
-            Next turn →
-          </button>
-          <button
-            className="button button--phase"
-            type="button"
-            disabled={!game.present || openingPlayerId !== null}
-            onClick={() => {
-              dispatch(nextPhase())
-            }}
-          >
-            Volgende fase
-          </button>
-          <button
             className="icon-button"
             type="button"
             disabled={game.past.length === 0}
@@ -321,10 +277,8 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="battle-table">
           <PlayerBoard playerId="player-2" orientation="opponent" />
-          <div className="table-divider" aria-hidden="true">
-            <span />
-            <strong>Battle line</strong>
-            <span />
+          <div className="table-divider">
+            <MatchStatusBar />
           </div>
           <PlayerBoard playerId="player-1" orientation="self" />
         </div>

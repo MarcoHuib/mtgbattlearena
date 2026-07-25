@@ -1,9 +1,12 @@
 import type {
   BattlefieldPosition,
+  CardDefinition,
   CardGroup,
   CardInstance,
   DeckSnapshot,
   GameState,
+  DayNightStatus,
+  OptionalPlayerTracker,
   PlayerId,
   PlayerState,
   PlayerZones,
@@ -55,6 +58,10 @@ const makePlayer = (playerId: PlayerId, deck: DeckSnapshot): PlayerState => ({
   deckSnapshotId: deck.id,
   life: 40,
   poison: 0,
+  trackers: { energy: 0, experience: 0, rad: 0 },
+  visibleTrackers: { energy: false, experience: false, rad: false },
+  citysBlessing: false,
+  disabled: false,
   commanderTax: {},
   commanderDamage: {},
   zones: emptyZones(),
@@ -118,7 +125,7 @@ export const createGame = (
   })
 
   const game: GameState = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: options.createId("game"),
     title: `${decks[0].name} vs. ${decks[1].name}`,
     createdAt: options.now,
@@ -126,6 +133,11 @@ export const createGame = (
     activePlayerId: "player-1",
     turnNumber: 1,
     phase: "beginning",
+    matchStatus: {
+      monarchPlayerId: null,
+      initiativePlayerId: null,
+      dayNight: "none",
+    },
     openingHands: {
       "player-1": { mulliganCount: 0, kept: false },
       "player-2": { mulliganCount: 0, kept: false },
@@ -631,6 +643,161 @@ export const changePlayerPoison = (
     },
   },
 })
+
+export const changePlayerTracker = (
+  game: GameState,
+  playerId: PlayerId,
+  tracker: OptionalPlayerTracker,
+  delta: number,
+  now = new Date().toISOString(),
+): GameState => {
+  const player = game.players[playerId]
+  const value = Math.max(0, player.trackers[tracker] + delta)
+  return {
+    ...game,
+    updatedAt: now,
+    players: {
+      ...game.players,
+      [playerId]: {
+        ...player,
+        trackers: { ...player.trackers, [tracker]: value },
+      },
+    },
+  }
+}
+
+export const setPlayerTrackerVisibility = (
+  game: GameState,
+  playerId: PlayerId,
+  tracker: OptionalPlayerTracker,
+  visible: boolean,
+  now = new Date().toISOString(),
+): GameState => {
+  const player = game.players[playerId]
+  if (player.visibleTrackers[tracker] === visible) return game
+  return {
+    ...game,
+    updatedAt: now,
+    players: {
+      ...game.players,
+      [playerId]: {
+        ...player,
+        visibleTrackers: { ...player.visibleTrackers, [tracker]: visible },
+      },
+    },
+  }
+}
+
+export const setPlayerCitysBlessing = (
+  game: GameState,
+  playerId: PlayerId,
+  active: boolean,
+  now = new Date().toISOString(),
+): GameState => {
+  const player = game.players[playerId]
+  if (player.citysBlessing === active) return game
+  return {
+    ...game,
+    updatedAt: now,
+    players: {
+      ...game.players,
+      [playerId]: { ...player, citysBlessing: active },
+    },
+  }
+}
+
+export const setPlayerDisabled = (
+  game: GameState,
+  playerId: PlayerId,
+  disabled: boolean,
+  now = new Date().toISOString(),
+): GameState => {
+  const player = game.players[playerId]
+  if (player.disabled === disabled) return game
+  return {
+    ...game,
+    updatedAt: now,
+    players: {
+      ...game.players,
+      [playerId]: { ...player, disabled },
+    },
+  }
+}
+
+export const setMonarchHolder = (
+  game: GameState,
+  playerId: PlayerId | null,
+  now = new Date().toISOString(),
+): GameState => {
+  if (game.matchStatus.monarchPlayerId === playerId) return game
+  return {
+    ...game,
+    updatedAt: now,
+    matchStatus: { ...game.matchStatus, monarchPlayerId: playerId },
+  }
+}
+
+export const setInitiativeHolder = (
+  game: GameState,
+  playerId: PlayerId | null,
+  now = new Date().toISOString(),
+): GameState => {
+  if (game.matchStatus.initiativePlayerId === playerId) return game
+  return {
+    ...game,
+    updatedAt: now,
+    matchStatus: { ...game.matchStatus, initiativePlayerId: playerId },
+  }
+}
+
+export const setDayNightStatus = (
+  game: GameState,
+  dayNight: DayNightStatus,
+  now = new Date().toISOString(),
+): GameState => {
+  if (game.matchStatus.dayNight === dayNight) return game
+  return {
+    ...game,
+    updatedAt: now,
+    matchStatus: { ...game.matchStatus, dayNight },
+  }
+}
+
+export type PlayerWarning = "life" | "poison" | "commander-damage"
+
+export const isCreatureDefinition = (
+  definition: CardDefinition | undefined,
+): boolean =>
+  [
+    definition?.typeLine,
+    ...(definition?.faces.map(face => face.typeLine) ?? []),
+  ].some(typeLine => /\bcreature\b/i.test(typeLine ?? ""))
+
+export const getPlayerWarnings = (
+  game: GameState,
+  playerId: PlayerId,
+): PlayerWarning[] => {
+  const player = game.players[playerId]
+  const warnings: PlayerWarning[] = []
+  if (player.life <= 0) warnings.push("life")
+  if (player.poison >= 10) warnings.push("poison")
+  if (
+    Object.entries(player.commanderDamage).some(([commanderId, value]) => {
+      const commander = game.cardsById[commanderId]
+      return (
+        value >= 21 &&
+        isCreatureDefinition(
+          commander
+            ? game.cardDefinitionsById[commander.definitionId]
+            : undefined,
+        )
+      )
+    })
+  ) {
+    warnings.push("commander-damage")
+  }
+  return warnings
+}
 
 export const changeCommanderTax = (
   game: GameState,

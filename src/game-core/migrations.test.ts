@@ -10,9 +10,9 @@ test("migreert een versie 1-savegame met veilige beurtdefaults", () => {
   }
   const hydrated = hydratePersistedGame(JSON.parse(JSON.stringify(stored)))
   expect(hydrated).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     game: {
-      schemaVersion: 5,
+      schemaVersion: 6,
       id: "game",
       activePlayerId: "player-1",
       turnNumber: 1,
@@ -43,9 +43,9 @@ test("hervat een versie 2-battle zonder opnieuw een openingshand te vragen", () 
   }
 
   expect(hydratePersistedGame(stored)).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     game: {
-      schemaVersion: 5,
+      schemaVersion: 6,
       activePlayerId: "player-2",
       turnNumber: 4,
       phase: "beginning",
@@ -92,14 +92,18 @@ test("migreert versie 3 met commander- en poisondefaults zonder zones te verliez
   }
 
   expect(hydratePersistedGame(stored)).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     game: {
-      schemaVersion: 5,
+      schemaVersion: 6,
       phase: "beginning",
       players: {
         "player-1": {
           life: 37,
           poison: 0,
+          trackers: { energy: 0, experience: 0, rad: 0 },
+          visibleTrackers: { energy: false, experience: false, rad: false },
+          citysBlessing: false,
+          disabled: false,
           commanderTax: { "commander-card": 0 },
           commanderDamage: {},
           zones: { command: ["commander-card"] },
@@ -144,7 +148,7 @@ test("behoudt fase-2-data bij serialisatie en hydratatie", () => {
 
   const hydrated = hydratePersistedGame(stored)
   expect(hydrated.game).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     groupsById: {},
     phase: "combat",
     players: {
@@ -197,11 +201,83 @@ test("migreert versie 4 naar groepen en ruimt ongeldige attachments op", () => {
 
   const hydrated = hydratePersistedGame(stored)
   expect(hydrated).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     game: {
-      schemaVersion: 5,
+      schemaVersion: 6,
       groupsById: {},
       cardsById: { card: { attachedTo: undefined } },
     },
+  })
+})
+
+test("migreert versie 5 naar centrale matchstatus en spelertrackers", () => {
+  const player = {
+    id: "player-1",
+    name: "Speler",
+    deckSnapshotId: "deck",
+    life: 12,
+    poison: 3,
+    commanderTax: {},
+    commanderDamage: {},
+    zones: {
+      library: [],
+      hand: [],
+      battlefield: [],
+      graveyard: [],
+      exile: [],
+      command: [],
+    },
+  }
+  const game = {
+    schemaVersion: 5,
+    id: "game",
+    title: "Battle",
+    createdAt: "2026-01-06T00:00:00.000Z",
+    updatedAt: "2026-01-06T00:00:00.000Z",
+    activePlayerId: "player-1",
+    turnNumber: 2,
+    phase: "combat",
+    openingHands: {
+      "player-1": { mulliganCount: 0, kept: true },
+      "player-2": { mulliganCount: 0, kept: true },
+    },
+    deckSnapshotIds: ["deck-1", "deck-2"],
+    players: {
+      "player-1": player,
+      "player-2": { ...player, id: "player-2" },
+    },
+    cardDefinitionsById: {},
+    cardsById: {},
+    groupsById: {},
+  }
+
+  const hydrated = hydratePersistedGame({
+    schemaVersion: 5,
+    game,
+    past: [game],
+    future: [],
+    savedAt: "2026-01-06T00:00:00.000Z",
+  })
+
+  expect(hydrated).toMatchObject({
+    schemaVersion: 6,
+    game: {
+      schemaVersion: 6,
+      matchStatus: {
+        monarchPlayerId: null,
+        initiativePlayerId: null,
+        dayNight: "none",
+      },
+      players: {
+        "player-1": {
+          life: 12,
+          trackers: { energy: 0, experience: 0, rad: 0 },
+          visibleTrackers: { energy: false, experience: false, rad: false },
+          citysBlessing: false,
+          disabled: false,
+        },
+      },
+    },
+    past: [{ schemaVersion: 6 }],
   })
 })

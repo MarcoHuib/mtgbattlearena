@@ -116,8 +116,31 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
       name: "Library-acties openen",
     }),
   )
+  const libraryActions = screen.getByRole("dialog", {
+    name: "Libraryacties",
+  })
+  expect(
+    within(libraryActions).getByRole("button", { name: /Trek een kaart/ }),
+  ).toBeInTheDocument()
+  expect(
+    within(libraryActions).getByRole("button", { name: "Trek X" }),
+  ).toBeInTheDocument()
+  expect(
+    within(libraryActions).getByRole("button", { name: "Mill X" }),
+  ).toBeInTheDocument()
+  expect(
+    within(libraryActions).getByRole("button", { name: /Schud library/ }),
+  ).toBeInTheDocument()
+  expect(
+    within(libraryActions).getByRole("button", { name: /Mulligan/ }),
+  ).toBeInTheDocument()
+  expect(
+    within(playerBoard.querySelector(".player-rail")!).queryByRole("button", {
+      name: /Trek|Mill|Schud|Untap alles/,
+    }),
+  ).not.toBeInTheDocument()
   await user.click(
-    screen.getByRole("button", {
+    within(libraryActions).getByRole("button", {
       name: /Bekijk library/,
     }),
   )
@@ -165,6 +188,9 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
   const battlefieldActions = screen.getByRole("dialog", {
     name: "Battlefieldacties",
   })
+  expect(
+    within(battlefieldActions).getByRole("button", { name: /Untap alles/ }),
+  ).toBeInTheDocument()
   await user.click(
     within(battlefieldActions).getByRole("button", { name: /Treasure/ }),
   )
@@ -185,6 +211,62 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
   ).toBe(
     "https://card-images.archidekt.com/normal/front/f/9/f909bd95-58a1-4299-9570-87724145fc85.jpg?1783902798",
   )
+
+  await user.click(within(playerBoard).getByText("Optionele trackers"))
+  await user.click(
+    within(playerBoard).getByRole("checkbox", { name: "Energy" }),
+  )
+  await user.click(
+    within(playerBoard).getByRole("button", {
+      name: "Verhoog Energy van Verdant Resolve",
+    }),
+  )
+  expect(
+    store.getState().game.present?.players["player-1"].trackers.energy,
+  ).toBe(1)
+  await user.click(
+    within(playerBoard).getByRole("button", { name: "City's Blessing" }),
+  )
+  expect(store.getState().game.present?.players["player-1"].citysBlessing).toBe(
+    true,
+  )
+  await user.click(
+    within(playerBoard).getByRole("button", {
+      name: "Speler uitschakelen",
+    }),
+  )
+  expect(store.getState().game.present?.players["player-1"].disabled).toBe(true)
+  await user.click(
+    within(playerBoard).getByRole("button", {
+      name: "Uitgeschakeld",
+    }),
+  )
+  expect(store.getState().game.present?.players["player-1"].disabled).toBe(
+    false,
+  )
+  await user.selectOptions(screen.getByLabelText("Monarch-houder"), "player-1")
+  await user.selectOptions(
+    screen.getByLabelText("Initiative-houder"),
+    "player-2",
+  )
+  await user.selectOptions(screen.getByLabelText("Dag- en nachtstatus"), "day")
+  expect(store.getState().game.present?.matchStatus).toEqual({
+    monarchPlayerId: "player-1",
+    initiativePlayerId: "player-2",
+    dayNight: "day",
+  })
+
+  const commanderTaxButton = within(playerBoard).getByRole("button", {
+    name: /Verhoog commander tax van/,
+  })
+  await user.click(commanderTaxButton)
+  const commanderId =
+    store.getState().game.present?.players["player-1"].zones.command[0] ?? ""
+  expect(
+    store.getState().game.present?.players["player-1"].commanderTax[
+      commanderId
+    ],
+  ).toBe(2)
 
   await waitFor(
     () => {

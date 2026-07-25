@@ -8,6 +8,7 @@ import {
   changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
+  changePlayerTracker,
   createCardGroup,
   createKnownToken,
   createToken,
@@ -24,8 +25,14 @@ import {
   mulliganOpeningHand,
   removeCardsFromGroup,
   seededRandom,
+  setDayNightStatus,
   setCardCounter,
   setCardStackOrder,
+  setInitiativeHolder,
+  setMonarchHolder,
+  setPlayerCitysBlessing,
+  setPlayerDisabled,
+  setPlayerTrackerVisibility,
   shuffleLibrary,
   switchCardFace,
   toggleCardTapped,
@@ -37,6 +44,8 @@ import type {
   BattlefieldPosition,
   GameHistoryState,
   GameState,
+  DayNightStatus,
+  OptionalPlayerTracker,
   PlayerId,
   TokenKind,
   Zone,
@@ -314,6 +323,79 @@ export const gameSlice = createSlice({
         changePlayerPoison(game, action.payload.playerId, action.payload.delta),
       )
     },
+    changeTracker(
+      state,
+      action: PayloadAction<{
+        playerId: PlayerId
+        tracker: OptionalPlayerTracker
+        delta: number
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        changePlayerTracker(
+          game,
+          action.payload.playerId,
+          action.payload.tracker,
+          action.payload.delta,
+        ),
+      )
+    },
+    setTrackerVisibility(
+      state,
+      action: PayloadAction<{
+        playerId: PlayerId
+        tracker: OptionalPlayerTracker
+        visible: boolean
+      }>,
+    ) {
+      applyGameChange(state, game =>
+        setPlayerTrackerVisibility(
+          game,
+          action.payload.playerId,
+          action.payload.tracker,
+          action.payload.visible,
+        ),
+      )
+    },
+    setCitysBlessing(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; active: boolean }>,
+    ) {
+      applyGameChange(state, game =>
+        setPlayerCitysBlessing(
+          game,
+          action.payload.playerId,
+          action.payload.active,
+        ),
+      )
+    },
+    setDisabled(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; disabled: boolean }>,
+    ) {
+      applyGameChange(state, game =>
+        setPlayerDisabled(
+          game,
+          action.payload.playerId,
+          action.payload.disabled,
+        ),
+      )
+    },
+    setMonarch(state, action: PayloadAction<{ playerId: PlayerId | null }>) {
+      applyGameChange(state, game =>
+        setMonarchHolder(game, action.payload.playerId),
+      )
+    },
+    setInitiative(state, action: PayloadAction<{ playerId: PlayerId | null }>) {
+      applyGameChange(state, game =>
+        setInitiativeHolder(game, action.payload.playerId),
+      )
+    },
+    setDayNight(state, action: PayloadAction<{ status: DayNightStatus }>) {
+      applyGameChange(state, game =>
+        setDayNightStatus(game, action.payload.status),
+      )
+    },
     changeTax(
       state,
       action: PayloadAction<{
@@ -416,6 +498,7 @@ export const {
   changeDamage,
   changeLife,
   changePoison,
+  changeTracker,
   changeStackOrder,
   changeTax,
   closeBattle,
@@ -437,6 +520,12 @@ export const {
   redo,
   removeFromGroup,
   setCounter,
+  setCitysBlessing,
+  setDayNight,
+  setDisabled,
+  setInitiative,
+  setMonarch,
+  setTrackerVisibility,
   shufflePlayerLibrary,
   startGame,
   switchFace,

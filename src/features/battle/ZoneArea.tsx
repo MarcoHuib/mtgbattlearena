@@ -13,6 +13,7 @@ import {
 } from "./battlefieldPosition"
 import { CardView } from "./CardView"
 import { CardGroupOverlay } from "./CardGroupOverlay"
+import { CommanderTaxControl } from "./CommanderTaxControl"
 
 type ZoneAreaProps = {
   playerId: PlayerId
@@ -190,7 +191,19 @@ export const ZoneArea = ({
                 </div>
               )
             }
-            return (
+            return zone === "command" && instance.isCommander ? (
+              <div className="command-card" key={instance.instanceId}>
+                <CardView
+                  instance={instance}
+                  definition={definition}
+                  compact={compact}
+                />
+                <CommanderTaxControl
+                  instance={instance}
+                  definition={definition}
+                />
+              </div>
+            ) : (
               <CardView
                 key={instance.instanceId}
                 instance={instance}

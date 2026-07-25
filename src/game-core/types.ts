@@ -88,12 +88,22 @@ export type DeckSnapshot = ImportedDeck & {
 
 export type PlayerZones = Record<Zone, string[]>
 
+export type OptionalPlayerTracker = "energy" | "experience" | "rad"
+
+export type PlayerTrackers = Record<OptionalPlayerTracker, number>
+
+export type PlayerTrackerVisibility = Record<OptionalPlayerTracker, boolean>
+
 export type PlayerState = {
   id: PlayerId
   name: string
   deckSnapshotId: string
   life: number
   poison: number
+  trackers: PlayerTrackers
+  visibleTrackers: PlayerTrackerVisibility
+  citysBlessing: boolean
+  disabled: boolean
   commanderTax: Record<string, number>
   commanderDamage: Record<string, number>
   zones: PlayerZones
@@ -113,8 +123,16 @@ export type CardGroup = {
   collapsed: boolean
 }
 
+export type DayNightStatus = "none" | "day" | "night"
+
+export type MatchStatus = {
+  monarchPlayerId: PlayerId | null
+  initiativePlayerId: PlayerId | null
+  dayNight: DayNightStatus
+}
+
 export type GameState = {
-  schemaVersion: 5
+  schemaVersion: 6
   id: string
   title: string
   createdAt: string
@@ -122,6 +140,7 @@ export type GameState = {
   activePlayerId: PlayerId
   turnNumber: number
   phase: TurnPhase
+  matchStatus: MatchStatus
   openingHands: Record<PlayerId, OpeningHandState>
   deckSnapshotIds: [string, string]
   players: Record<PlayerId, PlayerState>
@@ -169,7 +188,7 @@ export type OfflineBattlePackage = {
 }
 
 export type PersistedGame = {
-  schemaVersion: 5
+  schemaVersion: 6
   game: GameState
   past: GameState[]
   future: GameState[]

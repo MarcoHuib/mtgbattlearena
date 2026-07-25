@@ -1,100 +1,86 @@
-import { useState } from "react"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
-import type { PlayerId } from "../../game-core/types"
+import { getPlayerWarnings, isCreatureDefinition } from "../../game-core/game"
+import type { OptionalPlayerTracker, PlayerId } from "../../game-core/types"
 import {
   changeDamage,
+  changeLife,
   changePoison,
-  changeTax,
-  drawCard,
-  mill,
-  shufflePlayerLibrary,
-  untapAll,
+  changeTracker,
+  setCitysBlessing,
+  setDisabled,
+  setTrackerVisibility,
 } from "../game/gameSlice"
 
 type PlayerControlsProps = {
   playerId: PlayerId
 }
 
-const randomSeed = () => {
-  const values = new Uint32Array(1)
-  crypto.getRandomValues(values)
-  return values[0] ?? Date.now()
+const trackerLabels: Record<OptionalPlayerTracker, string> = {
+  energy: "Energy",
+  experience: "Experience",
+  rad: "Rad",
 }
+
+const optionalTrackers = Object.keys(trackerLabels) as OptionalPlayerTracker[]
 
 export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
   const dispatch = useAppDispatch()
   const game = useAppSelector(state => state.game.present)
-  const [amount, setAmount] = useState(1)
   if (!game) return null
 
   const player = game.players[playerId]
   const opponentId: PlayerId = playerId === "player-1" ? "player-2" : "player-1"
   const opponent = game.players[opponentId]
-  const commanders = Object.keys(player.commanderTax)
-  const opposingCommanders = Object.keys(opponent.commanderTax)
-  const normalizedAmount = Math.max(1, Math.min(99, Math.floor(amount) || 1))
+  const opposingCommanders = Object.keys(opponent.commanderTax).filter(
+    commanderId => {
+      const commander = game.cardsById[commanderId]
+      return isCreatureDefinition(
+        commander
+          ? game.cardDefinitionsById[commander.definitionId]
+          : undefined,
+      )
+    },
+  )
+  const warnings = getPlayerWarnings(game, playerId)
+
   return (
     <div className="player-controls">
       <div
-        className="player-controls__quick"
-        aria-label={`Acties ${player.name}`}
+        className={`life-control ${
+          warnings.includes("life") ? "status-counter--warning" : ""
+        }`}
+        aria-label={`Levenspunten ${player.name}`}
       >
         <button
           type="button"
+          aria-label={`Verlaag leven van ${player.name}`}
           onClick={() => {
-            dispatch(drawCard({ playerId }))
+            dispatch(changeLife({ playerId, delta: -1 }))
           }}
         >
-          Trek 1
+          −
         </button>
-        <label>
-          <span className="sr-only">Aantal kaarten voor {player.name}</span>
-          <input
-            type="number"
-            min="1"
-            max="99"
-            value={amount}
-            onChange={event => {
-              const value = event.target.valueAsNumber
-              setAmount(Number.isFinite(value) ? value : 1)
-            }}
-          />
-        </label>
+        <span>
+          <strong>{player.life}</strong>
+          <small>leven</small>
+        </span>
         <button
           type="button"
+          aria-label={`Verhoog leven van ${player.name}`}
           onClick={() => {
-            dispatch(drawCard({ playerId, amount: normalizedAmount }))
+            dispatch(changeLife({ playerId, delta: 1 }))
           }}
         >
-          Trek X
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            dispatch(mill({ playerId, amount: normalizedAmount }))
-          }}
-        >
-          Mill X
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            dispatch(shufflePlayerLibrary({ playerId, seed: randomSeed() }))
-          }}
-        >
-          Schud
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            dispatch(untapAll({ playerId }))
-          }}
-        >
-          Untap alles
+          +
         </button>
       </div>
 
-      <div className="status-counter" aria-label={`Poison van ${player.name}`}>
+      <div
+        className={`status-counter ${
+          warnings.includes("poison") ? "status-counter--warning" : ""
+        }`}
+        aria-label={`Poison van ${player.name}`}
+      >
         <span>Poison</span>
         <button
           type="button"
@@ -106,7 +92,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
         >
           −
         </button>
-        <strong>{player.poison}</strong>
+        <strong>
+          {player.poison} <small>/ 10</small>
+        </strong>
         <button
           type="button"
           aria-label={`Verhoog poison van ${player.name}`}
@@ -118,45 +106,61 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
         </button>
       </div>
 
-      {commanders.length > 0 ? (
-        <details className="commander-tracker">
-          <summary>Commander tax</summary>
-          {commanders.map(commanderId => {
-            const definition =
-              game.cardDefinitionsById[
-                game.cardsById[commanderId]?.definitionId ?? ""
-              ]
-            const value = player.commanderTax[commanderId] ?? 0
-            return (
-              <div className="status-counter" key={commanderId}>
-                <span title={definition?.name}>
-                  {definition?.name ?? "Commander"}
-                </span>
-                <button
-                  type="button"
-                  disabled={value === 0}
-                  aria-label={`Verlaag commander tax van ${definition?.name ?? "commander"}`}
-                  onClick={() => {
-                    dispatch(changeTax({ playerId, commanderId, delta: -2 }))
-                  }}
-                >
-                  −
-                </button>
-                <strong>{value}</strong>
-                <button
-                  type="button"
-                  aria-label={`Verhoog commander tax van ${definition?.name ?? "commander"}`}
-                  onClick={() => {
-                    dispatch(changeTax({ playerId, commanderId, delta: 2 }))
-                  }}
-                >
-                  +
-                </button>
-              </div>
-            )
-          })}
-        </details>
-      ) : null}
+      {optionalTrackers
+        .filter(tracker => player.visibleTrackers[tracker])
+        .map(tracker => (
+          <div
+            className="status-counter"
+            key={tracker}
+            aria-label={`${trackerLabels[tracker]} van ${player.name}`}
+          >
+            <span>{trackerLabels[tracker]}</span>
+            <button
+              type="button"
+              aria-label={`Verlaag ${trackerLabels[tracker]} van ${player.name}`}
+              disabled={player.trackers[tracker] === 0}
+              onClick={() => {
+                dispatch(changeTracker({ playerId, tracker, delta: -1 }))
+              }}
+            >
+              −
+            </button>
+            <strong>{player.trackers[tracker]}</strong>
+            <button
+              type="button"
+              aria-label={`Verhoog ${trackerLabels[tracker]} van ${player.name}`}
+              onClick={() => {
+                dispatch(changeTracker({ playerId, tracker, delta: 1 }))
+              }}
+            >
+              +
+            </button>
+          </div>
+        ))}
+
+      <details className="tracker-settings">
+        <summary>Optionele trackers</summary>
+        <div>
+          {optionalTrackers.map(tracker => (
+            <label key={tracker}>
+              <input
+                type="checkbox"
+                checked={player.visibleTrackers[tracker]}
+                onChange={event => {
+                  dispatch(
+                    setTrackerVisibility({
+                      playerId,
+                      tracker,
+                      visible: event.target.checked,
+                    }),
+                  )
+                }}
+              />
+              {trackerLabels[tracker]}
+            </label>
+          ))}
+        </div>
+      </details>
 
       {opposingCommanders.length > 0 ? (
         <details className="commander-tracker">
@@ -168,7 +172,12 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
               ]
             const value = player.commanderDamage[commanderId] ?? 0
             return (
-              <div className="status-counter" key={commanderId}>
+              <div
+                className={`status-counter ${
+                  value >= 21 ? "status-counter--warning" : ""
+                }`}
+                key={commanderId}
+              >
                 <span title={definition?.name}>
                   {definition?.name ?? "Commander"}
                 </span>
@@ -188,7 +197,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
                 >
                   −
                 </button>
-                <strong>{value}</strong>
+                <strong>
+                  {value} <small>/ 21</small>
+                </strong>
                 <button
                   type="button"
                   aria-label={`Verhoog commander damage door ${definition?.name ?? "commander"}`}
@@ -208,6 +219,46 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
             )
           })}
         </details>
+      ) : null}
+
+      <div className="player-status-toggles">
+        <button
+          type="button"
+          className={player.citysBlessing ? "is-active" : ""}
+          aria-pressed={player.citysBlessing}
+          onClick={() => {
+            dispatch(
+              setCitysBlessing({
+                playerId,
+                active: !player.citysBlessing,
+              }),
+            )
+          }}
+        >
+          City&apos;s Blessing
+        </button>
+        <button
+          type="button"
+          className={player.disabled ? "is-disabled" : ""}
+          aria-pressed={player.disabled}
+          onClick={() => {
+            dispatch(setDisabled({ playerId, disabled: !player.disabled }))
+          }}
+        >
+          {player.disabled ? "Uitgeschakeld" : "Speler uitschakelen"}
+        </button>
+      </div>
+
+      {warnings.length > 0 ? (
+        <div className="player-warnings" role="status">
+          {warnings.includes("life") ? <span>Leven is 0 of lager</span> : null}
+          {warnings.includes("poison") ? (
+            <span>Poison is 10 of hoger</span>
+          ) : null}
+          {warnings.includes("commander-damage") ? (
+            <span>Commander damage is 21 of hoger</span>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )

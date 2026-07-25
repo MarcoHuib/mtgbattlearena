@@ -205,6 +205,21 @@ test("herstelt een gedownloade battle volledig offline", async ({
   expect(
     (libraryActionsBox?.x ?? 0) + (libraryActionsBox?.width ?? 0),
   ).toBeLessThanOrEqual(viewport?.width ?? 0)
+  await expect(
+    libraryActions.getByRole("button", { name: /Trek een kaart/ }),
+  ).toBeVisible()
+  await expect(
+    libraryActions.getByRole("button", { name: "Trek X" }),
+  ).toBeVisible()
+  await expect(
+    libraryActions.getByRole("button", { name: "Mill X" }),
+  ).toBeVisible()
+  await expect(
+    libraryActions.getByRole("button", { name: /Schud library/ }),
+  ).toBeVisible()
+  await expect(
+    libraryActions.getByRole("button", { name: /Mulligan/ }),
+  ).toBeVisible()
   await libraryActions.getByRole("button", { name: /Bekijk library/ }).click()
   const libraryBrowser = page.getByRole("dialog", {
     name: "Library bekijken",
@@ -548,14 +563,19 @@ test("herstelt een gedownloade battle volledig offline", async ({
   const movedPositionX = await positionedCard.getAttribute("data-position-x")
   const movedPositionY = await positionedCard.getAttribute("data-position-y")
 
-  const nextTurnButton = page.getByRole("button", { name: /^Next turn:/ })
+  const matchStatus = page.getByRole("region", { name: "Matchstatus" })
+  const nextTurnButton = matchStatus.getByRole("button", {
+    name: "Volgende beurt →",
+  })
   await nextTurnButton.click()
-  await expect(
-    page.getByLabel("Speelveld van Tidal Memory").getByText("Aan de beurt"),
-  ).toBeVisible()
+  await expect(matchStatus.locator(".match-status__turn strong")).toHaveText(
+    "Tidal Memory",
+  )
   await expect(battlefieldCard).toHaveClass(/card--tapped/)
   await nextTurnButton.click()
-  await expect(playerOneBoard.getByText("Aan de beurt")).toBeVisible()
+  await expect(matchStatus.locator(".match-status__turn strong")).toHaveText(
+    "Verdant Resolve",
+  )
   await expect(battlefieldCard).not.toHaveClass(/card--tapped/)
   await expect
     .poll(() =>
@@ -565,35 +585,50 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(hand.locator(".card")).toHaveCount(7)
 
   await page.getByRole("button", { name: "Volgende fase" }).click()
-  await expect(page.getByRole("button", { name: /^Next turn:/ })).toContainText(
-    "Eerste hoofdfase",
-  )
+  await expect(matchStatus).toContainText("Eerste hoofdfase")
 
   await playerOneBoard
     .getByRole("button", { name: "Verhoog poison van Verdant Resolve" })
     .click()
   await expect(
-    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1"),
+    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1 / 10"),
   ).toBeVisible()
 
-  await playerOneBoard.getByText("Commander tax").click()
   await playerOneBoard
     .getByRole("button", {
       name: "Verhoog commander tax van Aesi, Tyrant of Gyre Strait",
     })
     .click()
   await expect(
-    playerOneBoard.locator(".commander-tracker").first().getByText("2"),
+    playerOneBoard
+      .getByLabel("Commander tax van Aesi, Tyrant of Gyre Strait")
+      .getByText("2"),
   ).toBeVisible()
   await playerOneBoard.getByText("Commander damage").click()
+  await expect(
+    playerOneBoard.getByRole("button", {
+      name: "Verhoog commander damage door Folk Hero",
+    }),
+  ).toHaveCount(0)
   await playerOneBoard
     .getByRole("button", {
       name: "Verhoog commander damage door Aesi, Tyrant of Gyre Strait",
     })
     .click()
   await expect(
-    playerOneBoard.locator(".commander-tracker").nth(1).getByText("1"),
+    playerOneBoard.locator(".commander-tracker").getByText("1 / 21"),
   ).toBeVisible()
+
+  await playerOneBoard.getByText("Optionele trackers").click()
+  await playerOneBoard.getByRole("checkbox", { name: "Energy" }).check()
+  await playerOneBoard
+    .getByRole("button", { name: "Verhoog Energy van Verdant Resolve" })
+    .click()
+  await expect(playerOneBoard.getByLabel("Monarch-houder")).toHaveCount(0)
+  await matchStatus.getByLabel("Monarch-houder").selectOption("player-1")
+  await matchStatus.getByLabel("Initiative-houder").selectOption("player-2")
+  await matchStatus.getByLabel("Dag- en nachtstatus").selectOption("night")
+  await playerOneBoard.getByRole("button", { name: "City's Blessing" }).click()
 
   await battlefield.click({
     button: "right",
@@ -603,6 +638,9 @@ test("herstelt een gedownloade battle volledig offline", async ({
     name: "Battlefieldacties",
   })
   await expect(battlefieldMenu).toBeVisible()
+  await expect(
+    battlefieldMenu.getByRole("button", { name: /Untap alles/ }),
+  ).toBeVisible()
   const battlefieldMenuBox = await battlefieldMenu.boundingBox()
   expect(battlefieldMenuBox?.y).toBeGreaterThanOrEqual(0)
   expect(
@@ -637,11 +675,9 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(
     page.getByLabel("Levenspunten Verdant Resolve").getByText("39"),
   ).toBeVisible()
-  await expect(page.getByRole("button", { name: /^Next turn:/ })).toContainText(
-    "Eerste hoofdfase",
-  )
+  await expect(matchStatus).toContainText("Eerste hoofdfase")
   await expect(
-    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1"),
+    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1 / 10"),
   ).toBeVisible()
   await expect(treasureTokens).toHaveCount(2)
   await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
@@ -653,20 +689,32 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(
     page.getByLabel("Levenspunten Verdant Resolve").getByText("39"),
   ).toBeVisible()
-  await expect(page.getByRole("button", { name: /^Next turn:/ })).toContainText(
-    "Eerste hoofdfase",
-  )
+  await expect(matchStatus).toContainText("Eerste hoofdfase")
   await expect(
-    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1"),
+    playerOneBoard.getByLabel("Poison van Verdant Resolve").getByText("1 / 10"),
   ).toBeVisible()
-  await playerOneBoard.getByText("Commander tax").click()
   await expect(
-    playerOneBoard.locator(".commander-tracker").first().getByText("2"),
+    playerOneBoard
+      .getByLabel("Commander tax van Aesi, Tyrant of Gyre Strait")
+      .getByText("2"),
   ).toBeVisible()
   await playerOneBoard.getByText("Commander damage").click()
   await expect(
-    playerOneBoard.locator(".commander-tracker").nth(1).getByText("1"),
+    playerOneBoard.locator(".commander-tracker").getByText("1 / 21"),
   ).toBeVisible()
+  await expect(
+    playerOneBoard.getByLabel("Energy van Verdant Resolve").getByText("1"),
+  ).toBeVisible()
+  await expect(
+    playerOneBoard.getByRole("button", { name: "City's Blessing" }),
+  ).toHaveAttribute("aria-pressed", "true")
+  await expect(matchStatus.getByLabel("Monarch-houder")).toHaveValue("player-1")
+  await expect(matchStatus.getByLabel("Initiative-houder")).toHaveValue(
+    "player-2",
+  )
+  await expect(matchStatus.getByLabel("Dag- en nachtstatus")).toHaveValue(
+    "night",
+  )
   await expect(treasureTokens).toHaveCount(2)
   await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
   await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)

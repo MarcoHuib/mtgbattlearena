@@ -13,6 +13,7 @@ import {
   changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
+  changePlayerTracker,
   createGame,
   createCardGroup,
   createKnownToken,
@@ -21,6 +22,7 @@ import {
   dissolveCardGroup,
   duplicateToken,
   keepOpeningHand,
+  getPlayerWarnings,
   millCards,
   moveCard,
   moveCardGroup,
@@ -30,6 +32,12 @@ import {
   removeCardsFromGroup,
   setCardCounter,
   setCardStackOrder,
+  setDayNightStatus,
+  setInitiativeHolder,
+  setMonarchHolder,
+  setPlayerCitysBlessing,
+  setPlayerDisabled,
+  setPlayerTrackerVisibility,
   shuffle,
   shuffleLibrary,
   switchCardFace,
@@ -278,6 +286,66 @@ describe("game-core", () => {
     expect(damaged.players["player-2"].poison).toBe(3)
     expect(damaged.players["player-1"].commanderTax[commanderId]).toBe(2)
     expect(damaged.players["player-2"].commanderDamage[commanderId]).toBe(7)
+  })
+
+  it("beheert optionele spelertrackers en handmatige spelerstatussen", () => {
+    const initial = makeGame()
+    const visible = setPlayerTrackerVisibility(
+      initial,
+      "player-1",
+      "energy",
+      true,
+    )
+    const tracked = changePlayerTracker(visible, "player-1", "energy", 3)
+    const blessed = setPlayerCitysBlessing(tracked, "player-1", true)
+    const disabled = setPlayerDisabled(blessed, "player-1", true)
+
+    expect(disabled.players["player-1"]).toMatchObject({
+      trackers: { energy: 3, experience: 0, rad: 0 },
+      visibleTrackers: { energy: true, experience: false, rad: false },
+      citysBlessing: true,
+      disabled: true,
+    })
+    expect(
+      changePlayerTracker(disabled, "player-1", "energy", -99).players[
+        "player-1"
+      ].trackers.energy,
+    ).toBe(0)
+  })
+
+  it("houdt Monarch, Initiative en Day/Night eenmaal centraal bij", () => {
+    const initial = makeGame()
+    const firstMonarch = setMonarchHolder(initial, "player-1")
+    const secondMonarch = setMonarchHolder(firstMonarch, "player-2")
+    const initiative = setInitiativeHolder(secondMonarch, "player-1")
+    const night = setDayNightStatus(initiative, "night")
+
+    expect(night.matchStatus).toEqual({
+      monarchPlayerId: "player-2",
+      initiativePlayerId: "player-1",
+      dayNight: "night",
+    })
+  })
+
+  it("signaleert alleen de drie verliesdrempels zonder een speler uit te schakelen", () => {
+    const initial = makeGame()
+    const opponentCommander = initial.players["player-2"].zones.command[0]!
+    const lowLife = changePlayerLife(initial, "player-1", -40)
+    const poisoned = changePlayerPoison(lowLife, "player-1", 10)
+    const damaged = changeCommanderDamage(
+      poisoned,
+      "player-1",
+      opponentCommander,
+      21,
+    )
+
+    expect(getPlayerWarnings(damaged, "player-1")).toEqual([
+      "life",
+      "poison",
+      "commander-damage",
+    ])
+    expect(damaged.players["player-1"].disabled).toBe(false)
+    expect(getPlayerWarnings(initial, "player-1")).toEqual([])
   })
 
   it("ondersteunt twee commanders onafhankelijk", () => {

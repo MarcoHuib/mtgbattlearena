@@ -9,6 +9,11 @@ import {
   gameSlice,
   moveGameCards,
   redo,
+  setCitysBlessing,
+  setDayNight,
+  setInitiative,
+  setMonarch,
+  setTrackerVisibility,
   startGame,
   undo,
 } from "./gameSlice"
@@ -115,4 +120,45 @@ test("undo en redo herstellen attachments en permanente groepen", () => {
   expect(state.present?.cardsById[first!]?.attachedTo).toBeUndefined()
   state = gameSlice.reducer(state, redo())
   expect(state.present?.cardsById[first!]?.attachedTo).toBe(second)
+})
+
+test("undo en redo herstellen spelertrackers en centrale matchstatus", () => {
+  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const deck = createDeckSnapshot(imported, "deck")
+  let id = 0
+  const game = createGame([deck, deck], {
+    random: () => 0.3,
+    createId: prefix => `${prefix}-${(id += 1)}`,
+    now: "2026-01-01T00:00:00.000Z",
+  })
+  let state = gameSlice.reducer(undefined, startGame(game))
+  state = gameSlice.reducer(
+    state,
+    setTrackerVisibility({
+      playerId: "player-1",
+      tracker: "experience",
+      visible: true,
+    }),
+  )
+  state = gameSlice.reducer(
+    state,
+    setCitysBlessing({ playerId: "player-1", active: true }),
+  )
+  state = gameSlice.reducer(state, setMonarch({ playerId: "player-1" }))
+  state = gameSlice.reducer(state, setInitiative({ playerId: "player-2" }))
+  state = gameSlice.reducer(state, setDayNight({ status: "day" }))
+
+  expect(state.present?.matchStatus).toEqual({
+    monarchPlayerId: "player-1",
+    initiativePlayerId: "player-2",
+    dayNight: "day",
+  })
+  expect(state.present?.players["player-1"].visibleTrackers.experience).toBe(
+    true,
+  )
+
+  state = gameSlice.reducer(state, undo())
+  expect(state.present?.matchStatus.dayNight).toBe("none")
+  state = gameSlice.reducer(state, redo())
+  expect(state.present?.matchStatus.dayNight).toBe("day")
 })

@@ -84,12 +84,21 @@ npm run preview      # productiebuild lokaal bekijken
   acties.
 - Dubbelzijdige kaarten kunnen van actieve zijde wisselen. Alle zijden blijven
   onderdeel van een expliciet offlinepakket.
-- Per speler zijn draw, draw X, mill X, shuffle en untap all beschikbaar.
+- Draw, draw X, mill X, shuffle, mulligan en library zoeken/bekijken staan in
+  het library-contextmenu. **Untap alles** staat bij de battlefieldacties.
   **Volgende fase** doorloopt beginfase, beide hoofdfasen, combat en eindfase;
-  **Next turn** wisselt de actieve speler, untapt en trekt automatisch.
-- Elke speler begint met 40 leven en houdt poison, commander tax per commander
-  en ontvangen commander damage per commander bij. Partner- en
-  Background-decks behouden beide commanders als afzonderlijke instanties.
+  **Volgende beurt** wisselt de actieve speler, untapt en trekt automatisch.
+- Elke speler begint met 40 leven. De compacte spelerstatus toont poison met
+  de `10`-drempel, optioneel Energy, Experience en Rad, City’s Blessing,
+  handmatig uitschakelen en ontvangen commander damage met de `21`-drempel.
+  Pure Background-enchantments krijgen geen commander-damageteller; twee
+  creature-commanders worden volgens de Commander-regel afzonderlijk
+  bijgehouden.
+- Commander tax staat per commanderkaart in de command zone. Partner- en
+  Background-decks behouden daar beide afzonderlijke taxwaarden.
+- Monarch, Initiative en Day/Night staan eenmaal centraal op de battle line,
+  samen met actieve speler, beurt en fase. Monarch en Initiative hebben ieder
+  maximaal één houder; Day/Night is globale matchstate.
 - De import neemt bekende tokenkaarten uit het deck mee. Rechtermuisklik op
   lege battlefieldruimte opent **Tafelacties**, waar tokens met hun echte
   kaartafbeelding vanaf Archidekts kaart-CDN en eventuele power/toughness
@@ -137,7 +146,8 @@ npm run preview      # productiebuild lokaal bekijken
 - Rechtermuisklik op lege battlefieldruimte: tafelacties en bekende decktokens
   toevoegen op de aangeklikte positie.
 - Ctrl/⌘-klik of tik: kaart aan de multiselect toevoegen of eruit verwijderen.
-- Spelerrail: trek/mill/schud/untap, poison en commanderregistratie.
+- Spelerrail: leven, poison, optionele trackers, City’s Blessing, handmatige
+  uitschakeling en compacte commander-damageregistratie.
 
 ## Architectuur
 
@@ -165,10 +175,11 @@ genormaliseerd en spelerzones bevatten alleen instance-ID's. Reducers benaderen
 IndexedDB of Cache API nooit direct; listener middleware en services gebruiken
 repositoryinterfaces.
 
-De actuele savegame heeft schemaversie 5. Hydratie migreert versies 1–4 en
-voegt veilige defaults toe voor fase, poison en commanderregistratie. Tokens,
-counters, actieve kaartzijde, vrije posities, tax en damage staan in de
-duurzame game-state; multiselect en lopende pointerinteractie niet.
+De actuele savegame heeft schemaversie 6. Hydratie migreert versies 1–5 en
+voegt veilige defaults toe voor fase, spelertrackers, City’s Blessing,
+handmatige uitschakeling en centrale matchstatus. Tokens, counters, actieve
+kaartzijde, vrije posities, tax, damage en statuswaarden staan in de duurzame
+game-state; geopende panelen, multiselect en lopende pointerinteractie niet.
 
 Zie [ADR 001](docs/architecture/001-local-first-boundaries.md) voor het
 onderscheid tussen Redux, duurzame opslag, tijdelijke cache en expliciete
@@ -220,8 +231,9 @@ Deployment zelf is niet uitgevoerd en vereist eigen Cloudflare-toegang.
   niet uit vrije oracletekst. Reeds geïmporteerde decks moeten opnieuw worden
   geïmporteerd om de nieuwe tokenlijst te krijgen. Als Archidekt geen tokenkaart
   levert, blijft een functionele lege toestand beschikbaar.
-- Commander damage en tax worden handmatig bijgehouden; de app past geen
-  Commander-regels of verliescondities automatisch toe.
+- Commander damage en tax worden handmatig bijgehouden. Waarden van `21`
+  commander damage, `10` poison of leven op nul tonen alleen een waarschuwing;
+  de app schakelt een speler nooit automatisch uit.
 - Multiselect ondersteunt samen verplaatsen en enkele snelle acties, maar nog
   geen lasso-selectie.
 - Oudere battles zonder opgeslagen battlefieldposities krijgen eerst een
