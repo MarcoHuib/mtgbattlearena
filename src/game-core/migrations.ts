@@ -265,7 +265,7 @@ const migrateVersionFiveGame = (game: LegacyGame): GameState => {
 
 export const hydratePersistedGame = (value: unknown): PersistedGame => {
   const current = currentPersistedGameSchema.safeParse(value)
-  if (current.success) return current.data as PersistedGame
+  if (current.success) return current.data as unknown as PersistedGame
 
   const versionFive = versionFivePersistedGameSchema.safeParse(value)
   if (versionFive.success) {

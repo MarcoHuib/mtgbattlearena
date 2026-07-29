@@ -204,16 +204,13 @@ const cloneZones = (zones: PlayerZones): PlayerZones => ({
 
 const clonePlayersWithZones = (
   players: GameState["players"],
-): GameState["players"] => ({
-  "player-1": {
-    ...players["player-1"],
-    zones: cloneZones(players["player-1"].zones),
-  },
-  "player-2": {
-    ...players["player-2"],
-    zones: cloneZones(players["player-2"].zones),
-  },
-})
+): GameState["players"] =>
+  Object.fromEntries(
+    Object.entries(players).map(([playerId, player]) => [
+      playerId,
+      { ...player, zones: cloneZones(player.zones) },
+    ]),
+  )
 
 export const openingHandSizeAfterMulligan = (mulliganCount: number): number =>
   Math.max(0, Math.min(7, 9 - mulliganCount))

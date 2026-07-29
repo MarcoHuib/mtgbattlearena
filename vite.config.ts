@@ -5,6 +5,14 @@ import { defineConfig } from "vitest/config"
 import packageJson from "./package.json" with { type: "json" }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "cloudflare:workers": path.resolve(
+        import.meta.dirname,
+        "src/test/cloudflare-workers.ts",
+      ),
+    },
+  },
   plugins: [
     react(),
     VitePWA({

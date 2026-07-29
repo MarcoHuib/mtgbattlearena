@@ -22,7 +22,7 @@ const eslintConfig = config(
       "**/coverage/",
       "**/playwright-report/",
       "**/test-results/",
-      "worker/**",
+      "worker/archidekt-worker.js",
     ],
   },
   {
@@ -105,6 +105,12 @@ const eslintConfig = config(
     files: ["src/features/offline/offlineService.ts"],
     rules: {
       "@typescript-eslint/no-invalid-void-type": [0],
+    },
+  },
+  {
+    files: ["worker/online/types.ts"],
+    rules: {
+      "@typescript-eslint/no-unnecessary-type-parameters": [0],
     },
   },
 

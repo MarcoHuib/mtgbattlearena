@@ -58,6 +58,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
   })
 
   await page.goto("/")
+  await page.getByRole("link", { name: /Offline spelen/ }).click()
   const fields = page.getByLabel("Openbare Archidekt-URL")
   await fields.nth(0).fill("https://archidekt.com/decks/111/verdant")
   await page.getByRole("button", { name: "Deck importeren" }).nth(0).click()

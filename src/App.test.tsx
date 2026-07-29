@@ -5,6 +5,7 @@ import { archidektFixture, archidektTokenFixture } from "./archidekt/fixtures"
 import { renderWithProviders } from "./utils/test-utils"
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "/")
   vi.spyOn(globalThis, "fetch").mockImplementation(input => {
     const url =
       typeof input === "string"
@@ -39,6 +40,10 @@ beforeEach(() => {
 test("importeert twee decks, start een battle en verplaatst via het actiemenu", async () => {
   const { user, store } = renderWithProviders(<App />)
 
+  expect(
+    await screen.findByRole("heading", { name: "Kies hoe je wilt spelen." }),
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole("link", { name: /Offline spelen/ }))
   expect(
     await screen.findByRole("heading", { name: "Leg je battle klaar." }),
   ).toBeInTheDocument()

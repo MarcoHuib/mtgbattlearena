@@ -1,4 +1,5 @@
-export type PlayerId = "player-1" | "player-2"
+export type PlayerId = string
+export type GameMode = "offline" | "online"
 
 export type Zone =
   "library" | "hand" | "battlefield" | "graveyard" | "exile" | "command"

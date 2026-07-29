@@ -50,13 +50,20 @@ import {
   updateGroup,
 } from "../features/game/gameSlice"
 import { offlineSlice } from "../features/offline/offlineSlice"
+import { onlineSlice } from "../features/online/onlineSlice"
 import { setupSlice } from "../features/setup/setupSlice"
 import { uiSlice } from "../features/ui/uiSlice"
 import { setSaveError, setSaved, setSaving } from "../features/ui/uiSlice"
 import type { PersistedGame } from "../game-core/types"
 import { repositories } from "../persistence/database"
 
-const rootReducer = combineSlices(setupSlice, gameSlice, offlineSlice, uiSlice)
+const rootReducer = combineSlices(
+  setupSlice,
+  gameSlice,
+  offlineSlice,
+  onlineSlice,
+  uiSlice,
+)
 export type RootState = ReturnType<typeof rootReducer>
 
 const autosaveListener = createListenerMiddleware()

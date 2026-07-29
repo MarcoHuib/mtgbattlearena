@@ -1,8 +1,9 @@
 # MTG Battle Mode
 
-Een onofficiële, local-first digitale tafel waarop één gebruiker twee openbare
-Archidekt-decks tegenover elkaar speelt. De app houdt toestand bij, maar is
-bewust geen automatische Magic-regelsimulator.
+Een onofficiële, local-first digitale tafel waarop je twee openbare
+Archidekt-decks lokaal tegenover elkaar speelt, met een incrementele online
+multiplayerlaag voor 2–6 spelers. De app houdt toestand bij, maar is bewust geen
+automatische Magic-regelsimulator.
 
 ## Lokale ontwikkeling
 
@@ -26,6 +27,7 @@ npm run format       # Prettier schrijft formatting
 npm run format:check # controleert formatting
 npm run lint         # ESLint
 npm run type-check   # strikte TypeScript-controle
+npm run worker:type-check # online Worker en gedeeld protocol
 npm test             # Vitest unit- en integratietests
 npm run test:e2e     # Playwright kritieke offlineflow
 npm run build        # TypeScript en productie-PWA-build
@@ -155,6 +157,36 @@ npm run preview      # productiebuild lokaal bekijken
 - Spelerrail: leven, poison, optionele trackers, City’s Blessing, handmatige
   uitschakeling en compacte commander-damageregistratie.
 
+## Online multiplayer — eerste speelbare authoritative slice
+
+- URL-routes en een hoofdmenu voor offline, online, decks, hervatten en
+  instellingen. Offline import, battle, autosave en offlinepakketten hebben geen
+  login of backend nodig.
+- Online UI voor loginstatus, openbare lobby’s, game aanmaken en deelnemen met
+  code. Zonder `VITE_ONLINE_API_URL` gebruikt de app zichtbare, realistische
+  mocks; met die variabele gebruikt hij de Cloudflare HTTP- en
+  WebSocket-adapters.
+- `AuthService`, `OnlineGameService` en aparte offline/online
+  `GameCommandDispatcher`-implementaties houden SDK’s en transport uit
+  componenten en reducers.
+- Een strikt Zod-protocol voor versioned commands, persoonlijke snapshots,
+  serverevents en protocolerrors. Tegenstanders hebben alleen openbare zones en
+  aantallen voor verborgen zones; uitsluitend `privateView` kan de eigen hand
+  bevatten.
+- Een TypeScript Cloudflare Worker-basis met Firebase JWT/JWK-validatie, één
+  SQLite-backed Lobby Durable Object, server-toegewezen spelers/rollen,
+  kortlevende eenmalige socket-tickets en één SQLite-backed Durable Object per
+  game.
+- Het Durable Object beheert de officiële 2–6-spelerstate via een adapter op de
+  bestaande pure game-core. Trek, verplaats, wijzig leven/poison, mill, schud en
+  geef de beurt door zijn werkende versioned commands.
+- Iedere verbinding krijgt een eigen snapshot: publieke zones, de volledige
+  eigen hand en alleen aantallen voor verborgen zones van anderen. De online
+  Redux-slice bevat uitsluitend deze persoonlijke view.
+- De online battlepagina gebruikt acknowledgements en snapshots via WebSocket.
+  Na verbindingsverlies vraagt de adapter een nieuw eenmalig ticket en vervangt
+  hij de cache met een volledige verse snapshot.
+
 ## Architectuur
 
 De code blijft bewust één Vite-app; er is voor deze slice geen monorepo
@@ -163,16 +195,21 @@ geïntroduceerd.
 ```text
 src/
   game-core/       pure modellen, state-overgangen, assets en migraties
+  game-protocol/   runtime-gevalideerde online commands en persoonlijke views
   archidekt/       URL-parser, Zod-schema, adapter en netwerkclient
-  app/             store, listener middleware, typed hooks en app-thunks
+  app/             store, routing, listener middleware, typed hooks en thunks
   features/
     setup/         importstate en setupinterface
     game/          actieve genormaliseerde game en undo/redo
     battle/        gespiegeld tafeloppervlak en kaartinteracties
     offline/       manifeststate, downloadservice en voortgangsinterface
+    online/        service-adapters, dispatchers, mocks en lobbyschermen
+    menu/          hoofdmenu, hervatten, decks en instellingen
     ui/            gedeelde scherm-, boot- en autosavestatus
   persistence/     repositoryinterfaces, Dexie en Cache API-adapters
-worker/            begrensde Archidekt-importproxy
+worker/
+  archidekt-worker.js  begrensde Archidekt-importproxy
+  online/              Firebase en SQLite-backed Durable Objects
 e2e/               Playwright kritieke flow
 ```
 
@@ -230,6 +267,35 @@ npx wrangler deploy
 Koppel in productie dezelfde `/api/import/archidekt/*`-route aan de Worker.
 Deployment zelf is niet uitgevoerd en vereist eigen Cloudflare-toegang.
 
+## Online Worker lokaal configureren
+
+De afzonderlijke configuratie staat in `wrangler.online.toml`. De Worker heeft
+een `LOBBY`-binding voor het centrale Lobby Durable Object en een `GAMES`-binding
+die per game-ID een geïsoleerd Game Durable Object adresseert. Beide maken hun
+tabellen in de eigen SQLite-opslag aan; er is geen externe database of
+handmatige schemamigratie nodig.
+
+Stel `FIREBASE_PROJECT_ID` en `ALLOWED_ORIGIN` als omgevingsvariabelen voor de
+Worker in. Firebase-private keys horen niet in deze repository en zijn niet
+nodig: de Worker valideert ID-tokens met de openbare Google JWK-set.
+
+```sh
+npx wrangler dev --config wrangler.online.toml \
+  --var FIREBASE_PROJECT_ID:jouw-firebase-project-id \
+  --var ALLOWED_ORIGIN:http://localhost:5173
+```
+
+Bij deployment past Wrangler de Durable Object classmigraties uit
+`wrangler.online.toml` toe. Een eerdere ontwikkelomgeving met de oude externe
+database wordt niet automatisch gemigreerd: maak lobby’s opnieuw aan; actieve
+lokale/offline savegames staan daar los van en blijven intact.
+
+De webapp gebruikt standaard mocks. Zet `VITE_ONLINE_API_URL` pas wanneer de
+Worker bereikbaar is én injecteer een echte Firebase SDK-port in
+`FirebaseAuthService`. Wanneer alleen de API-URL is ingesteld, toont de app
+bewust een loginconfiguratiefout en stuurt hij geen mocktoken naar de echte
+backend.
+
 ## Huidige beperkingen
 
 - Alleen openbare Archidekt-decks worden ondersteund.
@@ -249,3 +315,12 @@ Deployment zelf is niet uitgevoerd en vereist eigen Cloudflare-toegang.
   geen aparte bibliotheekinterface.
 - Persistente browseropslag kan niet worden afgedwongen; de app toont de
   werkelijk toegekende status.
+- De online lobby- en battleflow gebruikt zonder configuratie een speelbare
+  vier-spelersmock. De Firebase SDK-bootstrap en echte Cloudflare-deployment
+  zijn niet geconfigureerd.
+- De Worker heeft een host-only initialisatieroute voor gevalideerde
+  deelnemersdecks. De UI voor het per deelnemer registreren van een eigen
+  immutable decksnapshot en de expliciete host-startactie volgt nog.
+- Tappen, untappen, fasewissels, mulligans, tokens, counters, commander tax en
+  commander damage zijn nog geen online commands en antwoorden voorlopig met
+  `NOT_READY` wanneer ze al in het protocol bekend zijn.

@@ -1,0 +1,25 @@
+name = "mtg-battle-mode-online"
+main = "worker/online/index.ts"
+compatibility_date = "2026-07-01"
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyDurableObject"
+
+[[durable_objects.bindings]]
+name = "GAMES"
+class_name = "GameDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameDurableObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["LobbyDurableObject"]
+
+# Set FIREBASE_PROJECT_ID and ALLOWED_ORIGIN as non-secret environment variables
+# per deployment. Firebase private keys are neither required nor supported here.

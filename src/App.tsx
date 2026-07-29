@@ -1,18 +1,37 @@
 import { useEffect, useRef, useState } from "react"
 import { useAppDispatch, useAppSelector } from "./app/hooks"
+import { navigate, useAppRoute } from "./app/router"
 import { hydrateApplication } from "./app/thunks"
 import { UpdatePrompt } from "./components/UpdatePrompt"
 import { BattleScreen } from "./features/battle/BattleScreen"
 import { closeBattle } from "./features/game/gameSlice"
+import { DecksScreen } from "./features/menu/DecksScreen"
+import { MainMenu } from "./features/menu/MainMenu"
+import { ResumeScreen } from "./features/menu/ResumeScreen"
+import { SettingsScreen } from "./features/menu/SettingsScreen"
+import { OnlineScreen } from "./features/online/OnlineScreen"
+import { OnlineGameScreen } from "./features/online/OnlineGameScreen"
+import {
+  createApplicationServices,
+  type ApplicationServices,
+} from "./features/online/services"
 import { clearSetup } from "./features/setup/setupSlice"
 import { showSetup } from "./features/ui/uiSlice"
 import { SetupScreen } from "./features/setup/SetupScreen"
 import "./App.css"
 
-export const App = () => {
+const defaultServices = createApplicationServices()
+
+type AppProps = {
+  services?: ApplicationServices
+}
+
+export const App = ({ services = defaultServices }: AppProps) => {
   const dispatch = useAppDispatch()
   const bootStatus = useAppSelector(state => state.ui.bootStatus)
   const screen = useAppSelector(state => state.ui.screen)
+  const game = useAppSelector(state => state.game.present)
+  const route = useAppRoute()
   const [confirmNew, setConfirmNew] = useState(false)
   const hydrated = useRef(false)
 
@@ -36,19 +55,63 @@ export const App = () => {
     dispatch(clearSetup())
     dispatch(showSetup())
     setConfirmNew(false)
+    navigate("/offline")
   }
 
-  return (
-    <>
-      {screen === "battle" ? (
+  let content
+  if (route === "/") {
+    content = <MainMenu onlineGames={services.onlineGames} />
+  } else if (route === "/offline") {
+    content = (
+      <SetupScreen
+        onBattleStarted={() => {
+          navigate("/offline/battle")
+        }}
+      />
+    )
+  } else if (route === "/offline/battle") {
+    content =
+      screen === "battle" && game ? (
         <BattleScreen
           onNewBattle={() => {
             setConfirmNew(true)
           }}
         />
       ) : (
-        <SetupScreen />
-      )}
+        <SetupScreen
+          onBattleStarted={() => {
+            navigate("/offline/battle")
+          }}
+        />
+      )
+  } else if (route === "/online") {
+    content = (
+      <OnlineScreen
+        auth={services.auth}
+        onlineGames={services.onlineGames}
+        onEnterGame={gameId => {
+          navigate(`/online/game/${encodeURIComponent(gameId)}`)
+        }}
+      />
+    )
+  } else if (route.startsWith("/online/game/")) {
+    content = (
+      <OnlineGameScreen
+        gameId={decodeURIComponent(route.slice("/online/game/".length))}
+        onlineGames={services.onlineGames}
+      />
+    )
+  } else if (route === "/decks") {
+    content = <DecksScreen />
+  } else if (route === "/resume") {
+    content = <ResumeScreen onlineGames={services.onlineGames} />
+  } else {
+    content = <SettingsScreen onlineGames={services.onlineGames} />
+  }
+
+  return (
+    <>
+      {content}
       {bootStatus === "error" ? (
         <div className="storage-alert" role="alert">
           Lokale opslag kon niet volledig worden geopend.

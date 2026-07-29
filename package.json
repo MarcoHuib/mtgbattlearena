@@ -11,9 +11,11 @@
     "lint:fix": "eslint --fix .",
     "lint": "eslint .",
     "test:e2e": "playwright test",
+    "worker:type-check": "tsc -p tsconfig.worker.json --noEmit",
     "preview": "vite preview",
     "start": "vite",
     "test": "vitest --run",
+    "test:integration": "vitest --run src/online-worker.integration.test.ts src/lobby-worker.integration.test.ts src/worker-online.test.ts src/features/online/realtime.test.ts src/features/online/OnlineScreen.test.tsx",
     "type-check": "tsc -b --noEmit"
   },
   "dependencies": {

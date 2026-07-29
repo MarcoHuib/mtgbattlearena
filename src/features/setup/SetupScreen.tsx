@@ -1,10 +1,15 @@
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
+import { AppLink } from "../../app/router"
 import { startBattleFromSetup } from "../../app/thunks"
 import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
 import { DeckSlot } from "./DeckSlot"
 
-export const SetupScreen = () => {
+type SetupScreenProps = {
+  onBattleStarted?: () => void
+}
+
+export const SetupScreen = ({ onBattleStarted }: SetupScreenProps) => {
   const dispatch = useAppDispatch()
   const firstReady =
     useAppSelector(state => state.setup["player-1"].status) === "ready"
@@ -14,7 +19,9 @@ export const SetupScreen = () => {
   return (
     <main className="setup-screen">
       <header className="app-header">
-        <Brand />
+        <AppLink to="/" className="brand-link">
+          <Brand />
+        </AppLink>
         <StatusBar />
       </header>
       <section className="setup-hero">
@@ -48,6 +55,7 @@ export const SetupScreen = () => {
           disabled={!firstReady || !secondReady}
           onClick={() => {
             dispatch(startBattleFromSetup())
+            onBattleStarted?.()
           }}
         >
           Battle starten

@@ -5,6 +5,7 @@ import {
 } from "@dnd-kit/react"
 import { useRef } from "react"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
+import { AppLink } from "../../app/router"
 import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
 import type { PlayerId, Zone } from "../../game-core/types"
@@ -222,7 +223,9 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
   return (
     <main className="battle-screen">
       <header className="battle-header">
-        <Brand />
+        <AppLink to="/" className="brand-link">
+          <Brand />
+        </AppLink>
         <div className="battle-title">
           <span className="eyebrow">
             {restored ? "Lokale battle hervat" : "Actieve battle"}

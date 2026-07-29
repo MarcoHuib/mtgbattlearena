@@ -115,12 +115,14 @@ Gebruik voor de online uitbreiding bij voorkeur:
 
 * Firebase Authentication voor identiteit, inclusief optionele anonieme login;
 * een Cloudflare Worker in TypeScript voor HTTP-API, tokenvalidatie, lobby-routing en WebSocket-upgrades;
-* één SQLite-backed Durable Object per actieve game;
+* één SQLite-backed Lobby Durable Object voor lobbymetadata en deelname;
+* één SQLite-backed Game Durable Object per actieve game;
 * WebSocket Hibernation voor langdurige verbindingen met lage idle-kosten;
-* Cloudflare D1 voor openbare/private lobbymetadata, deelnemers, profielen en eventueel match history;
 * gedeelde TypeScript-contracten met runtimevalidatie, bijvoorbeeld Zod.
 
-Firebase Realtime Database is niet nodig voor de actieve wedstrijd. Gebruik niet tegelijk Realtime Database en Durable Objects als twee concurrerende bronnen van waarheid.
+Gebruik geen D1, Firebase Realtime Database of Cloudflare Access/RBAC voor
+spelers. Firebase Authentication is uitsluitend de identity provider; de
+Worker en Durable Objects bepalen zelf host-, speler- en spectatorrollen.
 
 ## 4. Gewenste repositorystructuur
 
@@ -144,7 +146,7 @@ Betekenis:
 
 * `apps/web`: React-webapp en webspecifieke interacties.
 * `apps/import-worker`: kleine proxy/BFF voor externe deckimport; mag later met `game-worker` worden samengevoegd wanneer dat de bestaande deployment vereenvoudigt.
-* `apps/game-worker`: Cloudflare Worker, D1-toegang, Firebase-tokenvalidatie, lobby-API en Durable Objects.
+* `apps/game-worker`: Cloudflare Worker, Firebase-tokenvalidatie, lobby-API en SQLite-backed Durable Objects.
 * `packages/game-core`: pure TypeScript-domeinlogica.
 * `packages/game-protocol`: gedeelde, runtime-gevalideerde commands en serverberichten zonder geheime serverstate.
 * `packages/store`: Redux Toolkit-configuratie, slices en selectors.
@@ -337,8 +339,10 @@ Voeg migratiefuncties toe zodra het savegameformaat verandert. Breek bestaande l
 
 Online state heeft een andere bron van waarheid dan offline state:
 
-* het Durable Object bewaart de officiële actieve wedstrijdstate;
-* D1 bewaart lobby- en deelnemersmetadata, niet de geheime actieve hand/library-state;
+* het Game Durable Object bewaart de officiële actieve wedstrijdstate in
+  geheugen en persistente snapshots in zijn eigen SQLite-opslag;
+* het Lobby Durable Object bewaart lobby- en deelnemersmetadata in zijn eigen
+  SQLite-opslag, nooit geheime actieve hand/library-state;
 * de browser mag reconnectmetadata en de laatst ontvangen view cachen, maar behandelt die niet als officiële serverstate;
 * na reconnect vraagt de client een verse persoonlijke snapshot en verwerkt daarna versioned events;
 * offline savegames en online metadata gebruiken afzonderlijke repositoryinterfaces.
@@ -783,7 +787,8 @@ De volgende productmijlpaal voegt online functionaliteit toe zonder de bestaande
 2. Offline routes blijven zonder account en zonder backend werken.
 3. Firebase Authentication achter een `AuthService`-interface.
 4. Lobbylijst, game aanmaken en deelnemen met code achter een `OnlineGameService`-interface.
-5. D1 voor lobbymetadata en één TypeScript Durable Object per actieve game.
+5. Eén SQLite-backed Lobby Durable Object voor lobbymetadata en één
+   SQLite-backed Game Durable Object per actieve game.
 6. WebSocketprotocol met versioned commands en persoonlijke serverviews.
 7. Online games ondersteunen 2–6 spelers en standaard 4 voor Commander.
 8. Eerst mocks en duidelijke adapters; daarna echte Cloudflare- en Firebase-integratie zonder frontendcomponenten direct aan SDK’s te koppelen.
