@@ -74,6 +74,9 @@ export const OnlineScreen = ({
     "loading" | "ready" | "empty" | "error"
   >("loading")
   const [message, setMessage] = useState<string | null>(null)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authenticating, setAuthenticating] = useState(false)
   const [joinCode, setJoinCode] = useState("")
   const [creating, setCreating] = useState(false)
   const [createInput, setCreateInput] = useState<CreateLobbyInput>({
@@ -115,6 +118,25 @@ export const OnlineScreen = ({
       return false
     }
     return true
+  }
+
+  const runAuth = async (action: () => Promise<unknown>) => {
+    setAuthenticating(true)
+    setMessage(null)
+    try {
+      await action()
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Inloggen is mislukt.",
+      )
+    } finally {
+      setAuthenticating(false)
+    }
+  }
+
+  const submitEmailLogin = (event: SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    void runAuth(() => auth.signInWithEmail(email.trim(), password))
   }
 
   const join = async (code: string) => {
@@ -216,24 +238,78 @@ export const OnlineScreen = ({
               Uitloggen
             </button>
           ) : (
-            <button
-              className="button button--primary"
-              type="button"
-              disabled={
-                authState.status === "loading" || authState.status === "error"
-              }
-              onClick={() => {
-                void auth.signInAnonymously().catch((error: unknown) => {
-                  setMessage(
-                    error instanceof Error
-                      ? error.message
-                      : "Inloggen is mislukt.",
-                  )
-                })
-              }}
-            >
-              Anoniem inloggen
-            </button>
+            <form className="auth-login-form" onSubmit={submitEmailLogin}>
+              <label>
+                E-mailadres
+                <input
+                  type="email"
+                  value={email}
+                  autoComplete="email"
+                  required
+                  onChange={event => {
+                    setEmail(event.target.value)
+                  }}
+                />
+              </label>
+              <label>
+                Wachtwoord
+                <input
+                  type="password"
+                  value={password}
+                  minLength={6}
+                  autoComplete="current-password"
+                  required
+                  onChange={event => {
+                    setPassword(event.target.value)
+                  }}
+                />
+              </label>
+              <div className="auth-login-form__actions">
+                <button
+                  className="button button--primary"
+                  type="submit"
+                  disabled={
+                    authenticating ||
+                    authState.status === "loading" ||
+                    authState.status === "error"
+                  }
+                >
+                  Inloggen
+                </button>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={
+                    authenticating ||
+                    authState.status === "loading" ||
+                    authState.status === "error" ||
+                    !email.trim() ||
+                    password.length < 6
+                  }
+                  onClick={() => {
+                    void runAuth(() =>
+                      auth.registerWithEmail(email.trim(), password),
+                    )
+                  }}
+                >
+                  Account maken
+                </button>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={
+                    authenticating ||
+                    authState.status === "loading" ||
+                    authState.status === "error"
+                  }
+                  onClick={() => {
+                    void runAuth(() => auth.signInWithGoogle())
+                  }}
+                >
+                  Doorgaan met Google
+                </button>
+              </div>
+            </form>
           )}
           {authState.status === "error" ? (
             <p className="auth-panel__error" role="alert">

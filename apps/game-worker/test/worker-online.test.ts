@@ -1,4 +1,9 @@
-import { validateFirebaseClaims, type FirebaseClaims } from "../src/auth"
+import {
+  FirebaseTokenVerifier,
+  validateFirebaseClaims,
+  type FirebaseClaims,
+} from "../src/auth"
+import { isOriginAllowed } from "../src/index"
 import {
   MemorySocketTicketRepository,
   SocketTicketService,
@@ -31,6 +36,29 @@ test("Firebase-claims worden aan project, issuer en tijd gebonden", () => {
   ).toThrow("verlopen")
 })
 
+test("Firebase-certificaten worden met de globale fetch-context opgehaald", async () => {
+  const fetcher = function (this: unknown) {
+    expect(this).toBe(globalThis)
+    return Promise.resolve(
+      Response.json(
+        { keys: [] },
+        { headers: { "Cache-Control": "public, max-age=300" } },
+      ),
+    )
+  } as typeof fetch
+  const verifier = new FirebaseTokenVerifier(
+    "battle-project",
+    fetcher,
+    () => 1_500_000,
+  )
+  const header = btoa(JSON.stringify({ alg: "RS256", kid: "test-key" }))
+  const claims = btoa(JSON.stringify({ aud: "battle-project" }))
+
+  await expect(
+    verifier.verify(`${header}.${claims}.c2lnbmF0dXJl`),
+  ).rejects.toThrow("certificatenantwoord")
+})
+
 test("socket-ticket is kortlevend en exact eenmaal te gebruiken", async () => {
   let now = Date.parse("2026-07-29T18:00:00.000Z")
   const service = new SocketTicketService(
@@ -61,4 +89,17 @@ test("socket-ticket is kortlevend en exact eenmaal te gebruiken", async () => {
   })
   now += 31_000
   expect(await service.consume(expired.ticket)).toBeNull()
+})
+
+test("CORS accepteert uitsluitend exact geconfigureerde origins", () => {
+  const configured = "http://localhost:5173, https://mtgbattlearena.web.app"
+
+  expect(isOriginAllowed("http://localhost:5173", configured)).toBe(true)
+  expect(isOriginAllowed("https://mtgbattlearena.web.app", configured)).toBe(
+    true,
+  )
+  expect(isOriginAllowed("https://aanvaller.example", configured)).toBe(false)
+  expect(
+    isOriginAllowed("http://localhost:5173.attacker.example", configured),
+  ).toBe(false)
 })

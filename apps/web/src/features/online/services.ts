@@ -14,6 +14,7 @@ import {
   type OnlineGameService,
   type OnlineLobby,
 } from "./types"
+import { createFirebaseAuthPort, readFirebaseConfig } from "./firebaseAuth"
 import { MockRealtimeConnection } from "./mockRealtime"
 import { CloudflareWebSocketConnection } from "./realtime"
 
@@ -37,18 +38,26 @@ export class MockAuthService implements AuthService {
     }
   }
 
-  async signInAnonymously(displayName = "Planeswalker") {
+  async signInWithEmail(email: string) {
     this.state = { status: "loading", user: null }
     this.emit()
     await wait()
     const user: AuthUser = {
       uid: `mock-user-${crypto.randomUUID()}`,
-      displayName: displayName.trim() || "Planeswalker",
-      isAnonymous: true,
+      displayName: email.split("@")[0]?.trim() || "Planeswalker",
+      isAnonymous: false,
     }
     this.state = { status: "signed-in", user }
     this.emit()
     return user
+  }
+
+  registerWithEmail(email: string) {
+    return this.signInWithEmail(email)
+  }
+
+  signInWithGoogle() {
+    return this.signInWithEmail("google-player@example.com")
   }
 
   async signOut() {
@@ -83,7 +92,15 @@ export class UnavailableAuthService implements AuthService {
     return () => undefined
   }
 
-  signInAnonymously() {
+  signInWithEmail() {
+    return Promise.reject(new Error(this.state.message))
+  }
+
+  registerWithEmail() {
+    return Promise.reject(new Error(this.state.message))
+  }
+
+  signInWithGoogle() {
     return Promise.reject(new Error(this.state.message))
   }
 
@@ -106,7 +123,9 @@ export type FirebaseAuthPort = {
   onAuthStateChanged(
     listener: (user: FirebaseAuthPort["currentUser"]) => void,
   ): () => void
-  signInAnonymously(): Promise<void>
+  signInWithEmail(email: string, password: string): Promise<void>
+  registerWithEmail(email: string, password: string): Promise<void>
+  signInWithGoogle(): Promise<void>
   signOut(): Promise<void>
 }
 
@@ -141,13 +160,34 @@ export class FirebaseAuthService implements AuthService {
     }
   }
 
-  async signInAnonymously() {
-    await this.firebase.signInAnonymously()
-    const state = this.getState()
-    if (state.status !== "signed-in") {
+  async signInWithEmail(email: string, password: string) {
+    await this.firebase.signInWithEmail(email, password)
+    return this.readSignedInUser()
+  }
+
+  async registerWithEmail(email: string, password: string) {
+    await this.firebase.registerWithEmail(email, password)
+    return this.readSignedInUser()
+  }
+
+  async signInWithGoogle() {
+    await this.firebase.signInWithGoogle()
+    return this.readSignedInUser()
+  }
+
+  private readSignedInUser() {
+    const user = this.firebase.currentUser
+    if (!user) {
       throw new Error("Firebase heeft geen ingelogde gebruiker teruggegeven.")
     }
-    return state.user
+    const authUser: AuthUser = {
+      uid: user.uid,
+      displayName: user.displayName ?? "Planeswalker",
+      isAnonymous: user.isAnonymous,
+    }
+    this.state = { status: "signed-in", user: authUser }
+    this.emit()
+    return authUser
   }
 
   signOut() {
@@ -395,8 +435,18 @@ export const createApplicationServices = (): ApplicationServices => {
       ? configuredApiUrl
       : null
   if (apiUrl) {
-    const auth = new UnavailableAuthService(
-      "Firebase is nog niet aan de webapp gekoppeld. Offline spelen blijft beschikbaar.",
+    const firebaseConfig = readFirebaseConfig(import.meta.env)
+    if (!firebaseConfig.configured) {
+      const auth = new UnavailableAuthService(
+        `Firebase-configuratie ontbreekt (${firebaseConfig.missing.join(", ")}). Offline spelen blijft beschikbaar.`,
+      )
+      return {
+        auth,
+        onlineGames: new CloudflareOnlineGameService(apiUrl, auth),
+      }
+    }
+    const auth = new FirebaseAuthService(
+      createFirebaseAuthPort(firebaseConfig.options),
     )
     return {
       auth,

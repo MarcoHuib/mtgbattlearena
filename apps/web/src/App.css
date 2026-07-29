@@ -2688,6 +2688,37 @@ html.card-pointer-active .card.card--tapped {
   font-size: 1.2rem;
 }
 
+.auth-login-form {
+  display: grid;
+  min-width: min(100%, 520px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.auth-login-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.auth-login-form input {
+  min-height: 44px;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  color: var(--ink);
+  background: #091711;
+}
+
+.auth-login-form__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
 .online-form {
   display: grid;
   align-content: start;
@@ -2832,6 +2863,10 @@ html.card-pointer-active .card.card--tapped {
   .auth-panel,
   .lobby-card {
     align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .auth-login-form {
     grid-template-columns: 1fr;
   }
 

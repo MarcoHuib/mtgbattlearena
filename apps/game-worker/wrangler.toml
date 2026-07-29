@@ -6,6 +6,10 @@ tsconfig = "tsconfig.json"
 [observability]
 enabled = true
 
+[vars]
+FIREBASE_PROJECT_ID = "mtgbattlearena"
+ALLOWED_ORIGIN = "http://localhost:5173,https://mtgbattlearena.web.app,https://mtgbattlearena.firebaseapp.com"
+
 [[durable_objects.bindings]]
 name = "LOBBY"
 class_name = "LobbyDurableObject"
@@ -22,5 +26,4 @@ new_sqlite_classes = ["GameDurableObject"]
 tag = "v2"
 new_sqlite_classes = ["LobbyDurableObject"]
 
-# Set FIREBASE_PROJECT_ID and ALLOWED_ORIGIN as non-secret environment variables
-# per deployment. Firebase private keys are neither required nor supported here.
+# Firebase private keys are neither required nor supported here.

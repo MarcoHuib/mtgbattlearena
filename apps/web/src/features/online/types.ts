@@ -43,7 +43,9 @@ export type AuthState =
 export type AuthService = {
   getState(): AuthState
   subscribe(listener: (state: AuthState) => void): () => void
-  signInAnonymously(displayName?: string): Promise<AuthUser>
+  signInWithEmail(email: string, password: string): Promise<AuthUser>
+  registerWithEmail(email: string, password: string): Promise<AuthUser>
+  signInWithGoogle(): Promise<AuthUser>
   signOut(): Promise<void>
   getIdToken(): Promise<string | null>
 }

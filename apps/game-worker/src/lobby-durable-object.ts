@@ -33,10 +33,33 @@ const displayNameFor = (identity: VerifiedIdentity) => {
   return name?.length ? name : "Planeswalker"
 }
 
-const randomCode = (length: number) => {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  return [...bytes].map(byte => alphabet[byte % alphabet.length]).join("")
+const joinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+const randomByteAcceptanceLimit = joinCodeAlphabet.length * 7
+
+type FillRandomValues = (bytes: Uint8Array) => Uint8Array
+
+export const randomCode = (
+  length: number,
+  fillRandomValues: FillRandomValues = bytes => crypto.getRandomValues(bytes),
+) => {
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new RangeError("De lengte van een joincode moet positief zijn.")
+  }
+
+  let code = ""
+  const bytes = new Uint8Array(Math.max(16, length * 2))
+
+  while (code.length < length) {
+    fillRandomValues(bytes)
+    for (const byte of bytes) {
+      // Rejection sampling houdt iedere tekenindex exact even waarschijnlijk.
+      if (byte >= randomByteAcceptanceLimit) continue
+      code += joinCodeAlphabet[byte % joinCodeAlphabet.length]
+      if (code.length === length) break
+    }
+  }
+
+  return code
 }
 
 const failure = (

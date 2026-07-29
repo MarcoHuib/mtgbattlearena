@@ -25,8 +25,9 @@
 </div>
 
 > [!NOTE]
-> Dit is een onofficieel fanproject en een handmatige digitale tafel, geen
-> automatische Magic-regelsimulator.
+> Dit is een onafhankelijk, onofficieel fanproject en een handmatige digitale
+> tafel. Het is geen automatische Magic-regelsimulator en geen officiële
+> Archidekt-, Scryfall- of Wizards-applicatie.
 
 <details>
   <summary>Inhoudsopgave</summary>
@@ -36,17 +37,25 @@
     <li><a href="#quick-start">Quick Start</a></li>
     <li><a href="#architectuur">Architectuur</a></li>
     <li><a href="#ontwikkeling">Ontwikkeling</a></li>
+    <li><a href="#externe-diensten-en-databronnen">Externe diensten en databronnen</a></li>
     <li><a href="#documentatie">Documentatie</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#juridische-documenten">Juridische documenten</a></li>
+    <li><a href="#disclaimer">Disclaimer</a></li>
   </ol>
 </details>
 
 ## Over het project
 
-MTG Battle Mode importeert openbare Archidekt-decks en verandert de browser in
-een digitale Commander-tafel. De applicatie beheert kaarten, zones, leven,
-poison, counters, commanderstatus en beurten, terwijl spelers alle acties zelf
-uitvoeren.
+MTG Battle Mode importeert openbare decklijsten vanuit Archidekt en verandert de
+browser in een digitale Commander-tafel. De applicatie beheert kaarten, zones,
+leven, poison, counters, commanderstatus en beurten, terwijl spelers alle
+spelacties zelf uitvoeren.
+
+De Archidekt-integratie gebruikt publiek bereikbare deckgegevens om decklijsten,
+categorieën, gekozen printings en bijbehorende kaartinformatie te importeren.
+Deze integratie is onofficieel en vormt geen samenwerking, goedkeuring of
+ondersteuning door Archidekt.
 
 De belangrijkste uitgangspunten:
 
@@ -120,7 +129,7 @@ gedeelde TypeScript-packages:
 apps/
   web/              React, Redux, IndexedDB, PWA en Playwright
   game-worker/      Firebase-validatie en SQLite Durable Objects
-  import-worker/    Afgeschermde Archidekt-proxy
+  import-worker/    Afgeschermde proxy voor openbare Archidekt-deckdata
 
 packages/
   game-core/        Pure game-state en state-overgangen
@@ -128,6 +137,7 @@ packages/
 
 docs/
   architecture/     Architecture Decision Records
+  legal/            Privacy, voorwaarden en externe vermeldingen
 ```
 
 De webapp en game-worker delen dezelfde pure game-core en hetzelfde
@@ -149,18 +159,28 @@ Meer achtergrond:
 
 ### Scripts
 
-| Command                     | Doel                                     |
-| --------------------------- | ---------------------------------------- |
-| `npm run dev`               | Start de webapp met Vite                 |
-| `npm run build`             | Typecheck en bouw de productie-PWA       |
-| `npm run preview`           | Bekijk de productiebuild lokaal          |
-| `npm run format`            | Formatteer met Prettier                  |
-| `npm run lint`              | Controleer met ESLint                    |
-| `npm run type-check`        | Typecheck alle workspaces                |
-| `npm run worker:type-check` | Typecheck de online Worker               |
-| `npm test`                  | Draai package-, web- en Workertests      |
-| `npm run test:integration`  | Draai de online integratiesuite          |
-| `npm run test:e2e`          | Draai de kritieke Playwright-offlineflow |
+| Command                           | Doel                                           |
+| --------------------------------- | ---------------------------------------------- |
+| `npm run dev`                     | Start de webapp met Vite                       |
+| `npm run dev:worker:game`         | Start de online Worker lokaal                  |
+| `npm run dev:worker:import`       | Start de Archidekt Import Worker lokaal        |
+| `npm run build`                   | Typecheck en bouw de productie-PWA             |
+| `npm run preview`                 | Bekijk de productiebuild lokaal                |
+| `npm run format`                  | Formatteer met Prettier                        |
+| `npm run lint`                    | Controleer met ESLint                          |
+| `npm run type-check`              | Typecheck alle workspaces                      |
+| `npm run worker:type-check`       | Typecheck de online Worker                     |
+| `npm test`                        | Draai package-, web- en Workertests            |
+| `npm run test:integration`        | Draai de online integratiesuite                |
+| `npm run test:e2e`                | Draai de kritieke Playwright-offlineflow       |
+| `npm run cloudflare:login`        | Log Wrangler in bij Cloudflare                 |
+| `npm run cloudflare:status`       | Toon het actieve Cloudflare-account            |
+| `npm run deploy:cloudflare:check` | Bouw en controleer beide Workers zonder upload |
+| `npm run deploy:cloudflare`       | Deploy beide Workers naar Cloudflare           |
+| `npm run firebase:status`         | Toon de Firebase-login en het actieve project  |
+| `npm run dev:firebase:hosting`    | Bouw en serveer Firebase Hosting lokaal        |
+| `npm run deploy:firebase`         | Bouw en deploy de webapp naar Firebase Hosting |
+| `npm run deploy:all`              | Deploy Cloudflare Workers en Firebase Hosting  |
 
 <details>
   <summary>Online Worker lokaal starten</summary>
@@ -172,12 +192,11 @@ frontendomgeving:
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Start de online Worker met jouw Firebase-project-ID:
+Start de online Worker. De niet-geheime Firebase-project-ID en lokale origin
+staan in `apps/game-worker/wrangler.toml`:
 
 ```sh
-npx wrangler dev --config apps/game-worker/wrangler.toml \
-  --var FIREBASE_PROJECT_ID:jouw-firebase-project-id \
-  --var ALLOWED_ORIGIN:http://localhost:5173
+npm run dev:worker:game
 ```
 
 Zet daarna `VITE_ONLINE_API_URL` in `apps/web/.env.local`. Een Firebase-private
@@ -186,16 +205,105 @@ key of serviceaccount hoort niet in deze repository.
 </details>
 
 <details>
+  <summary>Firebase Hosting handmatig deployen</summary>
+
+Firebase Authentication wordt in de Firebase Console geconfigureerd en heeft
+geen afzonderlijke code-deployment. De statische React-webapp wordt wel via
+Firebase Hosting gedeployed.
+
+Controleer eerst de actieve Firebase-login en projectkoppeling:
+
+```sh
+npm run firebase:status
+```
+
+Bouw en serveer de Hosting-configuratie lokaal:
+
+```sh
+npm run dev:firebase:hosting
+```
+
+Deploy daarna uitsluitend de webapp:
+
+```sh
+npm run deploy:firebase
+```
+
+Deploy Cloudflare en Firebase samen alleen wanneer beide wijzigingen
+productieklaar zijn:
+
+```sh
+npm run deploy:all
+```
+
+Firebase Hosting gebruikt project `mtgbattlearena` en publiceert standaard op
+`https://mtgbattlearena.web.app`. De Firebase CLI moet lokaal geïnstalleerd en
+ingelogd zijn; hij blijft buiten de npm-dependencies om de applicatieaudit
+schoon te houden.
+
+</details>
+
+<details>
   <summary>Archidekt Import Worker starten</summary>
 
 ```sh
-npx wrangler dev --config apps/import-worker/wrangler.toml
+npm run dev:worker:import
 ```
 
-De Worker accepteert uitsluitend de afgeschermde Archidekt-routes voor decks,
-tokens en kaartafbeeldingen; het is geen generieke fetchproxy.
+De Worker accepteert uitsluitend afgeschermde routes voor openbare
+Archidekt-deckgegevens en de bijbehorende externe kaartafbeeldingen. Het is geen
+generieke fetchproxy.
 
 </details>
+
+<details>
+  <summary>Cloudflare Workers handmatig deployen</summary>
+
+Controleer eerst het actieve Cloudflare-account en voer een dry-run uit:
+
+```sh
+npm run cloudflare:status
+npm run deploy:cloudflare:check
+```
+
+Deploy daarna beide Workers:
+
+```sh
+npm run deploy:cloudflare
+```
+
+Je kunt ze ook afzonderlijk deployen:
+
+```sh
+npm run deploy:cloudflare:game
+npm run deploy:cloudflare:import
+```
+
+Deze commando's deployen geen frontend. Een centraal web-deployscript wordt
+toegevoegd zodra Firebase Hosting of een andere frontendhost is geconfigureerd.
+
+</details>
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+## Externe diensten en databronnen
+
+MTG Battle Mode gebruikt of kan gebruikmaken van diensten van externe partijen:
+
+- **Archidekt:** openbare decklijsten worden via een onofficiële,
+  read-only-integratie geïmporteerd. Archidekt kan endpoints, gegevensformaten
+  of toegang zonder aankondiging wijzigen.
+- **Scryfall:** kaartmetadata en kaartafbeeldingen kunnen via Scryfall-URL's of
+  Scryfall-diensten worden geladen. Afbeeldingen moeten ongewijzigd en met
+  zichtbare artiesten- en copyrightinformatie worden weergegeven.
+- **Firebase:** verzorgt authenticatie en gebruikersidentiteit voor de optionele
+  online multiplayerlaag.
+- **Cloudflare:** verzorgt Workers, Durable Objects en infrastructuur voor de
+  optionele online multiplayer- en importlaag.
+
+Archidekt, Scryfall, Firebase, Cloudflare en Wizards of the Coast zijn geen
+sponsors van dit project en hebben het project niet beoordeeld of goedgekeurd.
+Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
@@ -223,14 +331,25 @@ tokens en kaartafbeeldingen; het is geen generieke fetchproxy.
 - [ ] Expliciete host-startflow met echte backend configureren
 - [ ] Cloudflare staging- en productiedeployment
 - [ ] Overige online acties zoals tokens, counters en commander damage
+- [ ] Privacyverzoeken, bewaartermijnen en accountverwijdering technisch
+      implementeren
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
 ## Disclaimer
 
-Magic: The Gathering en alle bijbehorende namen en afbeeldingen zijn eigendom
-van Wizards of the Coast. Dit project is niet verbonden aan of goedgekeurd door
-Wizards of the Coast.
+MTG Battle Mode is onafhankelijk en onofficieel fancontent onder de Wizards of
+the Coast Fan Content Policy. Wizards heeft het project niet goedgekeurd of
+onderschreven. Een deel van het gebruikte materiaal is eigendom van Wizards of
+the Coast LLC. © Wizards of the Coast LLC.
+
+Magic: The Gathering, kaartnamen, symbolen, illustraties en overige bijbehorende
+materialen zijn eigendom van Wizards of the Coast LLC en/of hun respectieve
+rechthebbenden.
+
+De namen Archidekt en Scryfall en de bijbehorende diensten en handelsmerken
+behoren toe aan hun respectieve eigenaren. De integraties zijn onofficieel en
+houden geen samenwerking, sponsoring of goedkeuring in.
 
 <!-- MARKDOWN LINKS & IMAGES -->
 

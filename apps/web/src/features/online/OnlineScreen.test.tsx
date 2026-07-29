@@ -64,9 +64,11 @@ test("toont auth, 2–6 spelerkeuze en opent een speelbare mockgame", async () =
       .map(option => option.textContent),
   ).toEqual(["2", "3", "4 (Commander-standaard)", "5", "6"])
 
-  await user.click(screen.getByRole("button", { name: "Anoniem inloggen" }))
+  await user.type(screen.getByLabelText("E-mailadres"), "player@example.com")
+  await user.type(screen.getByLabelText("Wachtwoord"), "veilig-wachtwoord")
+  await user.click(screen.getByRole("button", { name: "Inloggen" }))
   expect(
-    await screen.findByRole("heading", { name: /Ingelogd als Planeswalker/ }),
+    await screen.findByRole("heading", { name: /Ingelogd als player/ }),
   ).toBeInTheDocument()
 
   await user.clear(screen.getByLabelText("Naam"))
@@ -91,8 +93,8 @@ test("neemt met een gamecode deel en opent de persoonlijke gameview", async () =
   const { user } = renderWithProviders(<App services={services} />)
 
   await screen.findByRole("heading", { name: "Niet ingelogd" })
-  await user.click(screen.getByRole("button", { name: "Anoniem inloggen" }))
-  await screen.findByRole("heading", { name: /Ingelogd als Planeswalker/ })
+  await user.click(screen.getByRole("button", { name: "Doorgaan met Google" }))
+  await screen.findByRole("heading", { name: /Ingelogd als google-player/ })
   await user.type(screen.getByLabelText("Gamecode"), "BATTLE")
   await user.click(screen.getByRole("button", { name: "Deelnemen" }))
 

@@ -79,6 +79,10 @@ const authenticate = async (
     if (caught instanceof Error && caught.message === "AUTH_NOT_CONFIGURED") {
       throw caught
     }
+    console.warn("Firebase ID-token validation failed.", {
+      reason: caught instanceof Error ? caught.message : "UNKNOWN",
+      projectId: env.FIREBASE_PROJECT_ID,
+    })
     throw new Error("INVALID_TOKEN", { cause: caught })
   }
 }
@@ -258,10 +262,23 @@ const routeRequest = async (request: Request, env: Env) => {
   return error(404, "NOT_FOUND", "Route niet gevonden.")
 }
 
+export const isOriginAllowed = (
+  origin: string | null,
+  configuredOrigins?: string,
+) =>
+  Boolean(
+    origin &&
+    configuredOrigins
+      ?.split(",")
+      .map(value => value.trim())
+      .filter(Boolean)
+      .includes(origin),
+  )
+
 const withCors = (response: Response, request: Request, env: Env) => {
   const headers = new Headers(response.headers)
   const origin = request.headers.get("Origin")
-  if (origin && env.ALLOWED_ORIGIN && origin === env.ALLOWED_ORIGIN) {
+  if (origin && isOriginAllowed(origin, env.ALLOWED_ORIGIN)) {
     headers.set("Access-Control-Allow-Origin", origin)
     headers.set("Vary", "Origin")
   }

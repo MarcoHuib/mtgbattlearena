@@ -9,7 +9,23 @@
   ],
   "scripts": {
     "build": "tsc -b && npm run build --workspace @mtg/web",
+    "cloudflare:login": "wrangler login",
+    "cloudflare:status": "wrangler whoami",
     "dev": "npm run dev --workspace @mtg/web",
+    "dev:worker:game": "wrangler dev --cwd apps/game-worker --config wrangler.toml",
+    "dev:worker:import": "wrangler dev --cwd apps/import-worker --config wrangler.toml",
+    "deploy:cloudflare": "npm run deploy:cloudflare:game && npm run deploy:cloudflare:import",
+    "deploy:cloudflare:check": "npm run deploy:cloudflare:check:game && npm run deploy:cloudflare:check:import",
+    "deploy:cloudflare:check:game": "wrangler deploy --cwd apps/game-worker --config wrangler.toml --dry-run",
+    "deploy:cloudflare:check:import": "wrangler deploy --cwd apps/import-worker --config wrangler.toml --dry-run",
+    "deploy:cloudflare:game": "wrangler deploy --cwd apps/game-worker --config wrangler.toml",
+    "deploy:cloudflare:import": "wrangler deploy --cwd apps/import-worker --config wrangler.toml",
+    "deploy:firebase": "npm run deploy:firebase:hosting",
+    "deploy:firebase:hosting": "npm run build && firebase deploy --only hosting --project mtgbattlearena",
+    "deploy:all": "npm run deploy:cloudflare && npm run deploy:firebase",
+    "dev:firebase:hosting": "npm run build && firebase serve --only hosting --project mtgbattlearena",
+    "firebase:login": "firebase login",
+    "firebase:status": "firebase login:list && firebase use --project mtgbattlearena",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "lint:fix": "eslint --fix .",
@@ -26,7 +42,7 @@
     "type-check": "tsc -b --noEmit"
   },
   "devDependencies": {
-    "@eslint/js": "^9.23.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -37,11 +53,10 @@
     "@types/react-dom": "^19.1.1",
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/eslint-plugin": "^1.1.39",
-    "eslint": "^9.23.0",
+    "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
-    "eslint-plugin-react": "^7.37.4",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^16.0.0",
     "jsdom": "^26.1.0",
     "prettier": "^3.5.3",
@@ -49,6 +64,12 @@
     "typescript-eslint": "^8.29.0",
     "vite": "^6.2.4",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wrangler": "^4.115.0"
+  },
+  "overrides": {
+    "filelist": {
+      "minimatch": "10.2.5"
+    }
   }
 }

@@ -1,7 +1,6 @@
 import js from "@eslint/js"
 import vitestPlugin from "@vitest/eslint-plugin"
 import prettierConfig from "eslint-config-prettier/flat"
-import reactPlugin from "eslint-plugin-react"
 import reactHooksPlugin from "eslint-plugin-react-hooks"
 import globals from "globals"
 import { config, configs } from "typescript-eslint"
@@ -32,11 +31,7 @@ const eslintConfig = config(
   configs.strictTypeChecked,
   configs.stylisticTypeChecked,
   vitestPlugin.configs.recommended,
-  {
-    name: "eslint-plugin-react/jsx-runtime",
-    ...reactPlugin.configs.flat["jsx-runtime"],
-  },
-  reactHooksPlugin.configs["recommended-latest"],
+  reactHooksPlugin.configs.flat["recommended-latest"],
   {
     name: "main",
     linterOptions: {
@@ -57,6 +52,7 @@ const eslintConfig = config(
     },
     rules: {
       "no-undef": [0],
+      "react-hooks/set-state-in-effect": [0],
       "@typescript-eslint/consistent-type-definitions": [2, "type"],
       "@typescript-eslint/consistent-type-imports": [
         2,
@@ -92,6 +88,12 @@ const eslintConfig = config(
     files: ["eslint.config.js"],
     rules: {
       "@typescript-eslint/no-deprecated": [0],
+    },
+  },
+  {
+    files: ["**/*.d.ts"],
+    rules: {
+      "@typescript-eslint/consistent-type-definitions": [0],
     },
   },
   {

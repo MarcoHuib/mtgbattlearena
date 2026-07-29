@@ -68,12 +68,15 @@ export const validateFirebaseClaims = (
 
 export class FirebaseTokenVerifier {
   private certificateCache: CertificateCache | null = null
+  private readonly fetcher: typeof fetch
 
   constructor(
     private readonly projectId: string,
-    private readonly fetcher: typeof fetch = fetch,
+    fetcher: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    this.fetcher = fetcher.bind(globalThis)
+  }
 
   async verify(token: string): Promise<VerifiedIdentity> {
     const parts = token.split(".")
