@@ -34,6 +34,12 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
         displayName: index === 0 ? "Jij" : `Tegenstander ${index}`,
         life: 40,
         poison: 0,
+        trackers: { energy: 0, experience: 0, rad: 0 },
+        visibleTrackers: { energy: false, experience: false, rad: false },
+        citysBlessing: false,
+        disabled: false,
+        commanderTax: {},
+        commanderDamage: {},
         handCount: 7,
         libraryCount: 92,
         battlefield: [],
@@ -49,6 +55,7 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
     gameId,
     version: 0,
     role: "player",
+    isHost: true,
     activePlayerId: turnOrder[0],
     turnNumber: 1,
     phase: "beginning",
@@ -67,10 +74,19 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
     players,
     privateView: {
       playerId: turnOrder[0],
+      deckSnapshotId: "mock-deck",
       hand: Array.from({ length: 7 }, (_, index) =>
         card(`Demo kaart ${index + 1}`, index + 1),
       ),
       revealedLibraryCards: [],
+      availableTokens: [
+        {
+          definitionId: "mock-token-treasure",
+          name: "Treasure",
+          typeLine: "Token Artifact — Treasure",
+          kind: "treasure",
+        },
+      ],
     },
   })
 }
@@ -240,6 +256,70 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         break
       }
       case "SHUFFLE_LIBRARY":
+        break
+      case "REVEAL_LIBRARY":
+        next.privateView.revealedLibraryCards = Array.from(
+          {
+            length: Math.min(command.payload.amount, own.libraryCount),
+          },
+          (_, index) =>
+            card(
+              `Library demo ${this.nextCardIndex + index}`,
+              this.nextCardIndex + index,
+            ),
+        )
+        break
+      case "HIDE_LIBRARY":
+        next.privateView.revealedLibraryCards = []
+        break
+      case "UNTAP_ALL":
+        own.battlefield.forEach(item => {
+          item.tapped = false
+        })
+        break
+      case "CREATE_TOKEN":
+        own.battlefield.push({
+          instanceId: `mock-token-${this.nextCardIndex}`,
+          definitionId: command.payload.token.definitionId,
+          name: command.payload.token.name,
+          typeLine: command.payload.token.typeLine,
+          imageUrl: command.payload.token.imageUrl,
+          tapped: false,
+          activeFaceIndex: 0,
+          counters: {},
+          position: command.payload.position,
+          isCommander: false,
+        })
+        this.nextCardIndex += 1
+        break
+      case "CHANGE_TRACKER":
+        own.trackers[command.payload.tracker] = Math.max(
+          0,
+          own.trackers[command.payload.tracker] + command.payload.delta,
+        )
+        break
+      case "SET_TRACKER_VISIBILITY":
+        own.visibleTrackers[command.payload.tracker] = command.payload.visible
+        break
+      case "SET_CITYS_BLESSING":
+        own.citysBlessing = command.payload.active
+        break
+      case "SET_PLAYER_DISABLED":
+        own.disabled = command.payload.disabled
+        break
+      case "CHANGE_COMMANDER_TAX":
+        own.commanderTax[command.payload.commanderId] = Math.max(
+          0,
+          (own.commanderTax[command.payload.commanderId] ?? 0) +
+            command.payload.delta,
+        )
+        break
+      case "CHANGE_COMMANDER_DAMAGE":
+        own.commanderDamage[command.payload.commanderId] = Math.max(
+          0,
+          (own.commanderDamage[command.payload.commanderId] ?? 0) +
+            command.payload.delta,
+        )
         break
       case "PASS_TURN": {
         if (next.activePlayerId !== ownId) return

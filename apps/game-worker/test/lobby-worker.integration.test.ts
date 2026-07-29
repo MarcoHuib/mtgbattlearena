@@ -323,6 +323,7 @@ describe("Lobby Durable Object RPC", () => {
           isCommander: false,
         },
       ],
+      tokens: [],
     })
     expect(lobby.prepareRegisteredGame(created.value.id, host)).toMatchObject({
       ok: false,

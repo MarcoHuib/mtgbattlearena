@@ -59,6 +59,11 @@ export const onlineSlice = createSlice({
         )
         return
       }
+      if (event.type === "GAME_ABORTED") {
+        state.connectionStatus = "disconnected"
+        state.pendingCommandIds = []
+        return
+      }
       state.lastError = event.error
       if (event.commandId) {
         state.pendingCommandIds = state.pendingCommandIds.filter(

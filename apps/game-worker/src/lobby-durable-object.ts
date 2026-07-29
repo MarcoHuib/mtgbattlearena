@@ -270,7 +270,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
   getSession(gameId: string, uid: string): GameSession | null {
     const lobby = this.store.getById(gameId)
     const participant = this.store.getParticipant(gameId, uid)
-    if (!lobby || !participant) return null
+    if (!lobby || lobby.status === "finished" || !participant) return null
     return {
       gameId,
       uid,
@@ -375,6 +375,32 @@ export class LobbyDurableObject extends DurableObject<Env> {
     if (!this.store.setStatus(gameId, "active", new Date().toISOString())) {
       return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
     }
+    return { ok: true, value: null }
+  }
+
+  markGameFinished(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): RpcResult<null> {
+    const lobby = this.store.getById(gameId)
+    if (!lobby) {
+      return failure(404, "GAME_NOT_FOUND", "Game niet gevonden.")
+    }
+    if (lobby.hostUid !== identity.uid) {
+      return failure(
+        403,
+        "FORBIDDEN",
+        "Alleen de geverifieerde host kan de game afbreken.",
+      )
+    }
+    if (lobby.status !== "active") {
+      return failure(
+        409,
+        "LOBBY_NOT_READY",
+        "Alleen een actieve game kan worden afgebroken.",
+      )
+    }
+    this.store.setStatus(gameId, "finished", new Date().toISOString())
     return { ok: true, value: null }
   }
 

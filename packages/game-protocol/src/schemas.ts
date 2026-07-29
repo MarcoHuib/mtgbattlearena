@@ -4,6 +4,29 @@ export const playerIdSchema = z.string().min(1).max(80)
 export const cardInstanceIdSchema = z.string().min(1).max(120)
 export const gameIdSchema = z.string().min(1).max(120)
 
+const tokenKindSchema = z.enum([
+  "creature",
+  "treasure",
+  "food",
+  "clue",
+  "copy",
+  "emblem",
+  "other",
+])
+
+export const onlineTokenDefinitionSchema = z
+  .object({
+    definitionId: z.string().min(1).max(120),
+    name: z.string().min(1).max(300),
+    typeLine: z.string().max(500).optional(),
+    imageUrl: z.url().optional(),
+    scryfallId: z.string().max(120).optional(),
+    kind: tokenKindSchema,
+    power: z.number().int().min(-1_000).max(1_000).optional(),
+    toughness: z.number().int().min(-1_000).max(1_000).optional(),
+  })
+  .strict()
+
 export const onlineDeckCardSchema = z
   .object({
     definitionId: z.string().min(1).max(120),
@@ -21,6 +44,7 @@ export const onlineDeckSubmissionSchema = z
     deckSnapshotId: z.string().min(1).max(120),
     deckName: z.string().min(1).max(120),
     cards: z.array(onlineDeckCardSchema).min(1).max(250),
+    tokens: z.array(onlineTokenDefinitionSchema).max(250).default([]),
   })
   .strict()
   .superRefine((deck, context) => {
@@ -41,6 +65,8 @@ const battlefieldPositionSchema = z
     z: z.number().int().nonnegative(),
   })
   .strict()
+
+const optionalTrackerSchema = z.enum(["energy", "experience", "rad"])
 
 export const gameCommandSchema = z.discriminatedUnion("type", [
   z
@@ -96,6 +122,108 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
       commandId: z.uuid(),
       expectedVersion: z.number().int().nonnegative(),
       payload: z.object({}).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("REVEAL_LIBRARY"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ amount: z.number().int().min(1).max(250) }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("HIDE_LIBRARY"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({}).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("UNTAP_ALL"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({}).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("CREATE_TOKEN"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          token: onlineTokenDefinitionSchema,
+          position: battlefieldPositionSchema,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("CHANGE_TRACKER"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          tracker: optionalTrackerSchema,
+          delta: z.number().int().min(-1_000).max(1_000),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_TRACKER_VISIBILITY"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({ tracker: optionalTrackerSchema, visible: z.boolean() })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_CITYS_BLESSING"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ active: z.boolean() }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_PLAYER_DISABLED"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ disabled: z.boolean() }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("CHANGE_COMMANDER_TAX"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          commanderId: cardInstanceIdSchema,
+          delta: z.number().int().min(-100).max(100),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("CHANGE_COMMANDER_DAMAGE"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          commanderId: cardInstanceIdSchema,
+          delta: z.number().int().min(-100).max(100),
+        })
+        .strict(),
     })
     .strict(),
   z
@@ -195,6 +323,18 @@ const publicPlayerSchema = z
     displayName: z.string().min(1).max(80),
     life: z.number().int(),
     poison: z.number().int().nonnegative(),
+    trackers: z.record(optionalTrackerSchema, z.number().int().nonnegative()),
+    visibleTrackers: z.record(optionalTrackerSchema, z.boolean()),
+    citysBlessing: z.boolean(),
+    disabled: z.boolean(),
+    commanderTax: z.record(
+      cardInstanceIdSchema,
+      z.number().int().nonnegative(),
+    ),
+    commanderDamage: z.record(
+      cardInstanceIdSchema,
+      z.number().int().nonnegative(),
+    ),
     handCount: z.number().int().nonnegative(),
     libraryCount: z.number().int().nonnegative(),
     battlefield: z.array(visibleCardSchema),
@@ -207,8 +347,10 @@ const publicPlayerSchema = z
 const privatePlayerViewSchema = z
   .object({
     playerId: playerIdSchema,
+    deckSnapshotId: z.string().min(1).max(120),
     hand: z.array(visibleCardSchema),
     revealedLibraryCards: z.array(visibleCardSchema),
+    availableTokens: z.array(onlineTokenDefinitionSchema),
   })
   .strict()
 
@@ -226,6 +368,7 @@ export const personalGameSnapshotSchema = z
     gameId: gameIdSchema,
     version: z.number().int().nonnegative(),
     role: z.enum(["player", "spectator"]),
+    isHost: z.boolean(),
     activePlayerId: playerIdSchema,
     turnNumber: z.number().int().positive(),
     phase: z.enum([
@@ -330,6 +473,13 @@ export const serverEventSchema = z.discriminatedUnion("type", [
   personalGameSnapshotSchema,
   z
     .object({
+      type: z.literal("GAME_ABORTED"),
+      gameId: gameIdSchema,
+      message: z.string().min(1).max(500),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("COMMAND_ACCEPTED"),
       gameId: gameIdSchema,
       commandId: z.uuid(),
@@ -349,6 +499,9 @@ export const serverEventSchema = z.discriminatedUnion("type", [
 
 export type GameCommand = z.infer<typeof gameCommandSchema>
 export type OnlineDeckSubmission = z.infer<typeof onlineDeckSubmissionSchema>
+export type OnlineTokenDefinition = z.infer<
+  typeof onlineTokenDefinitionSchema
+>
 export type VisibleOnlineCard = z.infer<typeof visibleCardSchema>
 export type PublicOnlinePlayer = z.infer<typeof publicPlayerSchema>
 export type PersonalGameSnapshot = z.infer<typeof personalGameSnapshotSchema>

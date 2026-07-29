@@ -161,6 +161,10 @@ export type LobbyDurableObjectStub = {
     gameId: string,
     identity: VerifiedIdentity,
   ): Promise<RpcResult<null>>
+  markGameFinished(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): Promise<RpcResult<null>>
 }
 
 export type GameDurableObjectStub = {
@@ -174,6 +178,7 @@ export type GameDurableObjectStub = {
     session: GameSession,
     command: GameCommand,
   ): Promise<CommandResult>
+  abortGame(session: GameSession): Promise<RpcResult<null>>
 }
 
 export type DurableObjectNamespace<TStub> = {

@@ -1,7 +1,12 @@
 import { z } from "zod"
 import {
+  changeCommanderDamage,
+  changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
+  changePlayerTracker,
+  createKnownToken,
+  createToken,
   drawCards,
   keepOpeningHand,
   millCards,
@@ -11,6 +16,9 @@ import {
   setDayNightStatus,
   setInitiativeHolder,
   setMonarchHolder,
+  setPlayerCitysBlessing,
+  setPlayerDisabled,
+  setPlayerTrackerVisibility,
   shuffle,
   shuffleLibrary,
   toggleCardTapped,
@@ -32,6 +40,7 @@ import {
   personalGameSnapshotSchema,
   type GameCommand,
   type OnlineDeckSubmission,
+  type OnlineTokenDefinition,
   type PersonalGameSnapshot,
   type VisibleOnlineCard,
 } from "@mtg/game-protocol"
@@ -76,7 +85,7 @@ export type OnlineGameSeed = z.infer<typeof onlineGameSeedSchema>
 export type { OnlineDeckSubmission }
 
 export type AuthoritativeGameState = {
-  schemaVersion: 3
+  schemaVersion: 4
   mode: Extract<GameMode, "online">
   gameId: string
   version: number
@@ -89,6 +98,7 @@ export type AuthoritativeGameState = {
   phase: GameState["phase"]
   matchStatus: GameState["matchStatus"]
   openingHands: GameState["openingHands"]
+  libraryRevealCounts: Record<PlayerId, number>
   players: Record<PlayerId, PlayerState>
   playerUids: Record<PlayerId, string>
   cardDefinitionsById: Record<string, CardDefinition>
@@ -247,11 +257,47 @@ export const createAuthoritativeGame = (
         if (entry.isCommander) player.commanderTax[instanceId] = 0
       }
     }
+    for (const token of playerSeed.tokens) {
+      const keyedDefinitionId = definitionKey(
+        playerSeed.playerId,
+        token.definitionId,
+      )
+      cardDefinitionsById[keyedDefinitionId] = {
+        id: keyedDefinitionId,
+        name: token.name,
+        scryfallId: token.scryfallId,
+        typeLine: token.typeLine,
+        faces: [
+          {
+            name: token.name,
+            typeLine: token.typeLine,
+            imageUrl: token.imageUrl,
+          },
+        ],
+        imageRefs: token.imageUrl
+          ? [
+              {
+                assetKey: `${keyedDefinitionId}:0:normal`,
+                faceIndex: 0,
+                variant: "normal",
+                url: token.imageUrl,
+              },
+            ]
+          : [],
+        token: {
+          kind: token.kind,
+          name: token.name,
+          power: token.power,
+          toughness: token.toughness,
+          source: "deck",
+        },
+      }
+    }
     player.zones.library = shuffle(player.zones.library, options.random)
   }
 
   let game: AuthoritativeGameState = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     mode: "online",
     gameId: seed.gameId,
     version: 0,
@@ -269,6 +315,9 @@ export const createAuthoritativeGame = (
     },
     openingHands: Object.fromEntries(
       turnOrder.map(playerId => [playerId, { mulliganCount: 0, kept: false }]),
+    ),
+    libraryRevealCounts: Object.fromEntries(
+      turnOrder.map(playerId => [playerId, 0]),
     ),
     players,
     playerUids,
@@ -288,22 +337,24 @@ export const migrateAuthoritativeGame = (
   state: AuthoritativeGameState,
 ): AuthoritativeGameState => {
   const legacy = state as AuthoritativeGameState & {
-    schemaVersion: 1 | 2 | 3
+    schemaVersion: 1 | 2 | 3 | 4
     openingHands?: GameState["openingHands"]
     phase?: GameState["phase"]
     matchStatus?: GameState["matchStatus"]
+    libraryRevealCounts?: Record<PlayerId, number>
   }
   if (
-    legacy.schemaVersion === 3 &&
+    legacy.schemaVersion === 4 &&
     legacy.openingHands &&
     legacy.phase &&
-    legacy.matchStatus
+    legacy.matchStatus &&
+    legacy.libraryRevealCounts
   ) {
     return state
   }
   return {
     ...state,
-    schemaVersion: 3,
+    schemaVersion: 4,
     phase: legacy.phase ?? "beginning",
     matchStatus: legacy.matchStatus ?? {
       monarchPlayerId: null,
@@ -318,6 +369,9 @@ export const migrateAuthoritativeGame = (
           { mulliganCount: 0, kept: true },
         ]),
       ),
+    libraryRevealCounts:
+      legacy.libraryRevealCounts ??
+      Object.fromEntries(state.turnOrder.map(playerId => [playerId, 0])),
   }
 }
 
@@ -425,6 +479,37 @@ export const applyAuthoritativeCommand = (
     }
   }
 
+  if (command.type === "REVEAL_LIBRARY") {
+    return {
+      accepted: true,
+      state: {
+        ...state,
+        updatedAt: now,
+        libraryRevealCounts: {
+          ...state.libraryRevealCounts,
+          [playerId]: Math.min(
+            command.payload.amount,
+            state.players[playerId]?.zones.library.length ?? 0,
+          ),
+        },
+      },
+    }
+  }
+
+  if (command.type === "HIDE_LIBRARY") {
+    return {
+      accepted: true,
+      state: {
+        ...state,
+        updatedAt: now,
+        libraryRevealCounts: {
+          ...state.libraryRevealCounts,
+          [playerId]: 0,
+        },
+      },
+    }
+  }
+
   switch (command.type) {
     case "DRAW_CARD":
       nextCore = drawCards(core, playerId, command.payload.amount, now)
@@ -473,6 +558,95 @@ export const applyAuthoritativeCommand = (
       break
     case "SHUFFLE_LIBRARY":
       nextCore = shuffleLibrary(core, playerId, options.random, now)
+      break
+    case "UNTAP_ALL":
+      nextCore = untapAllCards(core, playerId, now)
+      break
+    case "CREATE_TOKEN": {
+      const submittedToken = command.payload.token
+      const knownDefinitionId = definitionKey(
+        playerId,
+        submittedToken.definitionId,
+      )
+      const knownDefinition =
+        state.cardDefinitionsById[submittedToken.definitionId] ??
+        state.cardDefinitionsById[knownDefinitionId]
+      nextCore =
+        knownDefinition?.token &&
+        knownDefinition.id.startsWith(`${playerId}:`)
+          ? createKnownToken(core, {
+              playerId,
+              definitionId: knownDefinition.id,
+              instanceId: options.createId("online-token"),
+              position: command.payload.position,
+              now,
+            })
+          : createToken(core, {
+              playerId,
+              kind: submittedToken.kind,
+              name: submittedToken.name,
+              typeLine: submittedToken.typeLine,
+              imageUrl: submittedToken.imageUrl,
+              scryfallId: submittedToken.scryfallId,
+              power: submittedToken.power,
+              toughness: submittedToken.toughness,
+              position: command.payload.position,
+              createId: options.createId,
+              now,
+            })
+      break
+    }
+    case "CHANGE_TRACKER":
+      nextCore = changePlayerTracker(
+        core,
+        playerId,
+        command.payload.tracker,
+        command.payload.delta,
+        now,
+      )
+      break
+    case "SET_TRACKER_VISIBILITY":
+      nextCore = setPlayerTrackerVisibility(
+        core,
+        playerId,
+        command.payload.tracker,
+        command.payload.visible,
+        now,
+      )
+      break
+    case "SET_CITYS_BLESSING":
+      nextCore = setPlayerCitysBlessing(
+        core,
+        playerId,
+        command.payload.active,
+        now,
+      )
+      break
+    case "SET_PLAYER_DISABLED":
+      nextCore = setPlayerDisabled(
+        core,
+        playerId,
+        command.payload.disabled,
+        now,
+      )
+      break
+    case "CHANGE_COMMANDER_TAX":
+      nextCore = changeCommanderTax(
+        core,
+        playerId,
+        command.payload.commanderId,
+        command.payload.delta,
+        now,
+      )
+      break
+    case "CHANGE_COMMANDER_DAMAGE":
+      nextCore = changeCommanderDamage(
+        core,
+        playerId,
+        command.payload.commanderId,
+        command.payload.delta,
+        now,
+      )
       break
     case "PASS_TURN":
       return applyPassTurn(state, playerId, now)
@@ -578,6 +752,24 @@ const visibleCard = (
   }
 }
 
+const visibleTokenDefinition = (
+  definition: CardDefinition,
+): OnlineTokenDefinition => {
+  const firstFace = definition.faces[0]
+  return {
+    definitionId: definition.id,
+    name: firstFace?.name ?? definition.name,
+    typeLine: firstFace?.typeLine ?? definition.typeLine,
+    imageUrl:
+      firstFace?.imageUrl ??
+      definition.imageRefs.find(reference => reference.faceIndex === 0)?.url,
+    scryfallId: definition.scryfallId,
+    kind: definition.token?.kind ?? "other",
+    power: definition.token?.power,
+    toughness: definition.token?.toughness,
+  }
+}
+
 export const serializePersonalSnapshot = (
   state: AuthoritativeGameState,
   session: GameSession,
@@ -604,6 +796,12 @@ export const serializePersonalSnapshot = (
           displayName: player.name,
           life: player.life,
           poison: player.poison,
+          trackers: player.trackers,
+          visibleTrackers: player.visibleTrackers,
+          citysBlessing: player.citysBlessing,
+          disabled: player.disabled,
+          commanderTax: player.commanderTax,
+          commanderDamage: player.commanderDamage,
           handCount: player.zones.hand.length,
           libraryCount: player.zones.library.length,
           battlefield: player.zones.battlefield.map(instanceId =>
@@ -630,10 +828,29 @@ export const serializePersonalSnapshot = (
     privatePlayer && session.playerId
       ? {
           playerId: session.playerId,
+          deckSnapshotId: privatePlayer.deckSnapshotId,
           hand: privatePlayer.zones.hand.map(instanceId =>
             visibleCard(state, instanceId),
           ),
-          revealedLibraryCards: [],
+          revealedLibraryCards: (() => {
+            const revealCount =
+              state.libraryRevealCounts[session.playerId] ?? 0
+            if (revealCount === 0) {
+              return []
+            }
+            return privatePlayer.zones.library
+              .slice(-revealCount)
+              .reverse()
+              .map(instanceId => visibleCard(state, instanceId))
+          })(),
+          availableTokens: Object.values(state.cardDefinitionsById)
+            .filter(
+              definition =>
+                definition.id.startsWith(`${session.playerId}:`) &&
+                definition.token?.source === "deck",
+            )
+            .map(visibleTokenDefinition)
+            .sort((first, second) => first.name.localeCompare(second.name)),
         }
       : null
 
@@ -643,6 +860,7 @@ export const serializePersonalSnapshot = (
     gameId: state.gameId,
     version: state.version,
     role: session.role,
+    isHost: session.isHost,
     activePlayerId: state.activePlayerId,
     turnNumber: state.turnNumber,
     phase: state.phase,

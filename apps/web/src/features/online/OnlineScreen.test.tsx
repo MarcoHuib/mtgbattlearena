@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { fireEvent, screen, within } from "@testing-library/react"
 import type { DeckSnapshot } from "@mtg/game-core/types"
 import { App } from "../../App"
 import { repositories } from "../../persistence/database"
@@ -84,6 +84,10 @@ class HostLobbyOnlineGameService extends MockOnlineGameService {
 
 class ReadyLobbyOnlineGameService extends MockOnlineGameService {
   private hostDeckName: string | null = null
+
+  override abortGame(): Promise<void> {
+    return Promise.resolve()
+  }
 
   override getLobbyRoom(): Promise<LobbyRoom> {
     return Promise.resolve({
@@ -444,10 +448,14 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   await user.click(
     screen.getByRole("button", { name: "Library-acties openen" }),
   )
-  expect(screen.getByRole("menuitem", { name: "Trek kaart" })).toBeEnabled()
-  expect(screen.getByRole("menuitem", { name: "Mill 1" })).toBeEnabled()
   expect(
-    screen.getByRole("menuitem", { name: "Schud library" }),
+    screen.getByRole("dialog", { name: "Libraryacties" }),
+  ).toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Trek een kaart" })).toBeEnabled()
+  expect(screen.getByRole("button", { name: "Trek X" })).toBeEnabled()
+  expect(screen.getByRole("button", { name: "Mill X" })).toBeEnabled()
+  expect(
+    screen.getByRole("button", { name: "Schud library" }),
   ).toBeEnabled()
   await user.click(
     screen.getByRole("button", { name: "Library-acties openen" }),
@@ -469,5 +477,40 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
     name: /Kaartacties voor/,
   })
   await user.click(cardActions[0]!)
-  expect(screen.getByRole("menu")).toBeInTheDocument()
+  expect(
+    screen.getByRole("dialog", { name: /Kaartacties voor/ }),
+  ).toBeInTheDocument()
+  await user.keyboard("{Escape}")
+
+  const ownBoard = screen.getByLabelText("Speelveld van Jij")
+  const battlefield = within(ownBoard).getByLabelText("Battlefield, 0 kaarten")
+  fireEvent.contextMenu(
+    battlefield.querySelector(".zone__cards") ?? battlefield,
+    {
+      clientX: 480,
+      clientY: 360,
+    },
+  )
+  expect(
+    screen.getByRole("dialog", { name: "Battlefieldacties" }),
+  ).toBeInTheDocument()
+  expect(screen.getByRole("button", { name: /Token toevoegen/ })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  )
+  await user.click(screen.getByRole("button", { name: /Treasure/ }))
+  expect(
+    await within(ownBoard).findByRole("button", {
+      name: "Treasure, Battlefield",
+    }),
+  ).toBeInTheDocument()
+
+  await user.click(screen.getByRole("button", { name: "Spel afbreken" }))
+  expect(
+    screen.getByRole("heading", { name: "Spel voor iedereen afbreken?" }),
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole("button", { name: "Ja, spel afbreken" }))
+  expect(
+    await screen.findByRole("heading", { name: "Online spelen" }),
+  ).toBeInTheDocument()
 })

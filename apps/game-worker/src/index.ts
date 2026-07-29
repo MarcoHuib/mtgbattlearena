@@ -243,6 +243,25 @@ const routeRequest = async (request: Request, env: Env) => {
     }
   }
 
+  const abortGameRoute = /^\/api\/online\/lobbies\/([^/]+)\/abort$/.exec(
+    url.pathname,
+  )
+  if (abortGameRoute?.[1] && request.method === "POST") {
+    const identity = await authenticate(request, env)
+    const gameId = decodeURIComponent(abortGameRoute[1])
+    const session = await lobby.getSession(gameId, identity.uid)
+    if (!session?.isHost) {
+      return error(
+        403,
+        "FORBIDDEN",
+        "Alleen de geverifieerde host kan de game afbreken.",
+      )
+    }
+    const aborted = await env.GAMES.getByName(gameId).abortGame(session)
+    if (!aborted.ok) return resultResponse(aborted)
+    return resultResponse(await lobby.markGameFinished(gameId, identity))
+  }
+
   const lobbyRoomRoute = /^\/api\/online\/lobbies\/([^/]+)$/.exec(url.pathname)
   if (lobbyRoomRoute?.[1]) {
     const identity = await authenticate(request, env)

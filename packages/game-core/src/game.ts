@@ -851,6 +851,9 @@ type CreateTokenOptions = {
   playerId: PlayerId
   kind: TokenKind
   name: string
+  typeLine?: string
+  imageUrl?: string
+  scryfallId?: string
   power?: number
   toughness?: number
   position?: BattlefieldPosition
@@ -867,9 +870,10 @@ export const createToken = (
   const instanceId = options.createId("token")
   const now = options.now ?? new Date().toISOString()
   const typeLine =
-    options.kind === "creature" || options.kind === "copy"
+    options.typeLine ??
+    (options.kind === "creature" || options.kind === "copy"
       ? "Token Creature"
-      : `Token Artifact — ${name}`
+      : `Token Artifact — ${name}`)
   return {
     ...game,
     updatedAt: now,
@@ -878,9 +882,19 @@ export const createToken = (
       [definitionId]: {
         id: definitionId,
         name,
+        scryfallId: options.scryfallId,
         typeLine,
-        faces: [{ name, typeLine }],
-        imageRefs: [],
+        faces: [{ name, typeLine, imageUrl: options.imageUrl }],
+        imageRefs: options.imageUrl
+          ? [
+              {
+                assetKey: `${definitionId}:0:normal`,
+                faceIndex: 0,
+                variant: "normal",
+                url: options.imageUrl,
+              },
+            ]
+          : [],
         token: {
           kind: options.kind,
           name,

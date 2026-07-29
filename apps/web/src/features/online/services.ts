@@ -55,6 +55,21 @@ export const createOnlineDeckSubmission = (
         isCommander: card.isCommander,
       }
     }),
+    tokens: deck.definitions
+      .filter(definition => definition.token?.source === "deck")
+      .map(definition => {
+        const firstFace = definition.faces[0]
+        return {
+          definitionId: definition.id,
+          name: firstFace?.name ?? definition.name,
+          typeLine: firstFace?.typeLine ?? definition.typeLine,
+          imageUrl: firstFace?.imageUrl ?? definition.imageRefs[0]?.url,
+          scryfallId: definition.scryfallId,
+          kind: definition.token?.kind ?? "other",
+          power: definition.token?.power,
+          toughness: definition.token?.toughness,
+        }
+      }),
   })
 }
 
@@ -358,6 +373,15 @@ export class MockOnlineGameService implements OnlineGameService {
     this.lobbies.splice(index, 1)
   }
 
+  async abortGame(gameId: string) {
+    await wait()
+    const lobby = this.lobbies.find(candidate => candidate.id === gameId)
+    if (lobby?.viewerRole !== "host") {
+      throw new Error("Alleen de host kan de game afbreken.")
+    }
+    lobby.status = "finished"
+  }
+
   async registerDeck(gameId: string, deck: DeckSnapshot) {
     await wait()
     const lobby = this.lobbies.find(candidate => candidate.id === gameId)
@@ -469,6 +493,16 @@ export class CloudflareOnlineGameService implements OnlineGameService {
     await this.request(`/api/online/lobbies/${encodeURIComponent(gameId)}`, {
       method: "DELETE",
     })
+  }
+
+  async abortGame(gameId: string) {
+    await this.request(
+      `/api/online/lobbies/${encodeURIComponent(gameId)}/abort`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    )
   }
 
   async registerDeck(gameId: string, deck: DeckSnapshot) {

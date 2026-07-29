@@ -19,6 +19,12 @@ const player = (id: string) => ({
   displayName: id,
   life: 40,
   poison: 0,
+  trackers: { energy: 0, experience: 0, rad: 0 },
+  visibleTrackers: { energy: false, experience: false, rad: false },
+  citysBlessing: false,
+  disabled: false,
+  commanderTax: {},
+  commanderDamage: {},
   handCount: 7,
   libraryCount: 92,
   battlefield: [visibleCard],
@@ -58,6 +64,7 @@ test("valideert één eigen deckregistratie zonder clientidentiteit of seat", ()
     ],
   })
   expect(deck.deckName).toBe("Mijn Commander-deck")
+  expect(deck.tokens).toEqual([])
   expect("uid" in deck).toBe(false)
   expect("playerId" in deck).toBe(false)
   expect(() =>
@@ -86,6 +93,43 @@ test("valideert alle speelbare online basiscommands strikt", () => {
     { ...base, type: "CHANGE_POISON", payload: { delta: 1 } },
     { ...base, type: "MILL", payload: { amount: 2 } },
     { ...base, type: "SHUFFLE_LIBRARY", payload: {} },
+    { ...base, type: "REVEAL_LIBRARY", payload: { amount: 7 } },
+    { ...base, type: "HIDE_LIBRARY", payload: {} },
+    { ...base, type: "UNTAP_ALL", payload: {} },
+    {
+      ...base,
+      type: "CREATE_TOKEN",
+      payload: {
+        token: {
+          definitionId: "treasure-token",
+          name: "Treasure",
+          kind: "treasure",
+        },
+        position: { x: 0.5, y: 0.5, z: 1 },
+      },
+    },
+    {
+      ...base,
+      type: "CHANGE_TRACKER",
+      payload: { tracker: "energy", delta: 1 },
+    },
+    {
+      ...base,
+      type: "SET_TRACKER_VISIBILITY",
+      payload: { tracker: "energy", visible: true },
+    },
+    { ...base, type: "SET_CITYS_BLESSING", payload: { active: true } },
+    { ...base, type: "SET_PLAYER_DISABLED", payload: { disabled: true } },
+    {
+      ...base,
+      type: "CHANGE_COMMANDER_TAX",
+      payload: { commanderId: "card", delta: 2 },
+    },
+    {
+      ...base,
+      type: "CHANGE_COMMANDER_DAMAGE",
+      payload: { commanderId: "opponent-card", delta: 1 },
+    },
     { ...base, type: "TOGGLE_TAP", payload: { instanceId: "card" } },
     { ...base, type: "PASS_TURN", payload: {} },
     { ...base, type: "NEXT_PHASE", payload: {} },
@@ -104,6 +148,16 @@ test("valideert alle speelbare online basiscommands strikt", () => {
     "CHANGE_POISON",
     "MILL",
     "SHUFFLE_LIBRARY",
+    "REVEAL_LIBRARY",
+    "HIDE_LIBRARY",
+    "UNTAP_ALL",
+    "CREATE_TOKEN",
+    "CHANGE_TRACKER",
+    "SET_TRACKER_VISIBILITY",
+    "SET_CITYS_BLESSING",
+    "SET_PLAYER_DISABLED",
+    "CHANGE_COMMANDER_TAX",
+    "CHANGE_COMMANDER_DAMAGE",
     "TOGGLE_TAP",
     "PASS_TURN",
     "NEXT_PHASE",
@@ -127,6 +181,7 @@ test("persoonlijke snapshots ondersteunen 2–6 spelers en één private view", 
     gameId: "game",
     version: 9,
     role: "player",
+    isHost: false,
     activePlayerId: "p2",
     turnNumber: 3,
     phase: "combat",
@@ -142,8 +197,10 @@ test("persoonlijke snapshots ondersteunen 2–6 spelers en één private view", 
     players: Object.fromEntries(turnOrder.map(id => [id, player(id)])),
     privateView: {
       playerId: "p1",
+      deckSnapshotId: "deck-p1",
       hand: [visibleCard],
       revealedLibraryCards: [],
+      availableTokens: [],
     },
   })
   expect(snapshot.turnOrder).toHaveLength(4)
@@ -157,6 +214,7 @@ test("weigert verborgen tegenstanderdata en spectator-private-state", () => {
     mode: "online",
     gameId: "game",
     version: 1,
+    isHost: false,
     activePlayerId: "p1",
     turnNumber: 1,
     phase: "beginning",

@@ -22,6 +22,7 @@ import type {
   Env,
   GameSession,
   GameSnapshotResult,
+  RpcResult,
   WorkerWebSocket,
 } from "./types"
 
@@ -179,6 +180,28 @@ export class GameDurableObject extends DurableObject<Env> {
     const result = this.handleCommand(session, serialized)
     if (result.accepted) this.broadcastSnapshots()
     return result
+  }
+
+  async abortGame(session: GameSession): Promise<RpcResult<null>> {
+    await this.ready
+    if (!session.isHost || session.role !== "player") {
+      return {
+        ok: false,
+        status: 403,
+        code: "FORBIDDEN",
+        message: "Alleen de geverifieerde host kan de game afbreken.",
+      }
+    }
+    const event: ServerEvent = {
+      type: "GAME_ABORTED",
+      gameId: session.gameId,
+      message: "De host heeft de game afgebroken.",
+    }
+    for (const socket of this.state.getWebSockets()) {
+      socket.send(JSON.stringify(event))
+      socket.close(1000, "Game afgebroken")
+    }
+    return { ok: true, value: null }
   }
 
   async fetch(request: Request) {

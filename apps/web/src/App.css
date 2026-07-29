@@ -2463,18 +2463,29 @@ html.card-pointer-active .card.card--tapped {
   z-index: 5000 !important;
 }
 
-.online-table-card[data-online-draggable="true"] .card {
+.online-table-card .card[data-online-draggable="true"] {
   cursor: grab;
   touch-action: none;
 }
 
-.online-table-card[data-online-draggable="true"] .card:active {
+.online-table-card .card[data-online-draggable="true"]:active {
   cursor: grabbing;
 }
 
-.online-table-card--dragging {
+.online-card--dragging {
   z-index: 10000 !important;
   opacity: 0.92;
+  pointer-events: none;
+}
+
+.online-game-error {
+  position: sticky;
+  z-index: 12000;
+  top: 76px;
+  margin: 0;
+  border-color: rgb(222 123 102 / 55%);
+  background: rgb(70 25 20 / 96%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 38%);
 }
 
 .online-table-card .card {
@@ -2566,6 +2577,111 @@ html.card-pointer-active .card.card--tapped {
 .online-table-card__actions button:hover,
 .online-table-card__actions button:focus-visible {
   background: rgb(221 184 103 / 15%);
+}
+
+.online-action-menu {
+  max-height: calc(100vh - 24px);
+  display: grid;
+  gap: 4px;
+  position: fixed;
+  z-index: 20000;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgb(238 207 135 / 32%);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #0b1d17;
+  box-shadow:
+    0 22px 54px rgb(0 0 0 / 62%),
+    0 0 0 3px rgb(4 12 8 / 28%);
+}
+
+.online-action-menu strong {
+  overflow: hidden;
+  padding: 5px 6px 7px;
+  color: var(--gold-bright);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-action-menu button {
+  padding: 8px;
+  color: var(--ink);
+  border: 0;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 6%);
+  font-size: 10px;
+  text-align: left;
+}
+
+.online-action-menu button:hover,
+.online-action-menu button:focus-visible {
+  background: rgb(221 184 103 / 16%);
+}
+
+.online-action-menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.online-card-action-menu,
+.online-zone-action-menu {
+  z-index: 20000;
+}
+
+.online-table-card--menu-open .card:not(.card--tapped) {
+  transform: none !important;
+}
+
+.online-table-card--menu-open .card.card--tapped {
+  transform: rotate(90deg) !important;
+}
+
+.online-battle-table .face-up-card-stack .online-table-card {
+  width: 86px;
+  height: 120px;
+  display: block;
+}
+
+.online-battle-table .face-up-card-stack .online-table-card > .card {
+  position: absolute;
+  inset: 0;
+}
+
+.online-battle-table .player-rail {
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.online-zone-browser {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.online-zone-browser-card {
+  width: min(100%, 150px);
+  aspect-ratio: 488 / 680;
+  display: grid;
+  place-items: center;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.5rem;
+  color: var(--ink);
+  background: #14221b;
+  box-shadow: 0 0.8rem 1.6rem rgb(0 0 0 / 28%);
+}
+
+.online-zone-browser-card img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.online-zone-browser .zone-browser__item select {
+  width: 100%;
+  margin-top: 0.35rem;
 }
 
 .online-hidden-hand {

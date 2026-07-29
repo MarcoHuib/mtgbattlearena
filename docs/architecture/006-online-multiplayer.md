@@ -89,6 +89,18 @@ De online middenbalk volgt dezelfde taakverdeling als offline: fase,
 beurtverloop, Monarch, Initiative en Dag/Nacht zijn publieke,
 server-authoritative matchstatus. Trekken, millen en schudden horen bij het
 actiemenu van de eigen library en staan niet in de globale middenbalk.
+De publieke spelerweergave bevat daarnaast commander tax, commander damage,
+Energy, Experience, Rad, City’s Blessing en de uitgeschakelde status. Wijzigen
+gaat uitsluitend via gevalideerde commands van de geverifieerde speler.
+Graveyard en exile zijn publieke zones en mogen daarom in een grotere
+doorzoekbare zonebrowser worden getoond. Een librarybrowser is privé en mag pas
+kaarten tonen wanneer die via de persoonlijke snapshot expliciet aan die
+speler zijn vrijgegeven.
+
+Alleen de geverifieerde host kan een actieve game expliciet afbreken. De Worker
+markeert de lobby als `finished`, het Game Durable Object stuurt
+`GAME_ABORTED` naar alle verbonden spelers en sluit daarna de sockets. Nieuwe
+socket-tickets en reconnects voor die game worden vervolgens geweigerd.
 
 De openingshand is eveneens authoritative. Iedere speler ontvangt alleen de
 eigen zeven kaarten en stuurt `MULLIGAN_HAND` of `KEEP_HAND` als versioned
@@ -142,11 +154,20 @@ De eerste infrastructuurslice volgt dit besluit als volgt:
   geaccepteerde statewijzigingen schrijven een herstelbaar SQLite-snapshot;
 - `DRAW_CARD`, `MOVE_CARD`, `CHANGE_LIFE`, `CHANGE_POISON`, `MILL`,
   `SHUFFLE_LIBRARY`, `NEXT_PHASE`, `PASS_TURN`, `SET_MONARCH`,
-  `SET_INITIATIVE` en `SET_DAY_NIGHT` zijn authoritative en verhogen ieder de
-  stateversie;
+  `SET_INITIATIVE`, `SET_DAY_NIGHT`, `UNTAP_ALL`, `CHANGE_TRACKER`,
+  `SET_TRACKER_VISIBILITY`, `SET_CITYS_BLESSING`, `SET_PLAYER_DISABLED`,
+  `CHANGE_COMMANDER_TAX`, `CHANGE_COMMANDER_DAMAGE`, `REVEAL_LIBRARY` en
+  `HIDE_LIBRARY` zijn authoritative en verhogen ieder de stateversie;
+- `CREATE_TOKEN` bevat een runtime-gevalideerde tokendefinitie en een
+  genormaliseerde battlefieldpositie. De server koppelt die uitsluitend aan de
+  geverifieerde speler en maakt zelf de definitie- en instance-ID’s. Bekende
+  decktokens worden bij deckregistratie meegestuurd en staan alleen als
+  catalogus in de persoonlijke view;
 - één serializer maakt per WebSocket een afzonderlijke snapshot. Publieke
   zones worden volledig getoond, de eigen hand staat alleen in `privateView`
-  en handen/libraries van anderen bestaan uitsluitend als aantallen;
+  en handen/libraries van anderen bestaan uitsluitend als aantallen. Een
+  tijdelijke libraryweergave komt alleen in de persoonlijke `privateView` van
+  de eigenaar en wordt bij het sluiten van de browser weer ingetrokken;
 - de online React-route bewaart alleen deze gevalideerde persoonlijke view in
   de online Redux-slice. De WebSocket-adapter vraagt voor iedere reconnect een
   nieuw eenmalig ticket en vervangt de clientview met de eerste verse snapshot;

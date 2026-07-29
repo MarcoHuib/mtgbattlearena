@@ -174,6 +174,14 @@ const seed: OnlineGameSeed = {
         isCommander: false,
       },
     ],
+    tokens: [
+      {
+        definitionId: `token-${playerId}`,
+        name: "Treasure",
+        typeLine: "Token Artifact — Treasure",
+        kind: "treasure",
+      },
+    ],
   })),
 }
 
@@ -238,6 +246,8 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     const spectator = await runtime.snapshot(spectatorSession)
 
     expect(playerA.turnOrder).toHaveLength(4)
+    expect(playerA.isHost).toBe(true)
+    expect(playerB.isHost).toBe(false)
     expect(playerA.privateView?.hand).toHaveLength(7)
     expect(playerB.privateView?.hand).toHaveLength(7)
     expect(playerA.players["seat-b"]?.handCount).toBe(7)
@@ -270,6 +280,28 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
         ? spectatorBroadcast.privateView
         : undefined,
     ).toBeNull()
+  })
+
+  test("laat alleen de host de game voor alle sockets afbreken", async () => {
+    await expect(
+      runtime.durableObject.abortGame(playerSession(1)),
+    ).resolves.toMatchObject({ ok: false, code: "FORBIDDEN" })
+
+    await expect(
+      runtime.durableObject.abortGame(playerSession(0)),
+    ).resolves.toEqual({ ok: true, value: null })
+
+    for (const socket of [...playerSockets, spectatorSocket]) {
+      expect(socket.events()).toContainEqual({
+        type: "GAME_ABORTED",
+        gameId,
+        message: "De host heeft de game afgebroken.",
+      })
+      expect(socket.closed).toEqual({
+        code: 1000,
+        reason: "Game afgebroken",
+      })
+    }
   })
 
   test("laat iedere speler de eigen openingshand mulliganen en houden", async () => {
@@ -392,6 +424,116 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
 
     const playerB = await runtime.snapshot(playerSession(1))
     expect(playerB.privateView?.hand).toHaveLength(8)
+  })
+
+  test("synchroniseert commander- en spelertrackers authoritative", async () => {
+    const session = playerSession(0)
+    let version = await keepAllOpeningHands()
+    let snapshot = await runtime.snapshot(session)
+    const ownCommander = snapshot.players["seat-a"]?.command[0]?.instanceId
+    const opposingCommander = snapshot.players["seat-b"]?.command[0]?.instanceId
+    expect(ownCommander).toBeDefined()
+    expect(opposingCommander).toBeDefined()
+
+    const apply = async (
+      type: Parameters<typeof command>[0],
+      payload: unknown,
+    ) => {
+      expectAccepted(
+        await runtime.command(session, command(type, version, payload)),
+        version + 1,
+      )
+      version += 1
+    }
+
+    await apply("CHANGE_COMMANDER_TAX", {
+      commanderId: ownCommander,
+      delta: 2,
+    })
+    await apply("CHANGE_COMMANDER_DAMAGE", {
+      commanderId: opposingCommander,
+      delta: 3,
+    })
+    await apply("SET_TRACKER_VISIBILITY", {
+      tracker: "energy",
+      visible: true,
+    })
+    await apply("CHANGE_TRACKER", { tracker: "energy", delta: 4 })
+    await apply("SET_CITYS_BLESSING", { active: true })
+    await apply("SET_PLAYER_DISABLED", { disabled: true })
+    await apply("UNTAP_ALL", {})
+
+    snapshot = await runtime.snapshot(session)
+    expect(snapshot.players["seat-a"]).toMatchObject({
+      trackers: { energy: 4, experience: 0, rad: 0 },
+      visibleTrackers: { energy: true, experience: false, rad: false },
+      citysBlessing: true,
+      disabled: true,
+      commanderTax: { [ownCommander!]: 2 },
+      commanderDamage: { [opposingCommander!]: 3 },
+    })
+  })
+
+  test("onthult librarykaarten uitsluitend in de persoonlijke view", async () => {
+    const session = playerSession(0)
+    const readyVersion = await keepAllOpeningHands()
+
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("REVEAL_LIBRARY", readyVersion, { amount: 3 }),
+      ),
+      readyVersion + 1,
+    )
+
+    const ownerView = await runtime.snapshot(session)
+    const opponentView = await runtime.snapshot(playerSession(1))
+    const spectatorView = await runtime.snapshot(spectatorSession)
+    expect(ownerView.privateView?.revealedLibraryCards).toHaveLength(3)
+    expect(opponentView.privateView?.revealedLibraryCards).toHaveLength(0)
+    expect(spectatorView.privateView).toBeNull()
+    expect("library" in (opponentView.players["seat-a"] ?? {})).toBe(false)
+
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("HIDE_LIBRARY", readyVersion + 1, {}),
+      ),
+      readyVersion + 2,
+    )
+    expect(
+      (await runtime.snapshot(session)).privateView?.revealedLibraryCards,
+    ).toHaveLength(0)
+  })
+
+  test("maakt een decktoken authoritative op de gekozen tafelpositie", async () => {
+    const session = playerSession(0)
+    const readyVersion = await keepAllOpeningHands()
+    const before = await runtime.snapshot(session)
+    const token = before.privateView?.availableTokens[0]
+    expect(token?.name).toBe("Treasure")
+
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("CREATE_TOKEN", readyVersion, {
+          token,
+          position: { x: 0.3, y: 0.7, z: 4 },
+        }),
+      ),
+      readyVersion + 1,
+    )
+
+    const ownerView = await runtime.snapshot(session)
+    const opponentView = await runtime.snapshot(playerSession(1))
+    expect(ownerView.players["seat-a"]?.battlefield.at(-1)).toMatchObject({
+      name: "Treasure",
+      position: { x: 0.3, y: 0.7, z: 4 },
+    })
+    expect(opponentView.players["seat-a"]?.battlefield.at(-1)).toMatchObject({
+      name: "Treasure",
+      position: { x: 0.3, y: 0.7, z: 4 },
+    })
   })
 
   test("weigert rol-, kaart-, game- en playerId-manipulatie", async () => {

@@ -5,6 +5,7 @@ export {
   parseServerEvent,
   onlineDeckCardSchema,
   onlineDeckSubmissionSchema,
+  onlineTokenDefinitionSchema,
   personalGameSnapshotSchema,
   protocolErrorSchema,
   serverEventSchema,
@@ -12,6 +13,7 @@ export {
 export type {
   GameCommand,
   OnlineDeckSubmission,
+  OnlineTokenDefinition,
   PersonalGameSnapshot,
   ProtocolError,
   PublicOnlinePlayer,

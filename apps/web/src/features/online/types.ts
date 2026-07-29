@@ -117,6 +117,7 @@ export type OnlineGameService = {
   joinByCode(code: string): Promise<JoinLobbyResult>
   getLobbyRoom(gameId: string, signal?: AbortSignal): Promise<LobbyRoom>
   deleteLobby(gameId: string): Promise<void>
+  abortGame(gameId: string): Promise<void>
   registerDeck(gameId: string, deck: DeckSnapshot): Promise<void>
   startGame(gameId: string): Promise<void>
   createSocketTicket(gameId: string): Promise<{
