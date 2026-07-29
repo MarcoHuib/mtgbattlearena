@@ -51,7 +51,19 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
     role: "player",
     activePlayerId: turnOrder[0],
     turnNumber: 1,
+    phase: "beginning",
+    matchStatus: {
+      monarchPlayerId: null,
+      initiativePlayerId: null,
+      dayNight: "none",
+    },
     turnOrder,
+    openingHands: Object.fromEntries(
+      turnOrder.map((playerId, index) => [
+        playerId,
+        { mulliganCount: 0, kept: index !== 0 },
+      ]),
+    ),
     players,
     privateView: {
       playerId: turnOrder[0],
@@ -132,23 +144,6 @@ export class MockRealtimeConnection implements OnlineGameConnection {
       })
       return
     }
-    if (command.type === "TOGGLE_TAP" || command.type === "NEXT_PHASE") {
-      this.emit({
-        type: "event",
-        event: {
-          type: "ERROR",
-          gameId: this.snapshot.gameId,
-          commandId: command.commandId,
-          error: {
-            code: "NOT_READY",
-            message: `${command.type} is nog niet geïmplementeerd.`,
-            retryable: true,
-            currentVersion: this.snapshot.version,
-          },
-        },
-      })
-      return
-    }
     const next = structuredClone(this.snapshot)
     const ownId = next.privateView?.playerId
     if (!ownId || !next.privateView) return
@@ -156,6 +151,28 @@ export class MockRealtimeConnection implements OnlineGameConnection {
     if (!own) return
 
     switch (command.type) {
+      case "MULLIGAN_HAND": {
+        const openingHand = next.openingHands[ownId]
+        if (!openingHand || openingHand.kept) return
+        openingHand.mulliganCount += 1
+        const handSize = Math.max(0, Math.min(7, 9 - openingHand.mulliganCount))
+        next.privateView.hand = Array.from({ length: handSize }, (_, index) =>
+          card(
+            `Nieuwe demo ${this.nextCardIndex + index}`,
+            this.nextCardIndex + index,
+          ),
+        )
+        this.nextCardIndex += handSize
+        own.handCount = handSize
+        own.libraryCount = Math.max(0, 99 - handSize)
+        break
+      }
+      case "KEEP_HAND": {
+        const openingHand = next.openingHands[ownId]
+        if (!openingHand || openingHand.kept) return
+        openingHand.kept = true
+        break
+      }
       case "DRAW_CARD": {
         const amount = Math.min(command.payload.amount, own.libraryCount)
         for (let count = 0; count < amount; count += 1) {
@@ -230,6 +247,45 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         next.activePlayerId =
           next.turnOrder[(currentIndex + 1) % next.turnOrder.length] ?? ownId
         next.turnNumber += 1
+        next.phase = "beginning"
+        break
+      }
+      case "NEXT_PHASE": {
+        if (next.activePlayerId !== ownId) return
+        const phases: PersonalGameSnapshot["phase"][] = [
+          "beginning",
+          "precombat-main",
+          "combat",
+          "postcombat-main",
+          "ending",
+        ]
+        const phaseIndex = phases.indexOf(next.phase)
+        if (phaseIndex === phases.length - 1) {
+          const currentIndex = next.turnOrder.indexOf(ownId)
+          next.activePlayerId =
+            next.turnOrder[(currentIndex + 1) % next.turnOrder.length] ?? ownId
+          next.turnNumber += 1
+          next.phase = "beginning"
+        } else {
+          next.phase = phases[phaseIndex + 1] ?? "beginning"
+        }
+        break
+      }
+      case "SET_MONARCH":
+        next.matchStatus.monarchPlayerId = command.payload.playerId
+        break
+      case "SET_INITIATIVE":
+        next.matchStatus.initiativePlayerId = command.payload.playerId
+        break
+      case "SET_DAY_NIGHT":
+        next.matchStatus.dayNight = command.payload.status
+        break
+      case "TOGGLE_TAP": {
+        const battlefieldCard = own.battlefield.find(
+          item => item.instanceId === command.payload.instanceId,
+        )
+        if (!battlefieldCard) return
+        battlefieldCard.tapped = !battlefieldCard.tapped
         break
       }
     }

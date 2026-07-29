@@ -5,8 +5,8 @@ import {
 } from "@reduxjs/toolkit"
 import { importArchidektDeck } from "../../archidekt/client"
 import { DeckImportError } from "../../archidekt/errors"
-import { createDeckSnapshot } from "@mtg/game-core/decks"
 import type { DeckSnapshot, PlayerId } from "@mtg/game-core/types"
+import { createImportedDeckSnapshot } from "../decks/deckSnapshots"
 import { repositories } from "../../persistence/database"
 
 export type DeckSlotState = {
@@ -39,7 +39,7 @@ export const importDeckForPlayer = createAsyncThunk<
   async ({ playerId, url }, { rejectWithValue, signal }) => {
     try {
       const imported = await importArchidektDeck(url, signal)
-      const deck = createDeckSnapshot(imported, `deck-${crypto.randomUUID()}`)
+      const deck = createImportedDeckSnapshot(imported)
       await repositories.decks.save(deck)
       return { playerId, deck }
     } catch (error) {

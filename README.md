@@ -66,6 +66,12 @@ De belangrijkste uitgangspunten:
   offline gebruik worden gedownload.
 - **Optioneel online:** Firebase verzorgt identiteit; Cloudflare Durable Objects
   beheren de authoritative multiplayerstate.
+- **Dezelfde digitale tafel:** een online duel gebruikt dezelfde ruimtelijke
+  tegenover-elkaar-opstelling als offline. Iedere speler kiest eerst privé een
+  openingshand of mulligan; spelen begint pas wanneer iedereen de hand houdt.
+- **Persoonlijke decklijst:** online geïmporteerde decks worden lokaal per
+  Firebase-gebruiker geïndexeerd. Identieke imports worden hergebruikt en decks
+  kunnen met bevestiging uit de eigen lijst worden verwijderd.
 - **Geen rules engine:** de app automatiseert geen mana, combat, triggers of
   kaartregels.
 
@@ -88,6 +94,13 @@ De belangrijkste uitgangspunten:
 Online ondersteunt momenteel authoritative commands voor trekken, kaarten
 verplaatsen, leven en poison aanpassen, millen, schudden en de beurt doorgeven.
 Tegenstanders ontvangen nooit verborgen hand- of librarymetadata.
+De hoofdbalk toont op iedere route één centrale arenastatus, gebaseerd op de
+echte Worker-healthcheck. Bij serveruitval wordt de online lobbyflow vervangen
+door een retry- en offline-melding; lokale battles blijven beschikbaar.
+In een wachtkamer kiest of importeert iedere speler zijn eigen lokale
+decksnapshot. Alleen de decknaam en gereedstatus zijn zichtbaar; zodra alle
+seats en decks gereed zijn kan de geverifieerde host de authoritative battle
+starten.
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
@@ -199,10 +212,18 @@ staan in `apps/game-worker/wrangler.toml`:
 npm run dev:worker:game
 ```
 
-Zet daarna `VITE_ONLINE_API_URL` in `apps/web/.env.local`. Een Firebase-private
-key of serviceaccount hoort niet in deze repository.
+Zet daarna `VITE_ONLINE_API_URL` en `VITE_ONLINE_SOCKET_URL` in
+`apps/web/.env.local`. Een Firebase-private key of serviceaccount hoort niet in
+deze repository.
 
 </details>
+
+De productiebuild gebruikt `apps/web/.env.production` met
+`https://api.mtgbattlearena.nl` voor REST en imports, en
+`https://ws.mtgbattlearena.nl` voor de WebSocket-upgrade. De online Worker is
+de publieke API-gateway en roept de begrensde import-Worker intern aan via een
+Cloudflare service binding. Lokale ontwikkeling houdt dezelfde
+`/api/import/archidekt`-routes via de Vite-proxy.
 
 <details>
   <summary>Firebase Hosting handmatig deployen</summary>
@@ -240,6 +261,11 @@ Firebase Hosting gebruikt project `mtgbattlearena` en publiceert standaard op
 `https://mtgbattlearena.web.app`. De Firebase CLI moet lokaal geïnstalleerd en
 ingelogd zijn; hij blijft buiten de npm-dependencies om de applicatieaudit
 schoon te houden.
+
+Een nieuw frontenddomein moet zowel bij **Firebase Authentication → Authorized
+domains** als in `ALLOWED_ORIGIN` in `apps/game-worker/wrangler.toml` worden
+toegevoegd. Zonder de Worker-origin levert de browser bij online API-calls een
+CORS-fout op die doorgaans als `Failed to fetch` zichtbaar wordt.
 
 </details>
 
@@ -326,6 +352,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 - [x] Hoofdmenu, online lobby-UI en persoonlijke online Redux-view
 - [x] SQLite-backed Lobby en Game Durable Objects
 - [x] Authoritative online basiscommands en privacytests
+- [x] Persoonlijke online openingshand, mulligan en volledige tafelweergave
 - [ ] Firebase Web SDK en accountproviders configureren
 - [ ] Per deelnemer een immutable online decksnapshot registreren
 - [ ] Expliciete host-startflow met echte backend configureren

@@ -3,11 +3,17 @@ import {
   changePlayerLife,
   changePlayerPoison,
   drawCards,
+  keepOpeningHand,
   millCards,
   moveCard,
+  mulliganOpeningHand,
   seededRandom,
+  setDayNightStatus,
+  setInitiativeHolder,
+  setMonarchHolder,
   shuffle,
   shuffleLibrary,
+  toggleCardTapped,
   untapAllCards,
   type IdFactory,
   type RandomSource,
@@ -22,33 +28,19 @@ import type {
   Zone,
 } from "@mtg/game-core/types"
 import {
+  onlineDeckSubmissionSchema,
   personalGameSnapshotSchema,
   type GameCommand,
+  type OnlineDeckSubmission,
   type PersonalGameSnapshot,
   type VisibleOnlineCard,
 } from "@mtg/game-protocol"
 import type { GameSession } from "./types"
 
-const onlineDeckCardSeedSchema = z
-  .object({
-    definitionId: z.string().min(1).max(120),
-    name: z.string().min(1).max(300),
-    typeLine: z.string().max(500).optional(),
-    imageUrl: z.url().optional(),
-    scryfallId: z.string().max(120).optional(),
-    quantity: z.number().int().min(1).max(100),
-    isCommander: z.boolean().default(false),
-  })
-  .strict()
-
-const onlinePlayerSubmissionSchema = z
-  .object({
-    playerId: z.string().min(1).max(80),
-    displayName: z.string().min(1).max(80),
-    deckSnapshotId: z.string().min(1).max(120),
-    cards: z.array(onlineDeckCardSeedSchema).min(1).max(250),
-  })
-  .strict()
+const onlinePlayerSubmissionSchema = onlineDeckSubmissionSchema.safeExtend({
+  playerId: z.string().min(1).max(80),
+  displayName: z.string().min(1).max(80),
+})
 
 export const onlineGameSubmissionSchema = z
   .object({
@@ -66,22 +58,12 @@ export const onlineGameSubmissionSchema = z
         path: ["players"],
       })
     }
-    for (const [index, player] of seed.players.entries()) {
-      const definitionIds = player.cards.map(card => card.definitionId)
-      if (new Set(definitionIds).size !== definitionIds.length) {
-        context.addIssue({
-          code: "custom",
-          message: "Kaartdefinities moeten per deck uniek zijn.",
-          path: ["players", index, "cards"],
-        })
-      }
-    }
   })
 
 export const onlineGameSeedSchema = onlineGameSubmissionSchema.safeExtend({
   players: z
     .array(
-      onlinePlayerSubmissionSchema.extend({
+      onlinePlayerSubmissionSchema.safeExtend({
         uid: z.string().min(1).max(128),
       }),
     )
@@ -91,9 +73,10 @@ export const onlineGameSeedSchema = onlineGameSubmissionSchema.safeExtend({
 
 export type OnlineGameSubmission = z.infer<typeof onlineGameSubmissionSchema>
 export type OnlineGameSeed = z.infer<typeof onlineGameSeedSchema>
+export type { OnlineDeckSubmission }
 
 export type AuthoritativeGameState = {
-  schemaVersion: 1
+  schemaVersion: 3
   mode: Extract<GameMode, "online">
   gameId: string
   version: number
@@ -103,6 +86,9 @@ export type AuthoritativeGameState = {
   turnOrder: PlayerId[]
   activePlayerId: PlayerId
   turnNumber: number
+  phase: GameState["phase"]
+  matchStatus: GameState["matchStatus"]
+  openingHands: GameState["openingHands"]
   players: Record<PlayerId, PlayerState>
   playerUids: Record<PlayerId, string>
   cardDefinitionsById: Record<string, CardDefinition>
@@ -163,18 +149,9 @@ const toCoreGame = (state: AuthoritativeGameState): GameState => ({
   updatedAt: state.updatedAt,
   activePlayerId: state.activePlayerId,
   turnNumber: state.turnNumber,
-  phase: "beginning",
-  matchStatus: {
-    monarchPlayerId: null,
-    initiativePlayerId: null,
-    dayNight: "none",
-  },
-  openingHands: Object.fromEntries(
-    state.turnOrder.map(playerId => [
-      playerId,
-      { mulliganCount: 0, kept: true },
-    ]),
-  ),
+  phase: state.phase,
+  matchStatus: state.matchStatus,
+  openingHands: structuredClone(state.openingHands),
   deckSnapshotIds: [
     state.players[state.turnOrder[0] ?? ""]?.deckSnapshotId ?? "online",
     state.players[state.turnOrder[1] ?? ""]?.deckSnapshotId ?? "online",
@@ -193,6 +170,9 @@ const fromCoreGame = (
   updatedAt: core.updatedAt,
   activePlayerId: core.activePlayerId,
   turnNumber: core.turnNumber,
+  phase: core.phase,
+  matchStatus: core.matchStatus,
+  openingHands: core.openingHands,
   players: core.players,
   cardDefinitionsById: core.cardDefinitionsById,
   cardsById: core.cardsById,
@@ -271,7 +251,7 @@ export const createAuthoritativeGame = (
   }
 
   let game: AuthoritativeGameState = {
-    schemaVersion: 1,
+    schemaVersion: 3,
     mode: "online",
     gameId: seed.gameId,
     version: 0,
@@ -281,6 +261,15 @@ export const createAuthoritativeGame = (
     turnOrder,
     activePlayerId: turnOrder[0] ?? "",
     turnNumber: 1,
+    phase: "beginning",
+    matchStatus: {
+      monarchPlayerId: null,
+      initiativePlayerId: null,
+      dayNight: "none",
+    },
+    openingHands: Object.fromEntries(
+      turnOrder.map(playerId => [playerId, { mulliganCount: 0, kept: false }]),
+    ),
     players,
     playerUids,
     cardDefinitionsById,
@@ -293,6 +282,43 @@ export const createAuthoritativeGame = (
     )
   }
   return game
+}
+
+export const migrateAuthoritativeGame = (
+  state: AuthoritativeGameState,
+): AuthoritativeGameState => {
+  const legacy = state as AuthoritativeGameState & {
+    schemaVersion: 1 | 2 | 3
+    openingHands?: GameState["openingHands"]
+    phase?: GameState["phase"]
+    matchStatus?: GameState["matchStatus"]
+  }
+  if (
+    legacy.schemaVersion === 3 &&
+    legacy.openingHands &&
+    legacy.phase &&
+    legacy.matchStatus
+  ) {
+    return state
+  }
+  return {
+    ...state,
+    schemaVersion: 3,
+    phase: legacy.phase ?? "beginning",
+    matchStatus: legacy.matchStatus ?? {
+      monarchPlayerId: null,
+      initiativePlayerId: null,
+      dayNight: "none",
+    },
+    openingHands:
+      legacy.openingHands ??
+      Object.fromEntries(
+        state.turnOrder.map(playerId => [
+          playerId,
+          { mulliganCount: 0, kept: true },
+        ]),
+      ),
+  }
 }
 
 export type ApplyCommandResult =
@@ -334,6 +360,7 @@ const applyPassTurn = (
     ...state,
     activePlayerId: nextPlayerId,
     turnNumber: state.turnNumber + 1,
+    phase: "beginning",
     updatedAt: now,
   }
   const untapped = untapAllCards(toCoreGame(advanced), nextPlayerId, now)
@@ -365,6 +392,38 @@ export const applyAuthoritativeCommand = (
   const now = options.now()
   const core = toCoreGame(state)
   let nextCore: GameState
+
+  if (command.type === "MULLIGAN_HAND") {
+    if (state.openingHands[playerId]?.kept) {
+      return {
+        accepted: false,
+        code: "INVALID_COMMAND",
+        message: "Deze openingshand is al gehouden.",
+      }
+    }
+    nextCore = mulliganOpeningHand(core, playerId, options.random, now)
+    return { accepted: true, state: fromCoreGame(state, nextCore) }
+  }
+
+  if (command.type === "KEEP_HAND") {
+    if (state.openingHands[playerId]?.kept) {
+      return {
+        accepted: false,
+        code: "INVALID_COMMAND",
+        message: "Deze openingshand is al gehouden.",
+      }
+    }
+    nextCore = keepOpeningHand(core, playerId, now)
+    return { accepted: true, state: fromCoreGame(state, nextCore) }
+  }
+
+  if (state.turnOrder.some(id => !state.openingHands[id]?.kept)) {
+    return {
+      accepted: false,
+      code: "NOT_READY",
+      message: "Wacht tot iedere speler een openingshand heeft gekozen.",
+    }
+  }
 
   switch (command.type) {
     case "DRAW_CARD":
@@ -417,13 +476,75 @@ export const applyAuthoritativeCommand = (
       break
     case "PASS_TURN":
       return applyPassTurn(state, playerId, now)
-    case "TOGGLE_TAP":
-    case "NEXT_PHASE":
-      return {
-        accepted: false,
-        code: "NOT_READY",
-        message: `${command.type} is nog niet geïmplementeerd voor online games.`,
+    case "TOGGLE_TAP": {
+      const card = state.cardsById[command.payload.instanceId]
+      if (card?.controllerId !== playerId || card.zone !== "battlefield") {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message:
+            "Alleen een eigen kaart op het battlefield kan worden getapt.",
+        }
       }
+      nextCore = toggleCardTapped(core, card.instanceId, now)
+      break
+    }
+    case "NEXT_PHASE": {
+      if (state.activePlayerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Alleen de actieve speler kan de fase doorgeven.",
+        }
+      }
+      const phases: GameState["phase"][] = [
+        "beginning",
+        "precombat-main",
+        "combat",
+        "postcombat-main",
+        "ending",
+      ]
+      const phaseIndex = phases.indexOf(state.phase)
+      if (phaseIndex === phases.length - 1) {
+        return applyPassTurn(state, playerId, now)
+      }
+      nextCore = {
+        ...core,
+        phase: phases[phaseIndex + 1] ?? "beginning",
+        updatedAt: now,
+      }
+      break
+    }
+    case "SET_MONARCH":
+      if (
+        command.payload.playerId !== null &&
+        !hasPlayer(state, command.payload.playerId)
+      ) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "De gekozen monarch neemt niet deel aan deze game.",
+        }
+      }
+      nextCore = setMonarchHolder(core, command.payload.playerId, now)
+      break
+    case "SET_INITIATIVE":
+      if (
+        command.payload.playerId !== null &&
+        !hasPlayer(state, command.payload.playerId)
+      ) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message:
+            "De gekozen initiative-houder neemt niet deel aan deze game.",
+        }
+      }
+      nextCore = setInitiativeHolder(core, command.payload.playerId, now)
+      break
+    case "SET_DAY_NIGHT":
+      nextCore = setDayNightStatus(core, command.payload.status, now)
+      break
   }
   return { accepted: true, state: fromCoreGame(state, nextCore) }
 }
@@ -524,7 +645,10 @@ export const serializePersonalSnapshot = (
     role: session.role,
     activePlayerId: state.activePlayerId,
     turnNumber: state.turnNumber,
+    phase: state.phase,
+    matchStatus: state.matchStatus,
     turnOrder: state.turnOrder,
+    openingHands: state.openingHands,
     players,
     privateView,
   })

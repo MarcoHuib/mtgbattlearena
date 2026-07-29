@@ -1,6 +1,10 @@
 name = "mtg-battle-mode-import"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
+compatibility_flags = ["global_fetch_strictly_public"]
+
+[vars]
+ALLOWED_ORIGIN = "http://localhost:5173,https://mtgbattlearena.nl,https://www.mtgbattlearena.nl,https://mtgbattlearena.web.app"
 
 [observability]
 enabled = true

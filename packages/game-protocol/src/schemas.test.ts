@@ -1,4 +1,8 @@
-import { gameCommandSchema, personalGameSnapshotSchema } from "./schemas"
+import {
+  gameCommandSchema,
+  onlineDeckSubmissionSchema,
+  personalGameSnapshotSchema,
+} from "./schemas"
 
 const visibleCard = {
   instanceId: "instance-public",
@@ -40,12 +44,38 @@ test("valideert versioned commands zonder betrouwbare clientidentiteit", () => {
   ).toThrow()
 })
 
+test("valideert één eigen deckregistratie zonder clientidentiteit of seat", () => {
+  const deck = onlineDeckSubmissionSchema.parse({
+    deckSnapshotId: "deck-snapshot",
+    deckName: "Mijn Commander-deck",
+    cards: [
+      {
+        definitionId: "commander",
+        name: "Atraxa",
+        quantity: 1,
+        isCommander: true,
+      },
+    ],
+  })
+  expect(deck.deckName).toBe("Mijn Commander-deck")
+  expect("uid" in deck).toBe(false)
+  expect("playerId" in deck).toBe(false)
+  expect(() =>
+    onlineDeckSubmissionSchema.parse({
+      ...deck,
+      cards: [...deck.cards, deck.cards[0]],
+    }),
+  ).toThrow()
+})
+
 test("valideert alle speelbare online basiscommands strikt", () => {
   const base = {
     commandId: "e34e485c-35f2-4ad7-90b2-e693df5426ea",
     expectedVersion: 12,
   }
   const commands = [
+    { ...base, type: "MULLIGAN_HAND", payload: {} },
+    { ...base, type: "KEEP_HAND", payload: {} },
     { ...base, type: "DRAW_CARD", payload: { amount: 1 } },
     {
       ...base,
@@ -56,18 +86,30 @@ test("valideert alle speelbare online basiscommands strikt", () => {
     { ...base, type: "CHANGE_POISON", payload: { delta: 1 } },
     { ...base, type: "MILL", payload: { amount: 2 } },
     { ...base, type: "SHUFFLE_LIBRARY", payload: {} },
+    { ...base, type: "TOGGLE_TAP", payload: { instanceId: "card" } },
     { ...base, type: "PASS_TURN", payload: {} },
+    { ...base, type: "NEXT_PHASE", payload: {} },
+    { ...base, type: "SET_MONARCH", payload: { playerId: "p1" } },
+    { ...base, type: "SET_INITIATIVE", payload: { playerId: null } },
+    { ...base, type: "SET_DAY_NIGHT", payload: { status: "day" } },
   ]
   expect(
     commands.map(command => gameCommandSchema.parse(command).type),
   ).toEqual([
+    "MULLIGAN_HAND",
+    "KEEP_HAND",
     "DRAW_CARD",
     "MOVE_CARD",
     "CHANGE_LIFE",
     "CHANGE_POISON",
     "MILL",
     "SHUFFLE_LIBRARY",
+    "TOGGLE_TAP",
     "PASS_TURN",
+    "NEXT_PHASE",
+    "SET_MONARCH",
+    "SET_INITIATIVE",
+    "SET_DAY_NIGHT",
   ])
   expect(() =>
     gameCommandSchema.parse({
@@ -87,7 +129,16 @@ test("persoonlijke snapshots ondersteunen 2–6 spelers en één private view", 
     role: "player",
     activePlayerId: "p2",
     turnNumber: 3,
+    phase: "combat",
+    matchStatus: {
+      monarchPlayerId: "p2",
+      initiativePlayerId: null,
+      dayNight: "day",
+    },
     turnOrder,
+    openingHands: Object.fromEntries(
+      turnOrder.map(id => [id, { mulliganCount: 0, kept: true }]),
+    ),
     players: Object.fromEntries(turnOrder.map(id => [id, player(id)])),
     privateView: {
       playerId: "p1",
@@ -108,7 +159,17 @@ test("weigert verborgen tegenstanderdata en spectator-private-state", () => {
     version: 1,
     activePlayerId: "p1",
     turnNumber: 1,
+    phase: "beginning",
+    matchStatus: {
+      monarchPlayerId: null,
+      initiativePlayerId: null,
+      dayNight: "none",
+    },
     turnOrder: ["p1", "p2"],
+    openingHands: {
+      p1: { mulliganCount: 0, kept: true },
+      p2: { mulliganCount: 0, kept: true },
+    },
     players: {
       p1: player("p1"),
       p2: { ...player("p2"), hand: [visibleCard] },

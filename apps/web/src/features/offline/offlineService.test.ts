@@ -13,11 +13,14 @@ describe("offlineAssetFetchUrl", () => {
   ])(
     "leidt Party time-asset %s via de begrensde lokale imageproxy",
     (cardId, hash) => {
+      const proxyUrl = offlineAssetFetchUrl(
+        `https://card-images.archidekt.com/normal/front/${cardId[0]}/${cardId[1]}/${cardId}.jpg?${hash}`,
+      )
       expect(
-        offlineAssetFetchUrl(
-          `https://card-images.archidekt.com/normal/front/${cardId[0]}/${cardId[1]}/${cardId}.jpg?${hash}`,
+        proxyUrl.endsWith(
+          `/api/import/archidekt/image/${cardId}?face=front&hash=${hash}`,
         ),
-      ).toBe(`/api/import/archidekt/image/${cardId}?face=front&hash=${hash}`)
+      ).toBe(true)
     },
   )
 

@@ -41,7 +41,9 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
   const { user, store } = renderWithProviders(<App />)
 
   expect(
-    await screen.findByRole("heading", { name: "Kies hoe je wilt spelen." }),
+    await screen.findByRole("heading", {
+      name: "Roep je deck bijeen. Begin de battle.",
+    }),
   ).toBeInTheDocument()
   await user.click(screen.getByRole("link", { name: /Offline spelen/ }))
   expect(

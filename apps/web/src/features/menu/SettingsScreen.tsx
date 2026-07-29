@@ -1,12 +1,7 @@
 import { AppShell } from "../../components/AppShell"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
-import type { OnlineGameService } from "../online/types"
 
-type SettingsScreenProps = {
-  onlineGames: OnlineGameService
-}
-
-export const SettingsScreen = ({ onlineGames }: SettingsScreenProps) => {
+export const SettingsScreen = () => {
   const online = useOnlineStatus()
 
   return (
@@ -27,14 +22,14 @@ export const SettingsScreen = ({ onlineGames }: SettingsScreenProps) => {
             </small>
           </div>
           <div className="content-card">
-            <h2>Online backend</h2>
+            <h2>Online multiplayer</h2>
             <p>
-              {onlineGames.kind === "mock"
-                ? "Demomodus actief: login en lobby’s draaien met lokale mocks."
-                : "Cloudflare-adapter actief."}
+              De app controleert de arena via een afzonderlijke
+              serverhealthcheck.
             </p>
             <small>
-              Stel VITE_ONLINE_API_URL in om de HTTP-adapter te activeren.
+              De actuele arenastatus staat altijd op dezelfde plek in de
+              hoofdbalk.
             </small>
           </div>
           <div className="content-card">

@@ -7,6 +7,7 @@ import {
 import {
   applyAuthoritativeCommand,
   createAuthoritativeGame,
+  migrateAuthoritativeGame,
   serializePersonalSnapshot,
   type OnlineGameSeed,
 } from "./game-server-adapter"
@@ -89,7 +90,14 @@ export class GameDurableObject extends DurableObject<Env> {
     this.snapshotStore =
       snapshotStore ?? new SqliteGameSnapshotStore(state.storage)
     this.ready = state.blockConcurrencyWhile(() => {
-      this.record = this.snapshotStore.load()
+      const loaded = this.snapshotStore.load()
+      if (!loaded) {
+        this.record = null
+        return Promise.resolve()
+      }
+      const game = migrateAuthoritativeGame(loaded.game)
+      this.record = { ...loaded, game }
+      if (game !== loaded.game) this.snapshotStore.save(this.record)
       return Promise.resolve()
     })
   }

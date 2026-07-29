@@ -1,5 +1,5 @@
 import { useAppSelector } from "../app/hooks"
-import { useOnlineStatus } from "../hooks/useOnlineStatus"
+import { useArenaStatus } from "../features/online/ArenaStatus"
 
 const formatSavedAt = (value: string | null) =>
   value
@@ -10,8 +10,12 @@ const formatSavedAt = (value: string | null) =>
       }).format(new Date(value))
     : null
 
-export const StatusBar = () => {
-  const online = useOnlineStatus()
+export const StatusBar = ({
+  onlineStateLabel,
+}: {
+  onlineStateLabel?: string
+}) => {
+  const arena = useArenaStatus()
   const saveStatus = useAppSelector(state => state.ui.saveStatus)
   const lastSavedAt = useAppSelector(state => state.ui.lastSavedAt)
 
@@ -23,18 +27,30 @@ export const StatusBar = () => {
         : lastSavedAt
           ? `Lokaal opgeslagen ${formatSavedAt(lastSavedAt) ?? ""}`
           : "Autosave actief"
+  const arenaLabel =
+    arena.status === "checking"
+      ? "Arena controleren…"
+      : arena.status === "online"
+        ? "Arena online"
+        : arena.status === "demo"
+          ? "Demoarena"
+          : "Arena offline"
 
   return (
     <div className="status-bar">
-      <span className={`status-pill ${online ? "is-online" : "is-offline"}`}>
+      <span
+        className={`status-pill arena-status is-${arena.status}`}
+        title={arena.message}
+        aria-live="polite"
+      >
         <span className="status-dot" aria-hidden="true" />
-        {online ? "Online" : "Offline"}
+        {arenaLabel}
       </span>
       <span
         className={`status-pill save-status save-status--${saveStatus}`}
         aria-live="polite"
       >
-        {saveLabel}
+        {onlineStateLabel ?? saveLabel}
       </span>
     </div>
   )

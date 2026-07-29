@@ -5,6 +5,7 @@ export type AppRoute =
   | "/offline"
   | "/offline/battle"
   | "/online"
+  | `/online/lobby/${string}`
   | `/online/game/${string}`
   | "/decks"
   | "/resume"
@@ -24,6 +25,9 @@ const currentRoute = (): AppRoute => {
   const path = window.location.pathname.replace(/\/+$/, "") || "/"
   if (/^\/online\/game\/[^/]+$/.test(path)) {
     return path as `/online/game/${string}`
+  }
+  if (/^\/online\/lobby\/[^/]+$/.test(path)) {
+    return path as `/online/lobby/${string}`
   }
   return knownRoutes.has(path as AppRoute) ? (path as AppRoute) : "/"
 }

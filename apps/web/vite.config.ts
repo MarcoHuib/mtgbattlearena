@@ -22,7 +22,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["app-icon.svg", "magic-card-back.webp"],
+      includeAssets: [
+        "app-icon.svg",
+        "fantasy-arena-hero.jpg",
+        "magic-card-back.webp",
+      ],
       manifest: {
         name: "MTG Battle Mode",
         short_name: "Battle Mode",

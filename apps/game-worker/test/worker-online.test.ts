@@ -3,11 +3,12 @@ import {
   validateFirebaseClaims,
   type FirebaseClaims,
 } from "../src/auth"
-import { isOriginAllowed } from "../src/index"
+import worker, { isOriginAllowed } from "../src/index"
 import {
   MemorySocketTicketRepository,
   SocketTicketService,
 } from "../src/tickets"
+import type { Env } from "../src/types"
 
 test("Firebase-claims worden aan project, issuer en tijd gebonden", () => {
   const claims: FirebaseClaims = {
@@ -92,9 +93,11 @@ test("socket-ticket is kortlevend en exact eenmaal te gebruiken", async () => {
 })
 
 test("CORS accepteert uitsluitend exact geconfigureerde origins", () => {
-  const configured = "http://localhost:5173, https://mtgbattlearena.web.app"
+  const configured =
+    "http://localhost:5173, https://mtgbattlearena.nl, https://mtgbattlearena.web.app"
 
   expect(isOriginAllowed("http://localhost:5173", configured)).toBe(true)
+  expect(isOriginAllowed("https://mtgbattlearena.nl", configured)).toBe(true)
   expect(isOriginAllowed("https://mtgbattlearena.web.app", configured)).toBe(
     true,
   )
@@ -102,4 +105,36 @@ test("CORS accepteert uitsluitend exact geconfigureerde origins", () => {
   expect(
     isOriginAllowed("http://localhost:5173.attacker.example", configured),
   ).toBe(false)
+})
+
+test("custom domains scheiden REST, imports en WebSockets", async () => {
+  const importFetch = vi.fn(() =>
+    Promise.resolve(Response.json({ name: "Deck via import-service" })),
+  )
+  const env = {
+    IMPORT: { fetch: importFetch },
+    ALLOWED_ORIGIN: "https://mtgbattlearena.nl",
+  } as unknown as Env
+
+  const imported = await worker.fetch(
+    new Request("https://api.mtgbattlearena.nl/api/import/archidekt/24190600", {
+      headers: { Origin: "https://mtgbattlearena.nl" },
+    }),
+    env,
+  )
+  expect(imported.status).toBe(200)
+  expect(await imported.json()).toEqual({ name: "Deck via import-service" })
+  expect(importFetch).toHaveBeenCalledOnce()
+
+  const socketOnApi = await worker.fetch(
+    new Request("https://api.mtgbattlearena.nl/api/online/socket"),
+    env,
+  )
+  expect(socketOnApi.status).toBe(404)
+
+  const restOnSocket = await worker.fetch(
+    new Request("https://ws.mtgbattlearena.nl/api/online/health"),
+    env,
+  )
+  expect(restOnSocket.status).toBe(404)
 })

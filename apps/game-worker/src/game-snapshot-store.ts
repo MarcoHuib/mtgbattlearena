@@ -15,7 +15,11 @@ const storedGameRecordSchema = z
   .object({
     game: z
       .object({
-        schemaVersion: z.literal(1),
+        schemaVersion: z.union([
+          z.literal(1),
+          z.literal(2),
+          z.literal(3),
+        ]),
         mode: z.literal("online"),
         gameId: z.string().min(1),
         version: z.number().int().nonnegative(),
@@ -61,7 +65,7 @@ export class SqliteGameSnapshotStore implements GameSnapshotStore {
     if (!row) return null
     return storedGameRecordSchema.parse(
       JSON.parse(row.payload),
-    ) as StoredGameRecord
+    ) as unknown as StoredGameRecord
   }
 
   save(record: StoredGameRecord) {

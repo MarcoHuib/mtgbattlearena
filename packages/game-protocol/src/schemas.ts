@@ -4,6 +4,36 @@ export const playerIdSchema = z.string().min(1).max(80)
 export const cardInstanceIdSchema = z.string().min(1).max(120)
 export const gameIdSchema = z.string().min(1).max(120)
 
+export const onlineDeckCardSchema = z
+  .object({
+    definitionId: z.string().min(1).max(120),
+    name: z.string().min(1).max(300),
+    typeLine: z.string().max(500).optional(),
+    imageUrl: z.url().optional(),
+    scryfallId: z.string().max(120).optional(),
+    quantity: z.number().int().min(1).max(100),
+    isCommander: z.boolean().default(false),
+  })
+  .strict()
+
+export const onlineDeckSubmissionSchema = z
+  .object({
+    deckSnapshotId: z.string().min(1).max(120),
+    deckName: z.string().min(1).max(120),
+    cards: z.array(onlineDeckCardSchema).min(1).max(250),
+  })
+  .strict()
+  .superRefine((deck, context) => {
+    const definitionIds = deck.cards.map(card => card.definitionId)
+    if (new Set(definitionIds).size !== definitionIds.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Kaartdefinities moeten per deck uniek zijn.",
+        path: ["cards"],
+      })
+    }
+  })
+
 const battlefieldPositionSchema = z
   .object({
     x: z.number().min(0).max(1),
@@ -102,6 +132,46 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
       payload: z.object({}).strict(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("SET_MONARCH"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ playerId: playerIdSchema.nullable() }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_INITIATIVE"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ playerId: playerIdSchema.nullable() }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_DAY_NIGHT"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ status: z.enum(["none", "day", "night"]) }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("MULLIGAN_HAND"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({}).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("KEEP_HAND"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({}).strict(),
+    })
+    .strict(),
 ])
 
 const visibleCardSchema = z
@@ -142,6 +212,13 @@ const privatePlayerViewSchema = z
   })
   .strict()
 
+const openingHandStateSchema = z
+  .object({
+    mulliganCount: z.number().int().nonnegative(),
+    kept: z.boolean(),
+  })
+  .strict()
+
 export const personalGameSnapshotSchema = z
   .object({
     type: z.literal("PERSONAL_SNAPSHOT"),
@@ -151,7 +228,22 @@ export const personalGameSnapshotSchema = z
     role: z.enum(["player", "spectator"]),
     activePlayerId: playerIdSchema,
     turnNumber: z.number().int().positive(),
+    phase: z.enum([
+      "beginning",
+      "precombat-main",
+      "combat",
+      "postcombat-main",
+      "ending",
+    ]),
+    matchStatus: z
+      .object({
+        monarchPlayerId: playerIdSchema.nullable(),
+        initiativePlayerId: playerIdSchema.nullable(),
+        dayNight: z.enum(["none", "day", "night"]),
+      })
+      .strict(),
     turnOrder: z.array(playerIdSchema).min(2).max(6),
+    openingHands: z.record(playerIdSchema, openingHandStateSchema),
     players: z.record(playerIdSchema, publicPlayerSchema),
     privateView: privatePlayerViewSchema.nullable(),
   })
@@ -163,6 +255,18 @@ export const personalGameSnapshotSchema = z
         message: "De actieve speler moet in de beurtvolgorde staan.",
         path: ["activePlayerId"],
       })
+    }
+    for (const [field, playerId] of [
+      ["monarchPlayerId", snapshot.matchStatus.monarchPlayerId],
+      ["initiativePlayerId", snapshot.matchStatus.initiativePlayerId],
+    ] as const) {
+      if (playerId !== null && !snapshot.turnOrder.includes(playerId)) {
+        context.addIssue({
+          code: "custom",
+          message: "Een statushouder moet aan de game deelnemen.",
+          path: ["matchStatus", field],
+        })
+      }
     }
     if (snapshot.role === "spectator" && snapshot.privateView !== null) {
       context.addIssue({
@@ -189,6 +293,13 @@ export const personalGameSnapshotSchema = z
           message:
             "Iedere speler in de beurtvolgorde moet publiek zichtbaar zijn.",
           path: ["players", playerId],
+        })
+      }
+      if (!snapshot.openingHands[playerId]) {
+        context.addIssue({
+          code: "custom",
+          message: "Iedere speler moet een openingshandstatus hebben.",
+          path: ["openingHands", playerId],
         })
       }
     }
@@ -237,6 +348,7 @@ export const serverEventSchema = z.discriminatedUnion("type", [
 ])
 
 export type GameCommand = z.infer<typeof gameCommandSchema>
+export type OnlineDeckSubmission = z.infer<typeof onlineDeckSubmissionSchema>
 export type VisibleOnlineCard = z.infer<typeof visibleCardSchema>
 export type PublicOnlinePlayer = z.infer<typeof publicPlayerSchema>
 export type PersonalGameSnapshot = z.infer<typeof personalGameSnapshotSchema>

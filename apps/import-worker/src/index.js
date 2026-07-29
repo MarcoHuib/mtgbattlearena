@@ -1,16 +1,61 @@
 const MAX_RESPONSE_BYTES = 5_000_000
 const UPSTREAM_TIMEOUT_MS = 10_000
 
-const jsonError = (status, code, message) =>
+const corsHeadersFor = (request, env) => {
+  const origin = request.headers.get("Origin")
+  const allowedOrigins = (env.ALLOWED_ORIGIN ?? "")
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean)
+  if (!origin || !allowedOrigins.includes(origin)) return {}
+  return {
+    "Access-Control-Allow-Origin": origin,
+    Vary: "Origin",
+  }
+}
+
+const withCors = (response, corsHeaders) => {
+  const headers = new Headers(response.headers)
+  Object.entries(corsHeaders).forEach(([name, value]) => {
+    headers.set(name, value)
+  })
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+const jsonError = (status, code, message, corsHeaders = {}) =>
   new Response(JSON.stringify({ error: { code, message } }), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...corsHeaders,
+    },
   })
 
 export default {
   async fetch(request, env, context) {
+    const corsHeaders = corsHeadersFor(request, env)
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...corsHeaders,
+          "Access-Control-Allow-Headers": "Accept",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Max-Age": "86400",
+        },
+      })
+    }
     if (request.method !== "GET") {
-      return jsonError(405, "METHOD_NOT_ALLOWED", "Alleen GET is toegestaan.")
+      return jsonError(
+        405,
+        "METHOD_NOT_ALLOWED",
+        "Alleen GET is toegestaan.",
+        corsHeaders,
+      )
     }
 
     const url = new URL(request.url)
@@ -33,6 +78,7 @@ export default {
         400,
         "INVALID_IMAGE_REFERENCE",
         "Ongeldige afbeeldingsverwijzing.",
+        corsHeaders,
       )
     }
     const requestedTokenIds = (url.searchParams.get("ids") ?? "").split(",")
@@ -43,18 +89,23 @@ export default {
         tokenIds.length > 100 ||
         tokenIds.some(id => !/^\d+$/.test(id)))
     ) {
-      return jsonError(400, "INVALID_TOKEN_IDS", "Ongeldige token-ID's.")
+      return jsonError(
+        400,
+        "INVALID_TOKEN_IDS",
+        "Ongeldige token-ID's.",
+        corsHeaders,
+      )
     }
     const match = /^\/api\/import\/archidekt\/(\d+)$/.exec(url.pathname)
     const deckId = match?.[1]
     if (!isTokenRequest && !isImageRequest && (!deckId || deckId === "0")) {
-      return jsonError(400, "INVALID_DECK_ID", "Ongeldig deck-ID.")
+      return jsonError(400, "INVALID_DECK_ID", "Ongeldig deck-ID.", corsHeaders)
     }
 
     const cache = caches.default
     const cacheKey = new Request(url.toString(), request)
     const cached = await cache.match(cacheKey)
-    if (cached) return cached
+    if (cached) return withCors(cached, corsHeaders)
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
@@ -72,25 +123,41 @@ export default {
         signal: controller.signal,
       })
       if (upstream.status === 404) {
-        return jsonError(404, "NOT_FOUND", "Deck niet gevonden.")
+        return jsonError(404, "NOT_FOUND", "Deck niet gevonden.", corsHeaders)
       }
       if (upstream.status === 401 || upstream.status === 403) {
-        return jsonError(403, "PRIVATE_DECK", "Deck is niet openbaar.")
+        return jsonError(
+          403,
+          "PRIVATE_DECK",
+          "Deck is niet openbaar.",
+          corsHeaders,
+        )
       }
       if (!upstream.ok) {
         return jsonError(
           502,
           "UPSTREAM_ERROR",
           "Archidekt is tijdelijk niet bereikbaar.",
+          corsHeaders,
         )
       }
       const declaredSize = Number(upstream.headers.get("Content-Length") ?? 0)
       if (declaredSize > MAX_RESPONSE_BYTES) {
-        return jsonError(413, "RESPONSE_TOO_LARGE", "Deckresponse is te groot.")
+        return jsonError(
+          413,
+          "RESPONSE_TOO_LARGE",
+          "Deckresponse is te groot.",
+          corsHeaders,
+        )
       }
       const payload = await upstream.arrayBuffer()
       if (payload.byteLength > MAX_RESPONSE_BYTES) {
-        return jsonError(413, "RESPONSE_TOO_LARGE", "Deckresponse is te groot.")
+        return jsonError(
+          413,
+          "RESPONSE_TOO_LARGE",
+          "Deckresponse is te groot.",
+          corsHeaders,
+        )
       }
       const response = new Response(payload, {
         headers: {
@@ -101,7 +168,7 @@ export default {
         },
       })
       context.waitUntil(cache.put(cacheKey, response.clone()))
-      return response
+      return withCors(response, corsHeaders)
     } catch (error) {
       return jsonError(
         error?.name === "AbortError" ? 504 : 502,
@@ -109,6 +176,7 @@ export default {
         error?.name === "AbortError"
           ? "Archidekt reageerde niet op tijd."
           : "Archidekt kon niet worden bereikt.",
+        corsHeaders,
       )
     } finally {
       clearTimeout(timeout)

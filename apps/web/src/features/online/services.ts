@@ -1,10 +1,15 @@
 import {
+  onlineDeckSubmissionSchema,
   parsePersonalSnapshot,
   parseServerEvent,
   type GameCommand,
+  type OnlineDeckSubmission,
 } from "@mtg/game-protocol"
+import type { DeckSnapshot } from "@mtg/game-core/types"
 import {
+  arenaHealthSchema,
   lobbyListSchema,
+  lobbyRoomSchema,
   onlineLobbySchema,
   type AuthService,
   type AuthState,
@@ -22,6 +27,36 @@ const wait = (duration = 120) =>
   new Promise<void>(resolve => {
     setTimeout(resolve, duration)
   })
+
+export const createOnlineDeckSubmission = (
+  deck: DeckSnapshot,
+): OnlineDeckSubmission => {
+  const definitions = new Map(
+    deck.definitions.map(definition => [definition.id, definition]),
+  )
+  return onlineDeckSubmissionSchema.parse({
+    deckSnapshotId: deck.id,
+    deckName: deck.name,
+    cards: deck.cards.map(card => {
+      const definition = definitions.get(card.definitionId)
+      if (!definition) {
+        throw new Error(
+          `Kaartdefinitie ${card.definitionId} ontbreekt in ${deck.name}.`,
+        )
+      }
+      const firstFace = definition.faces[0]
+      return {
+        definitionId: definition.id,
+        name: firstFace?.name ?? definition.name,
+        typeLine: firstFace?.typeLine ?? definition.typeLine,
+        imageUrl: firstFace?.imageUrl ?? definition.imageRefs[0]?.url,
+        scryfallId: definition.scryfallId,
+        quantity: card.quantity,
+        isCommander: card.isCommander,
+      }
+    }),
+  })
+}
 
 export class MockAuthService implements AuthService {
   private state: AuthState = { status: "signed-out", user: null }
@@ -215,6 +250,7 @@ const initialMockLobbies: OnlineLobby[] = [
     playerCount: 2,
     maxPlayers: 4,
     createdAt: "2026-07-29T18:00:00.000Z",
+    viewerRole: null,
   },
   {
     id: "mock-lobby-duel",
@@ -227,12 +263,21 @@ const initialMockLobbies: OnlineLobby[] = [
     playerCount: 1,
     maxPlayers: 2,
     createdAt: "2026-07-29T18:15:00.000Z",
+    viewerRole: null,
   },
 ]
 
 export class MockOnlineGameService implements OnlineGameService {
-  readonly kind = "mock" as const
+  readonly kind: OnlineGameService["kind"] = "mock"
   private readonly lobbies = initialMockLobbies.map(lobby => ({ ...lobby }))
+  private readonly registeredDecks = new Map<string, string>()
+
+  checkHealth() {
+    return Promise.resolve({
+      status: "ok" as const,
+      firebaseConfigured: true,
+    })
+  }
 
   async listPublicLobbies(signal?: AbortSignal) {
     await wait()
@@ -253,6 +298,7 @@ export class MockOnlineGameService implements OnlineGameService {
       playerCount: 1,
       maxPlayers: input.maxPlayers,
       createdAt: new Date().toISOString(),
+      viewerRole: "host",
     })
     this.lobbies.unshift(parsed)
     return parsed
@@ -268,7 +314,67 @@ export class MockOnlineGameService implements OnlineGameService {
       throw new Error("Deze lobby is vol.")
     }
     lobby.playerCount += 1
+    lobby.viewerRole = "player"
     return { lobby, gameId: lobby.id, role: "player" }
+  }
+
+  async getLobbyRoom(gameId: string, signal?: AbortSignal) {
+    await wait()
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
+    const lobby = this.lobbies.find(candidate => candidate.id === gameId)
+    if (!lobby) throw new Error("Lobby niet gevonden.")
+    const participants = [
+      {
+        displayName: lobby.hostDisplayName,
+        role: "player" as const,
+        seatNumber: 0,
+        isHost: true,
+        isViewer: lobby.viewerRole === "host",
+        deckReady: this.registeredDecks.has(`${gameId}:host`),
+        deckName: this.registeredDecks.get(`${gameId}:host`) ?? null,
+      },
+    ]
+    if (lobby.viewerRole === "player") {
+      participants.push({
+        displayName: "Jij",
+        role: "player",
+        seatNumber: Math.max(1, lobby.playerCount - 1),
+        isHost: false,
+        isViewer: true,
+        deckReady: this.registeredDecks.has(`${gameId}:player`),
+        deckName: this.registeredDecks.get(`${gameId}:player`) ?? null,
+      })
+    }
+    return lobbyRoomSchema.parse({ lobby, participants })
+  }
+
+  async deleteLobby(gameId: string) {
+    await wait()
+    const index = this.lobbies.findIndex(candidate => candidate.id === gameId)
+    if (index < 0) throw new Error("Lobby niet gevonden.")
+    if (this.lobbies[index]?.viewerRole !== "host") {
+      throw new Error("Alleen de host kan deze lobby verwijderen.")
+    }
+    this.lobbies.splice(index, 1)
+  }
+
+  async registerDeck(gameId: string, deck: DeckSnapshot) {
+    await wait()
+    const lobby = this.lobbies.find(candidate => candidate.id === gameId)
+    if (!lobby?.viewerRole) throw new Error("Lobby niet gevonden.")
+    this.registeredDecks.set(`${gameId}:${lobby.viewerRole}`, deck.name)
+  }
+
+  async startGame(gameId: string) {
+    await wait()
+    const lobby = this.lobbies.find(candidate => candidate.id === gameId)
+    if (lobby?.viewerRole !== "host") {
+      throw new Error("Alleen de host kan de battle starten.")
+    }
+    if (lobby.playerCount !== lobby.maxPlayers) {
+      throw new Error("Alle seats moeten bezet zijn.")
+    }
+    lobby.status = "active"
   }
 
   createSocketTicket() {
@@ -306,11 +412,18 @@ export class CloudflareOnlineGameService implements OnlineGameService {
   constructor(
     private readonly baseUrl: string,
     private readonly auth: AuthService,
+    private readonly socketBaseUrl = baseUrl,
   ) {}
+
+  async checkHealth(signal?: AbortSignal) {
+    return arenaHealthSchema.parse(
+      await this.request("/api/online/health", { signal }, false),
+    )
+  }
 
   async listPublicLobbies(signal?: AbortSignal) {
     return lobbyListSchema.parse(
-      await this.request("/api/online/lobbies", { signal }, false),
+      await this.request("/api/online/lobbies", { signal }, "optional"),
     )
   }
 
@@ -342,6 +455,39 @@ export class CloudflareOnlineGameService implements OnlineGameService {
       gameId: String(result.gameId),
       role: result.role === "spectator" ? "spectator" : "player",
     } satisfies JoinLobbyResult
+  }
+
+  async getLobbyRoom(gameId: string, signal?: AbortSignal) {
+    return lobbyRoomSchema.parse(
+      await this.request(`/api/online/lobbies/${encodeURIComponent(gameId)}`, {
+        signal,
+      }),
+    )
+  }
+
+  async deleteLobby(gameId: string) {
+    await this.request(`/api/online/lobbies/${encodeURIComponent(gameId)}`, {
+      method: "DELETE",
+    })
+  }
+
+  async registerDeck(gameId: string, deck: DeckSnapshot) {
+    await this.request(
+      `/api/online/lobbies/${encodeURIComponent(gameId)}/deck`,
+      {
+        method: "PUT",
+        body: JSON.stringify(createOnlineDeckSubmission(deck)),
+      },
+    )
+  }
+
+  async startGame(gameId: string) {
+    parsePersonalSnapshot(
+      await this.request(
+        `/api/online/lobbies/${encodeURIComponent(gameId)}/start`,
+        { method: "POST", body: JSON.stringify({}) },
+      ),
+    )
   }
 
   async createSocketTicket(gameId: string) {
@@ -385,7 +531,7 @@ export class CloudflareOnlineGameService implements OnlineGameService {
 
   connectGame(gameId: string) {
     const connection = new CloudflareWebSocketConnection(
-      new URL("/api/online/socket", this.baseUrl).toString(),
+      new URL("/api/online/socket", this.socketBaseUrl).toString(),
       () => this.createSocketTicket(gameId),
     )
     connection.start()
@@ -395,10 +541,10 @@ export class CloudflareOnlineGameService implements OnlineGameService {
   private async request(
     path: string,
     init: RequestInit = {},
-    authenticated = true,
+    authenticated: boolean | "optional" = true,
   ): Promise<unknown> {
-    const token = authenticated ? await this.auth.getIdToken() : null
-    if (authenticated && !token) throw new Error("Log eerst in.")
+    const token = authenticated === false ? null : await this.auth.getIdToken()
+    if (authenticated === true && !token) throw new Error("Log eerst in.")
     const headers = new Headers(init.headers)
     if (!headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json")
@@ -430,10 +576,15 @@ export type ApplicationServices = {
 
 export const createApplicationServices = (): ApplicationServices => {
   const configuredApiUrl: unknown = import.meta.env.VITE_ONLINE_API_URL
+  const configuredSocketUrl: unknown = import.meta.env.VITE_ONLINE_SOCKET_URL
   const apiUrl =
     typeof configuredApiUrl === "string" && configuredApiUrl.trim()
       ? configuredApiUrl
       : null
+  const socketUrl =
+    typeof configuredSocketUrl === "string" && configuredSocketUrl.trim()
+      ? configuredSocketUrl
+      : apiUrl
   if (apiUrl) {
     const firebaseConfig = readFirebaseConfig(import.meta.env)
     if (!firebaseConfig.configured) {
@@ -442,7 +593,11 @@ export const createApplicationServices = (): ApplicationServices => {
       )
       return {
         auth,
-        onlineGames: new CloudflareOnlineGameService(apiUrl, auth),
+        onlineGames: new CloudflareOnlineGameService(
+          apiUrl,
+          auth,
+          socketUrl ?? apiUrl,
+        ),
       }
     }
     const auth = new FirebaseAuthService(
@@ -450,7 +605,11 @@ export const createApplicationServices = (): ApplicationServices => {
     )
     return {
       auth,
-      onlineGames: new CloudflareOnlineGameService(apiUrl, auth),
+      onlineGames: new CloudflareOnlineGameService(
+        apiUrl,
+        auth,
+        socketUrl ?? apiUrl,
+      ),
     }
   }
   const auth = new MockAuthService()

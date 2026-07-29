@@ -26,6 +26,18 @@ hetzelfde zijn als een tijdelijke browsercache.
 - Dexie implementeert repositoryinterfaces voor decks, games,
   offlinepakketmanifesten en assetmetadata. Daardoor blijft een andere
   opslagimplementatie mogelijk.
+- Decksnapshots blijven immutable en kunnen door een bestaande savegame worden
+  vastgehouden. Een afzonderlijke Dexie-eigenaarsindex bepaalt welke snapshots
+  in de decklijst van een Firebase-gebruiker of in de apparaatlokale offlinelijst
+  verschijnen. Verwijderen haalt eerst alleen die eigenaarskoppeling weg; data
+  die nog door een game of offlinepakket wordt gebruikt blijft behouden.
+- Bestaande snapshots uit databaseversie 1 krijgen bij migratie bewust de
+  neutrale eigenaar `device`; de oude data bevatte geen betrouwbare Firebase-UID.
+  Een ingelogde gebruiker kan zo'n zichtbaar gemarkeerde legacy-import via
+  Decks beheren expliciet aan het eigen account koppelen.
+- De snapshot-ID bevat een deterministische fingerprint van de geïmporteerde
+  Archidekt-inhoud. Dezelfde import maakt daardoor geen duplicaat, terwijl een
+  gewijzigde deckinhoud een nieuw immutable snapshot oplevert.
 - De PWA-serviceworker bewaart de app-shell en opportunistische
   runtime-afbeeldingen. Dat is vervangbare cache.
 - “Download voor offline gebruik” maakt apart een duurzaam manifest en bewaart

@@ -1,8 +1,10 @@
 import { z } from "zod"
-import { parseGameCommand } from "@mtg/game-protocol"
+import {
+  onlineDeckSubmissionSchema,
+  parseGameCommand,
+} from "@mtg/game-protocol"
 import { FirebaseTokenVerifier, readBearerToken } from "./auth"
 import { GameDurableObject } from "./game-durable-object"
-import { onlineGameSubmissionSchema } from "./game-server-adapter"
 import { LobbyDurableObject } from "./lobby-durable-object"
 import type {
   Env,
@@ -162,6 +164,21 @@ const findSession = async (
 
 const routeRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url)
+  const isApiCustomDomain = url.hostname === "api.mtgbattlearena.nl"
+  const isSocketCustomDomain = url.hostname === "ws.mtgbattlearena.nl"
+  const isSocketRequest = url.pathname === "/api/online/socket"
+
+  if (
+    (isApiCustomDomain && isSocketRequest) ||
+    (isSocketCustomDomain && !isSocketRequest)
+  ) {
+    return error(404, "NOT_FOUND", "Route niet gevonden.")
+  }
+
+  if (url.pathname.startsWith("/api/import/archidekt")) {
+    return env.IMPORT.fetch(request)
+  }
+
   const lobby = env.LOBBY.getByName("global")
 
   if (request.method === "GET" && url.pathname === "/api/online/health") {
@@ -172,9 +189,14 @@ const routeRequest = async (request: Request, env: Env) => {
   }
 
   if (request.method === "GET" && url.pathname === "/api/online/lobbies") {
-    return json(await lobby.listPublicLobbies(), 200, {
-      "Cache-Control": "public, max-age=5",
-    })
+    const identity = request.headers.has("Authorization")
+      ? await authenticate(request, env)
+      : null
+    return json(
+      await lobby.listPublicLobbies(identity?.uid),
+      200,
+      identity ? undefined : { "Cache-Control": "public, max-age=5" },
+    )
   }
 
   if (request.method === "POST" && url.pathname === "/api/online/lobbies") {
@@ -192,6 +214,45 @@ const routeRequest = async (request: Request, env: Env) => {
     return resultResponse(
       await lobby.joinByCode(input.code, input.role, identity),
     )
+  }
+
+  const lobbyActionRoute =
+    /^\/api\/online\/lobbies\/([^/]+)\/(deck|start)$/.exec(url.pathname)
+  if (lobbyActionRoute?.[1] && lobbyActionRoute[2]) {
+    const identity = await authenticate(request, env)
+    const gameId = decodeURIComponent(lobbyActionRoute[1])
+    if (lobbyActionRoute[2] === "deck" && request.method === "PUT") {
+      const submission = onlineDeckSubmissionSchema.parse(
+        await readJson(request, 512_000),
+      )
+      return resultResponse(
+        await lobby.registerDeck(gameId, identity, submission),
+      )
+    }
+    if (lobbyActionRoute[2] === "start" && request.method === "POST") {
+      const prepared = await lobby.prepareRegisteredGame(gameId, identity)
+      if (!prepared.ok) return resultResponse(prepared)
+      const initialized = await env.GAMES.getByName(gameId).initializeGame(
+        prepared.value.seed,
+        prepared.value.session,
+      )
+      if (initialized.ok && initialized.value.type === "PERSONAL_SNAPSHOT") {
+        await lobby.markGameActive(gameId, identity)
+      }
+      return gameResultResponse(initialized, 201)
+    }
+  }
+
+  const lobbyRoomRoute = /^\/api\/online\/lobbies\/([^/]+)$/.exec(url.pathname)
+  if (lobbyRoomRoute?.[1]) {
+    const identity = await authenticate(request, env)
+    const gameId = decodeURIComponent(lobbyRoomRoute[1])
+    if (request.method === "GET") {
+      return resultResponse(await lobby.getLobbyRoom(gameId, identity))
+    }
+    if (request.method === "DELETE") {
+      return resultResponse(await lobby.deleteLobby(gameId, identity))
+    }
   }
 
   if (
@@ -219,10 +280,9 @@ const routeRequest = async (request: Request, env: Env) => {
     )
   }
 
-  const gameRoute =
-    /^\/api\/online\/games\/([^/]+)\/(commands|snapshot|initialize)$/.exec(
-      url.pathname,
-    )
+  const gameRoute = /^\/api\/online\/games\/([^/]+)\/(commands|snapshot)$/.exec(
+    url.pathname,
+  )
   if (gameRoute?.[1] && gameRoute[2]) {
     const identity = await authenticate(request, env)
     const gameId = decodeURIComponent(gameRoute[1])
@@ -230,23 +290,6 @@ const routeRequest = async (request: Request, env: Env) => {
     if (!sessionResult.ok) return resultResponse(sessionResult)
     const session = sessionResult.value
     const game = env.GAMES.getByName(gameId)
-
-    if (gameRoute[2] === "initialize" && request.method === "POST") {
-      const body = await readJson(request, 512_000)
-      const submission = onlineGameSubmissionSchema.parse(
-        typeof body === "object" && body !== null ? { ...body, gameId } : body,
-      )
-      const prepared = await lobby.prepareGame(gameId, identity, submission)
-      if (!prepared.ok) return resultResponse(prepared)
-      const initialized = await game.initializeGame(
-        prepared.value.seed,
-        prepared.value.session,
-      )
-      if (initialized.ok && initialized.value.type === "PERSONAL_SNAPSHOT") {
-        await lobby.markGameActive(gameId, identity)
-      }
-      return gameResultResponse(initialized, 201)
-    }
 
     if (gameRoute[2] === "snapshot" && request.method === "GET") {
       return gameResultResponse(await game.getPersonalSnapshot(session))
@@ -297,7 +340,7 @@ export default {
           status: 204,
           headers: {
             "Access-Control-Allow-Headers": "Authorization, Content-Type",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
           },
         }),
         request,

@@ -3,12 +3,24 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 tsconfig = "tsconfig.json"
 
+[[routes]]
+pattern = "api.mtgbattlearena.nl"
+custom_domain = true
+
+[[routes]]
+pattern = "ws.mtgbattlearena.nl"
+custom_domain = true
+
 [observability]
 enabled = true
 
 [vars]
 FIREBASE_PROJECT_ID = "mtgbattlearena"
-ALLOWED_ORIGIN = "http://localhost:5173,https://mtgbattlearena.web.app,https://mtgbattlearena.firebaseapp.com"
+ALLOWED_ORIGIN = "http://localhost:5173,https://mtgbattlearena.nl,https://www.mtgbattlearena.nl,https://mtgbattlearena.web.app,https://mtgbattlearena.firebaseapp.com"
+
+[[services]]
+binding = "IMPORT"
+service = "mtg-battle-mode-import"
 
 [[durable_objects.bindings]]
 name = "LOBBY"

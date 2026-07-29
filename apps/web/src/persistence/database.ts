@@ -14,10 +14,21 @@ import type {
 } from "./repositories"
 
 type StoredGame = PersistedGame & { id: string; title: string }
+type StoredDeckOwner = {
+  key: string
+  deckId: string
+  ownerId: string
+}
+
+export const deviceDeckOwnerId = "device"
+
+const deckOwnerKey = (deckId: string, ownerId: string) =>
+  `${encodeURIComponent(ownerId)}::${deckId}`
 
 class BattleDatabase extends Dexie {
   games!: EntityTable<StoredGame, "id">
   decks!: EntityTable<DeckSnapshot, "id">
+  deckOwners!: EntityTable<StoredDeckOwner, "key">
   offlinePackages!: EntityTable<OfflineBattlePackage, "id">
   assets!: EntityTable<AssetMetadata, "assetKey">
 
@@ -29,6 +40,24 @@ class BattleDatabase extends Dexie {
       offlinePackages: "id, currentGameId, updatedAt",
       assets: "assetKey, cacheKind, cachedAt",
     })
+    this.version(2)
+      .stores({
+        games: "id, savedAt",
+        decks: "id, sourceDeckId, importedAt",
+        deckOwners: "key, deckId, ownerId, [ownerId+deckId]",
+        offlinePackages: "id, currentGameId, updatedAt",
+        assets: "assetKey, cacheKind, cachedAt",
+      })
+      .upgrade(async transaction => {
+        const decks = await transaction.table<DeckSnapshot>("decks").toArray()
+        await transaction.table<StoredDeckOwner>("deckOwners").bulkPut(
+          decks.map(deck => ({
+            key: deckOwnerKey(deck.id, deviceDeckOwnerId),
+            deckId: deck.id,
+            ownerId: deviceDeckOwnerId,
+          })),
+        )
+      })
   }
 }
 
@@ -69,8 +98,20 @@ const createDexieRepositories = (): PersistenceRepositories => {
   }
 
   const decks: DeckSnapshotRepository = {
-    async save(deck) {
-      await database.decks.put(deck)
+    async save(deck, ownerId = deviceDeckOwnerId) {
+      await database.transaction(
+        "rw",
+        database.decks,
+        database.deckOwners,
+        async () => {
+          await database.decks.put(deck)
+          await database.deckOwners.put({
+            key: deckOwnerKey(deck.id, ownerId),
+            deckId: deck.id,
+            ownerId,
+          })
+        },
+      )
     },
     async get(id) {
       return (await database.decks.get(id)) ?? null
@@ -79,6 +120,48 @@ const createDexieRepositories = (): PersistenceRepositories => {
       const records = await database.decks.bulkGet([...ids])
       return records.filter(
         (record): record is DeckSnapshot => record !== undefined,
+      )
+    },
+    async list(ownerId) {
+      const records = ownerId
+        ? await database.decks.bulkGet(
+            (
+              await database.deckOwners
+                .where("ownerId")
+                .equals(ownerId)
+                .toArray()
+            ).map(owner => owner.deckId),
+          )
+        : await database.decks.toArray()
+      return [...records]
+        .sort((a, b) =>
+          (b?.importedAt ?? "").localeCompare(a?.importedAt ?? ""),
+        )
+        .filter((record): record is DeckSnapshot => record !== undefined)
+    },
+    async delete(id, ownerId) {
+      await database.transaction(
+        "rw",
+        database.decks,
+        database.deckOwners,
+        async () => {
+          if (ownerId) {
+            await database.deckOwners.delete(deckOwnerKey(id, ownerId))
+          } else {
+            await database.deckOwners.where("deckId").equals(id).delete()
+          }
+          const remainingOwners = await database.deckOwners
+            .where("deckId")
+            .equals(id)
+            .count()
+          if (remainingOwners > 0) return
+          const games = await database.games.toArray()
+          const packages = await database.offlinePackages.toArray()
+          const referenced =
+            games.some(record => record.game.deckSnapshotIds.includes(id)) ||
+            packages.some(record => record.deckSnapshotIds.includes(id))
+          if (!referenced) await database.decks.delete(id)
+        },
       )
     },
   }
@@ -115,9 +198,10 @@ const createDexieRepositories = (): PersistenceRepositories => {
   return { games, decks, offlinePackages, assets }
 }
 
-const createMemoryRepositories = (): PersistenceRepositories => {
+export const createMemoryRepositories = (): PersistenceRepositories => {
   const gameRecords = new Map<string, PersistedGame>()
   const deckRecords = new Map<string, DeckSnapshot>()
+  const deckOwners = new Map<string, Set<string>>()
   const packageRecords = new Map<string, OfflineBattlePackage>()
   const assetRecords = new Map<string, AssetMetadata>()
 
@@ -153,8 +237,11 @@ const createMemoryRepositories = (): PersistenceRepositories => {
       },
     },
     decks: {
-      save(deck) {
+      save(deck, ownerId = deviceDeckOwnerId) {
         deckRecords.set(deck.id, structuredClone(deck))
+        const owners = deckOwners.get(deck.id) ?? new Set<string>()
+        owners.add(ownerId)
+        deckOwners.set(deck.id, owners)
         return Promise.resolve()
       },
       get(id) {
@@ -167,6 +254,35 @@ const createMemoryRepositories = (): PersistenceRepositories => {
             return deck ? [structuredClone(deck)] : []
           }),
         )
+      },
+      list(ownerId) {
+        return Promise.resolve(
+          [...deckRecords.values()]
+            .filter(deck => !ownerId || deckOwners.get(deck.id)?.has(ownerId))
+            .sort((a, b) => b.importedAt.localeCompare(a.importedAt))
+            .map(deck => structuredClone(deck)),
+        )
+      },
+      delete(id, ownerId) {
+        if (!ownerId) {
+          deckOwners.delete(id)
+          deckRecords.delete(id)
+          return Promise.resolve()
+        }
+        const owners = deckOwners.get(id)
+        owners?.delete(ownerId)
+        const referenced =
+          [...gameRecords.values()].some(record =>
+            record.game.deckSnapshotIds.includes(id),
+          ) ||
+          [...packageRecords.values()].some(record =>
+            record.deckSnapshotIds.includes(id),
+          )
+        if (!owners?.size) {
+          deckOwners.delete(id)
+          if (!referenced) deckRecords.delete(id)
+        }
+        return Promise.resolve()
       },
     },
     offlinePackages: {

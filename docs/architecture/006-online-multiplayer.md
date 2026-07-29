@@ -25,6 +25,12 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
 - Cloudflare Access en Cloudflare RBAC worden niet voor spelers gebruikt.
 - Een Cloudflare Worker in TypeScript beheert de publieke HTTPS-API,
   Firebase-tokenvalidatie en WebSocket-upgrades.
+- `api.mtgbattlearena.nl` is de publieke REST-gateway. De online Worker stuurt
+  `/api/import/archidekt/*` intern via een Cloudflare service binding door naar
+  de afzonderlijke import-Worker.
+- `ws.mtgbattlearena.nl` accepteert uitsluitend de WebSocket-upgrade. De
+  API-hostnaam accepteert geen socket-upgrade en de WebSocket-hostnaam
+  publiceert geen REST-routes.
 - Eén SQLite-backed `LobbyDurableObject` bewaart lobby’s, deelnemers,
   zichtbaarheid, statussen en gamecodes.
 - Iedere wedstrijd heeft precies één SQLite-backed `GameDurableObject` met de
@@ -79,6 +85,18 @@ Het Durable Object bewaart de volledige state en serialiseert per verbinding een
 
 Online Redux is uitsluitend de ontvangen clientview plus lokale UI-state. Een lokaal gemanipuleerde Redux-store verandert de server niet.
 
+De online middenbalk volgt dezelfde taakverdeling als offline: fase,
+beurtverloop, Monarch, Initiative en Dag/Nacht zijn publieke,
+server-authoritative matchstatus. Trekken, millen en schudden horen bij het
+actiemenu van de eigen library en staan niet in de globale middenbalk.
+
+De openingshand is eveneens authoritative. Iedere speler ontvangt alleen de
+eigen zeven kaarten en stuurt `MULLIGAN_HAND` of `KEEP_HAND` als versioned
+command. De server voert de shuffle en nieuwe draw uit, bewaart per speler het
+aantal mulligans en blokkeert gewone spelcommands totdat alle spelers hun hand
+hebben gehouden. Tegenstanders en spectators zien alleen of een speler gereed
+is, nooit de inhoud van die hand.
+
 ### Reconnect en versiebeheer
 
 Het Durable Object verhoogt na iedere geaccepteerde actie de gameversie. Bij een versieconflict ontvangt de client een afwijzing en een verse persoonlijke snapshot. Na reconnect wordt eerst een volledige persoonlijke snapshot geladen en pas daarna worden nieuwe events verwerkt.
@@ -123,23 +141,53 @@ De eerste infrastructuurslice volgt dit besluit als volgt:
 - de actuele game-state blijft in geheugen; alleen initialisatie en
   geaccepteerde statewijzigingen schrijven een herstelbaar SQLite-snapshot;
 - `DRAW_CARD`, `MOVE_CARD`, `CHANGE_LIFE`, `CHANGE_POISON`, `MILL`,
-  `SHUFFLE_LIBRARY` en `PASS_TURN` zijn authoritative en verhogen ieder de
-  stateversie. Bekende maar nog niet gebouwde commands geven `NOT_READY`;
+  `SHUFFLE_LIBRARY`, `NEXT_PHASE`, `PASS_TURN`, `SET_MONARCH`,
+  `SET_INITIATIVE` en `SET_DAY_NIGHT` zijn authoritative en verhogen ieder de
+  stateversie;
 - één serializer maakt per WebSocket een afzonderlijke snapshot. Publieke
   zones worden volledig getoond, de eigen hand staat alleen in `privateView`
   en handen/libraries van anderen bestaan uitsluitend als aantallen;
 - de online React-route bewaart alleen deze gevalideerde persoonlijke view in
   de online Redux-slice. De WebSocket-adapter vraagt voor iedere reconnect een
   nieuw eenmalig ticket en vervangt de clientview met de eerste verse snapshot;
+- de online battle-route gebruikt dezelfde volledige, verticale
+  tegenover-elkaar-compositie als de offline tafel. De componenten lezen
+  uitsluitend de persoonlijke serverview: de eigen hand wordt als kaarten
+  getoond en handen van tegenstanders blijven kaartachterkanten met een aantal;
+- dezelfde dnd-kit-interactie wordt online gebruikt voor de eigen zichtbare
+  kaarten en zones. Een drop dispatcht geen lokale Redux-mutatie maar één
+  versioned `MOVE_CARD`-command, inclusief genormaliseerde battlefieldpositie;
+  pas de volgende persoonlijke serversnapshot bevestigt de verplaatsing;
+- één gedeelde arena-statusprovider controleert bij opstarten, terugkeer naar
+  het tabblad, browser-reconnect en vervolgens periodiek de publieke
+  `/api/online/health`-route. Alleen de hoofdbalk toont deze serverstatus;
+  wanneer de healthcheck faalt, verbergt de online overzichtsroute login-,
+  join- en aanmaakacties en biedt zij retry en offline spelen aan;
+- een geauthenticeerde lobbylijst bevat alleen de rol van de huidige viewer
+  (`host`, `player` of `spectator`) en nooit UID's van andere deelnemers. De
+  web-UI toont join- en aanmaakacties alleen na login en opent een wachtende
+  lobby niet als een al geïnitialiseerde game;
+- wachtende games hebben een afzonderlijke lobbyroute. Deze haalt via HTTPS
+  periodiek een geminimaliseerde deelnemerslijst op en navigeert alle
+  deelnemers naar het speelveld zodra de status `active` wordt. Alleen de
+  geverifieerde host kan een nog niet gestarte lobby definitief verwijderen;
+- iedere speler registreert in de wachtkamer uitsluitend zijn eigen
+  genormaliseerde decksnapshot. De Lobby Durable Object bewaart deze
+  startpayload per geverifieerde UID, maar retourneert aan de wachtkamer alleen
+  de decknaam en gereedstatus. De host kan geen decks of seats voor andere
+  spelers aanleveren;
+- de host-startactie wordt pas geaccepteerd wanneer exact het ingestelde aantal
+  spelers aanwezig is en iedere speler een deck heeft geregistreerd. De Worker
+  bouwt daarna server-side de `OnlineGameSeed`, initialiseert het Game Durable
+  Object en markeert de lobby pas na een geldige persoonlijke snapshot als
+  actief;
 - de UI gebruikt standaard mocks. Een ingestelde echte API zonder gekoppelde
   Firebase-port faalt zichtbaar en veilig, terwijl alle offline routes blijven
   werken.
 
-De host-initialisatieroute accepteert gevalideerde decks voor exact de
-server-toegewezen spelers. Door de browser ingestuurde UID’s worden niet
-geaccepteerd: de Worker voegt UID en displaynaam pas na de
-Lobby-Durable-Object-deelnemerscontrole toe aan de interne seed. De volgende
-integratieslice laat iedere deelnemer een
-eigen immutable decksnapshot registreren en voegt een expliciete host-startactie
-toe; tot die tijd gebruikt de web-UI zonder productieconfiguratie de speelbare
-vier-spelersfixture.
+De browser kan bij deckregistratie geen betrouwbare UID, `playerId`, seat of
+displaynaam aanleveren. De Worker koppelt de payload aan de geverifieerde
+Firebase-UID; de Lobby Durable Object voegt pas bij de start de
+server-toegewezen speler-ID en displaynaam aan de interne seed toe. De
+voormalige publieke initialisatieroute waarbij de host alle spelerdecks
+aanleverde is verwijderd.

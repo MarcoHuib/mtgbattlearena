@@ -11,6 +11,8 @@ import { ResumeScreen } from "./features/menu/ResumeScreen"
 import { SettingsScreen } from "./features/menu/SettingsScreen"
 import { OnlineScreen } from "./features/online/OnlineScreen"
 import { OnlineGameScreen } from "./features/online/OnlineGameScreen"
+import { LobbyRoomScreen } from "./features/online/LobbyRoomScreen"
+import { ArenaStatusProvider } from "./features/online/ArenaStatus"
 import {
   createApplicationServices,
   type ApplicationServices,
@@ -60,7 +62,7 @@ export const App = ({ services = defaultServices }: AppProps) => {
 
   let content
   if (route === "/") {
-    content = <MainMenu onlineGames={services.onlineGames} />
+    content = <MainMenu />
   } else if (route === "/offline") {
     content = (
       <SetupScreen
@@ -92,6 +94,26 @@ export const App = ({ services = defaultServices }: AppProps) => {
         onEnterGame={gameId => {
           navigate(`/online/game/${encodeURIComponent(gameId)}`)
         }}
+        onEnterLobby={gameId => {
+          navigate(`/online/lobby/${encodeURIComponent(gameId)}`)
+        }}
+      />
+    )
+  } else if (route.startsWith("/online/lobby/")) {
+    const authState = services.auth.getState()
+    content = (
+      <LobbyRoomScreen
+        gameId={decodeURIComponent(route.slice("/online/lobby/".length))}
+        deckOwnerId={
+          authState.status === "signed-in" ? authState.user.uid : "signed-out"
+        }
+        onlineGames={services.onlineGames}
+        onEnterGame={gameId => {
+          navigate(`/online/game/${encodeURIComponent(gameId)}`, true)
+        }}
+        onLeave={() => {
+          navigate("/online", true)
+        }}
       />
     )
   } else if (route.startsWith("/online/game/")) {
@@ -102,15 +124,15 @@ export const App = ({ services = defaultServices }: AppProps) => {
       />
     )
   } else if (route === "/decks") {
-    content = <DecksScreen />
+    content = <DecksScreen auth={services.auth} />
   } else if (route === "/resume") {
     content = <ResumeScreen onlineGames={services.onlineGames} />
   } else {
-    content = <SettingsScreen onlineGames={services.onlineGames} />
+    content = <SettingsScreen />
   }
 
   return (
-    <>
+    <ArenaStatusProvider onlineGames={services.onlineGames}>
       {content}
       {bootStatus === "error" ? (
         <div className="storage-alert" role="alert">
@@ -153,6 +175,6 @@ export const App = ({ services = defaultServices }: AppProps) => {
         </div>
       ) : null}
       <UpdatePrompt />
-    </>
+    </ArenaStatusProvider>
   )
 }

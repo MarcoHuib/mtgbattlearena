@@ -11,7 +11,17 @@ const snapshot = (gameId: string, version: number): PersonalGameSnapshot => ({
   role: "spectator",
   activePlayerId: "p1",
   turnNumber: version + 1,
+  phase: "beginning",
+  matchStatus: {
+    monarchPlayerId: null,
+    initiativePlayerId: null,
+    dayNight: "none",
+  },
   turnOrder: ["p1", "p2"],
+  openingHands: {
+    p1: { mulliganCount: 0, kept: true },
+    p2: { mulliganCount: 0, kept: true },
+  },
   players: {
     p1: {
       id: "p1",

@@ -5,10 +5,9 @@ import {
   normalizeArchidektDeck,
   normalizeArchidektTokens,
 } from "./adapter"
+import { archidektImportUrl } from "./endpoints"
 import { DeckImportError } from "./errors"
 import { parseArchidektDeckId } from "./url"
-
-const IMPORT_BASE = "/api/import/archidekt"
 
 const withUniqueDefinitions = (
   deck: ImportedDeck,
@@ -40,7 +39,7 @@ export const importArchidektDeck: DeckImporter = async (url, signal) => {
     : timeoutController.signal
 
   try {
-    const response = await fetch(`${IMPORT_BASE}/${deckId}`, {
+    const response = await fetch(archidektImportUrl(`/${deckId}`), {
       headers: { Accept: "application/json" },
       signal: combinedSignal,
     })
@@ -62,7 +61,21 @@ export const importArchidektDeck: DeckImporter = async (url, signal) => {
         "Archidekt is nu niet bereikbaar. Probeer het later opnieuw.",
       )
     }
-    const rawDeck: unknown = await response.json()
+    if (!response.headers.get("Content-Type")?.includes("application/json")) {
+      throw new DeckImportError(
+        "INVALID_RESPONSE",
+        "De deckservice gaf geen geldige deckdata terug. Probeer het later opnieuw.",
+      )
+    }
+    let rawDeck: unknown
+    try {
+      rawDeck = await response.json()
+    } catch {
+      throw new DeckImportError(
+        "INVALID_RESPONSE",
+        "De deckservice gaf onleesbare deckdata terug. Probeer het later opnieuw.",
+      )
+    }
     const deck = normalizeArchidektDeck(rawDeck, deckId)
     const deckWithExtras = withUniqueDefinitions(
       deck,
@@ -73,7 +86,9 @@ export const importArchidektDeck: DeckImporter = async (url, signal) => {
 
     try {
       const tokenResponse = await fetch(
-        `${IMPORT_BASE}/tokens?ids=${encodeURIComponent(tokenIds.join(","))}`,
+        archidektImportUrl(
+          `/tokens?ids=${encodeURIComponent(tokenIds.join(","))}`,
+        ),
         {
           headers: { Accept: "application/json" },
           signal: combinedSignal,

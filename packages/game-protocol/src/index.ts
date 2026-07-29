@@ -3,12 +3,15 @@ export {
   parseGameCommand,
   parsePersonalSnapshot,
   parseServerEvent,
+  onlineDeckCardSchema,
+  onlineDeckSubmissionSchema,
   personalGameSnapshotSchema,
   protocolErrorSchema,
   serverEventSchema,
 } from "./schemas"
 export type {
   GameCommand,
+  OnlineDeckSubmission,
   PersonalGameSnapshot,
   ProtocolError,
   PublicOnlinePlayer,

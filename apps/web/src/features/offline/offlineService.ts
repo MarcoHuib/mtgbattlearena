@@ -7,6 +7,7 @@ import type {
 import { browserAssetCache } from "../../persistence/assetCache"
 import { repositories } from "../../persistence/database"
 import type { RootState } from "../../app/store"
+import { archidektImportUrl } from "../../archidekt/endpoints"
 import { updateOfflinePackage } from "./offlineSlice"
 
 const activeDownloads = new Map<string, AbortController>()
@@ -22,7 +23,7 @@ export const offlineAssetFetchUrl = (assetUrl: string): string => {
     const hash = url.search.slice(1)
     if (!match || !/^\d+$/.test(hash)) return assetUrl
     const [, face, cardId] = match
-    return `/api/import/archidekt/image/${cardId}?face=${face}&hash=${hash}`
+    return archidektImportUrl(`/image/${cardId}?face=${face}&hash=${hash}`)
   } catch {
     return assetUrl
   }

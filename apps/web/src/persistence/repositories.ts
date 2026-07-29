@@ -20,9 +20,11 @@ export type GameRepository = {
 }
 
 export type DeckSnapshotRepository = {
-  save(deck: DeckSnapshot): Promise<void>
+  save(deck: DeckSnapshot, ownerId?: string): Promise<void>
   get(id: string): Promise<DeckSnapshot | null>
   getMany(ids: readonly string[]): Promise<DeckSnapshot[]>
+  list(ownerId?: string): Promise<DeckSnapshot[]>
+  delete(id: string, ownerId?: string): Promise<void>
 }
 
 export type OfflinePackageRepository = {

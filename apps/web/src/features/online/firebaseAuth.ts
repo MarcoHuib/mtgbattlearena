@@ -22,6 +22,47 @@ type FirebaseEnvironment = Partial<
   Record<FirebaseEnvironmentKey, string | undefined>
 >
 
+const firebaseAuthMessages: Record<string, string> = {
+  "auth/email-already-in-use":
+    "Dit e-mailadres is al gekoppeld aan een account. Probeer in te loggen.",
+  "auth/invalid-credential":
+    "De combinatie van e-mailadres en wachtwoord klopt niet.",
+  "auth/invalid-email": "Vul een geldig e-mailadres in.",
+  "auth/network-request-failed":
+    "Firebase kon niet worden bereikt. Controleer je verbinding en probeer opnieuw.",
+  "auth/operation-not-allowed":
+    "Deze inlogmethode staat nog niet aan in Firebase Authentication.",
+  "auth/popup-blocked":
+    "De Google-login werd door de browser geblokkeerd. Sta pop-ups toe en probeer opnieuw.",
+  "auth/popup-closed-by-user":
+    "De Google-login is gesloten voordat deze was afgerond.",
+  "auth/too-many-requests":
+    "Er zijn te veel inlogpogingen gedaan. Wacht even en probeer opnieuw.",
+  "auth/unauthorized-domain":
+    "Dit domein is nog niet toegestaan in Firebase Authentication.",
+  "auth/weak-password": "Kies een wachtwoord van minimaal zes tekens.",
+}
+
+export const describeFirebaseAuthError = (error: unknown) => {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = String(error.code)
+    const knownMessage = firebaseAuthMessages[code]
+    if (knownMessage) return knownMessage
+  }
+
+  if (
+    error instanceof TypeError ||
+    (error instanceof Error &&
+      /load failed|failed to fetch|networkerror/i.test(error.message))
+  ) {
+    return "Firebase kon niet worden bereikt. Controleer je verbinding en probeer opnieuw."
+  }
+
+  return error instanceof Error && error.message
+    ? error.message
+    : "Inloggen is mislukt. Probeer het opnieuw."
+}
+
 export type FirebaseConfigResult =
   | { configured: true; options: FirebaseOptions }
   | { configured: false; missing: FirebaseEnvironmentKey[] }

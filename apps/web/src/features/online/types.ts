@@ -4,10 +4,20 @@ import type {
   PersonalGameSnapshot,
   ServerEvent,
 } from "@mtg/game-protocol"
+import type { DeckSnapshot } from "@mtg/game-core/types"
 
 export type ConnectionRole = "player" | "spectator"
 export type LobbyVisibility = "public" | "private" | "invite-only"
 export type LobbyStatus = "waiting" | "starting" | "active" | "finished"
+
+export const arenaHealthSchema = z
+  .object({
+    status: z.literal("ok"),
+    firebaseConfigured: z.boolean(),
+  })
+  .strict()
+
+export type ArenaHealth = z.infer<typeof arenaHealthSchema>
 
 export const onlineLobbySchema = z
   .object({
@@ -21,12 +31,34 @@ export const onlineLobbySchema = z
     playerCount: z.number().int().min(0).max(6),
     maxPlayers: z.number().int().min(2).max(6),
     createdAt: z.iso.datetime(),
+    viewerRole: z.enum(["host", "player", "spectator"]).nullable(),
   })
   .strict()
 
 export const lobbyListSchema = z.array(onlineLobbySchema)
 
 export type OnlineLobby = z.infer<typeof onlineLobbySchema>
+
+export const lobbyParticipantSchema = z
+  .object({
+    displayName: z.string().min(1).max(80),
+    role: z.enum(["player", "spectator"]),
+    seatNumber: z.number().int().min(0).max(5).nullable(),
+    isHost: z.boolean(),
+    isViewer: z.boolean(),
+    deckReady: z.boolean(),
+    deckName: z.string().min(1).max(120).nullable(),
+  })
+  .strict()
+
+export const lobbyRoomSchema = z
+  .object({
+    lobby: onlineLobbySchema,
+    participants: z.array(lobbyParticipantSchema),
+  })
+  .strict()
+
+export type LobbyRoom = z.infer<typeof lobbyRoomSchema>
 
 export type AuthUser = {
   uid: string
@@ -79,9 +111,14 @@ export type OnlineGameConnection = {
 
 export type OnlineGameService = {
   readonly kind: "mock" | "cloudflare"
+  checkHealth(signal?: AbortSignal): Promise<ArenaHealth>
   listPublicLobbies(signal?: AbortSignal): Promise<OnlineLobby[]>
   createLobby(input: CreateLobbyInput): Promise<OnlineLobby>
   joinByCode(code: string): Promise<JoinLobbyResult>
+  getLobbyRoom(gameId: string, signal?: AbortSignal): Promise<LobbyRoom>
+  deleteLobby(gameId: string): Promise<void>
+  registerDeck(gameId: string, deck: DeckSnapshot): Promise<void>
+  startGame(gameId: string): Promise<void>
   createSocketTicket(gameId: string): Promise<{
     ticket: string
     expiresAt: string

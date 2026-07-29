@@ -1,4 +1,4 @@
-import { readFirebaseConfig } from "./firebaseAuth"
+import { describeFirebaseAuthError, readFirebaseConfig } from "./firebaseAuth"
 
 describe("Firebase webconfig", () => {
   test("maakt FirebaseOptions van een complete Vite-configuratie", () => {
@@ -34,5 +34,14 @@ describe("Firebase webconfig", () => {
         "VITE_FIREBASE_APP_ID",
       ],
     })
+  })
+
+  test("vertaalt mobiele netwerk- en Firebase-fouten naar bruikbare tekst", () => {
+    expect(describeFirebaseAuthError(new TypeError("Load failed"))).toBe(
+      "Firebase kon niet worden bereikt. Controleer je verbinding en probeer opnieuw.",
+    )
+    expect(
+      describeFirebaseAuthError({ code: "auth/operation-not-allowed" }),
+    ).toBe("Deze inlogmethode staat nog niet aan in Firebase Authentication.")
   })
 })

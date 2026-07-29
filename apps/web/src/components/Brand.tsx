@@ -5,7 +5,7 @@ export const Brand = () => (
     </span>
     <span>
       <strong>Battle Mode</strong>
-      <small>local tabletop</small>
+      <small>digital spelltable</small>
     </span>
   </div>
 )

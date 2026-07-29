@@ -1,12 +1,10 @@
 import type {
   GameCommand,
+  OnlineDeckSubmission,
   PersonalGameSnapshot,
   ServerEvent,
 } from "@mtg/game-protocol"
-import type {
-  OnlineGameSeed,
-  OnlineGameSubmission,
-} from "./game-server-adapter"
+import type { OnlineGameSeed } from "./game-server-adapter"
 
 export type SqlStorageValue = string | number | ArrayBuffer | null
 
@@ -72,6 +70,22 @@ export type LobbySummary = {
   playerCount: number
   maxPlayers: number
   createdAt: string
+  viewerRole: LobbyRole | null
+}
+
+export type LobbyParticipantSummary = {
+  displayName: string
+  role: ConnectionRole
+  seatNumber: number | null
+  isHost: boolean
+  isViewer: boolean
+  deckReady: boolean
+  deckName: string | null
+}
+
+export type LobbyRoom = {
+  lobby: LobbySummary
+  participants: LobbyParticipantSummary[]
 }
 
 export type CreateLobbyInput = {
@@ -110,7 +124,7 @@ export type GameSnapshotResult = RpcResult<PersonalGameSnapshot | ServerEvent>
 
 export type LobbyDurableObjectStub = {
   fetch(request: Request): Promise<Response>
-  listPublicLobbies(): Promise<LobbySummary[]>
+  listPublicLobbies(viewerUid?: string): Promise<LobbySummary[]>
   createLobby(
     input: CreateLobbyInput,
     identity: VerifiedIdentity,
@@ -120,16 +134,28 @@ export type LobbyDurableObjectStub = {
     requestedRole: ConnectionRole,
     identity: VerifiedIdentity,
   ): Promise<RpcResult<JoinLobbyResult>>
+  getLobbyRoom(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): Promise<RpcResult<LobbyRoom>>
+  deleteLobby(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): Promise<RpcResult<null>>
+  registerDeck(
+    gameId: string,
+    identity: VerifiedIdentity,
+    submission: OnlineDeckSubmission,
+  ): Promise<RpcResult<null>>
   getSession(gameId: string, uid: string): Promise<GameSession | null>
   issueSocketTicket(
     gameId: string,
     identity: VerifiedIdentity,
   ): Promise<RpcResult<SocketTicket>>
   consumeSocketTicket(ticket: string): Promise<GameSession | null>
-  prepareGame(
+  prepareRegisteredGame(
     gameId: string,
     identity: VerifiedIdentity,
-    submission: OnlineGameSubmission,
   ): Promise<RpcResult<{ seed: OnlineGameSeed; session: GameSession }>>
   markGameActive(
     gameId: string,
@@ -154,9 +180,14 @@ export type DurableObjectNamespace<TStub> = {
   getByName(name: string): TStub
 }
 
+export type WorkerService = {
+  fetch(request: Request): Promise<Response>
+}
+
 export type Env = {
   LOBBY: DurableObjectNamespace<LobbyDurableObjectStub>
   GAMES: DurableObjectNamespace<GameDurableObjectStub>
+  IMPORT: WorkerService
   FIREBASE_PROJECT_ID: string
   ALLOWED_ORIGIN?: string
 }

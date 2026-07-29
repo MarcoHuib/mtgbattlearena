@@ -1,6 +1,7 @@
 import { LobbyDurableObject } from "../src/lobby-durable-object"
 import type {
   AddParticipantResult,
+  LobbyDeckRecord,
   LobbyRecord,
   LobbyStore,
   ParticipantRecord,
@@ -16,13 +17,18 @@ import type {
 class MemoryLobbyStore implements LobbyStore {
   private readonly lobbies = new Map<string, LobbyRecord>()
   private readonly participants = new Map<string, ParticipantRecord>()
+  private readonly decks = new Map<string, LobbyDeckRecord>()
 
-  listPublic() {
+  listVisible(viewerUid?: string) {
     return [...this.lobbies.values()]
       .filter(
-        lobby => lobby.visibility === "public" && lobby.status === "waiting",
+        lobby =>
+          (lobby.visibility === "public" && lobby.status === "waiting") ||
+          (viewerUid !== undefined &&
+            lobby.status !== "finished" &&
+            this.getParticipant(lobby.id, viewerUid) !== null),
       )
-      .map(lobby => this.summary(this.withCount(lobby)))
+      .map(lobby => this.withCount(lobby))
   }
 
   getByCode(code: string) {
@@ -54,13 +60,39 @@ class MemoryLobbyStore implements LobbyStore {
   }
 
   listPlayers(gameId: string) {
+    return this.listParticipants(gameId).filter(
+      participant => participant.role === "player",
+    )
+  }
+
+  listParticipants(gameId: string) {
     return [...this.participants.values()]
-      .filter(
-        participant =>
-          participant.gameId === gameId && participant.role === "player",
+      .filter(participant => participant.gameId === gameId)
+      .sort(
+        (left, right) =>
+          (left.seatNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.seatNumber ?? Number.MAX_SAFE_INTEGER),
       )
-      .sort((left, right) => (left.seatNumber ?? 0) - (right.seatNumber ?? 0))
       .map(participant => structuredClone(participant))
+  }
+
+  getDeck(gameId: string, uid: string) {
+    return (
+      structuredClone(this.decks.get(this.participantKey(gameId, uid))) ?? null
+    )
+  }
+
+  listDecks(gameId: string) {
+    return [...this.decks.values()]
+      .filter(deck => deck.gameId === gameId)
+      .map(deck => structuredClone(deck))
+  }
+
+  upsertDeck(record: LobbyDeckRecord) {
+    this.decks.set(
+      this.participantKey(record.gameId, record.uid),
+      structuredClone(record),
+    )
   }
 
   addParticipant(
@@ -91,25 +123,21 @@ class MemoryLobbyStore implements LobbyStore {
     return true
   }
 
+  deleteLobby(gameId: string) {
+    if (!this.lobbies.delete(gameId)) return false
+    for (const [key, participant] of this.participants) {
+      if (participant.gameId === gameId) this.participants.delete(key)
+    }
+    for (const [key, deck] of this.decks) {
+      if (deck.gameId === gameId) this.decks.delete(key)
+    }
+    return true
+  }
+
   private withCount(lobby: LobbyRecord): LobbyRecord {
     return {
       ...structuredClone(lobby),
       playerCount: this.listPlayers(lobby.id).length,
-    }
-  }
-
-  private summary(lobby: LobbyRecord) {
-    return {
-      id: lobby.id,
-      code: lobby.code,
-      title: lobby.title,
-      hostDisplayName: lobby.hostDisplayName,
-      format: lobby.format,
-      visibility: lobby.visibility,
-      status: lobby.status,
-      playerCount: lobby.playerCount,
-      maxPlayers: lobby.maxPlayers,
-      createdAt: lobby.createdAt,
     }
   }
 
@@ -162,8 +190,13 @@ describe("Lobby Durable Object RPC", () => {
     const gameId = created.value.id
     const code = created.value.code
     expect(lobby.listPublicLobbies()).toEqual([
-      expect.objectContaining({ id: gameId, playerCount: 1 }),
+      expect.objectContaining({
+        id: gameId,
+        playerCount: 1,
+        viewerRole: null,
+      }),
     ])
+    expect(lobby.listPublicLobbies(host.uid)[0]?.viewerRole).toBe("host")
 
     for (const uid of ["two", "three", "four"]) {
       const joined = lobby.joinByCode(code, "player", identity(uid))
@@ -180,6 +213,23 @@ describe("Lobby Durable Object RPC", () => {
     expect(
       lobby.joinByCode(code, "player", identity("too-many")),
     ).toMatchObject({ ok: false, code: "LOBBY_FULL" })
+    const room = lobby.getLobbyRoom(gameId, identity("two"))
+    expect(room).toMatchObject({
+      ok: true,
+      value: { lobby: { viewerRole: "player" } },
+    })
+    if (!room.ok) return
+    expect(room.value.participants).toHaveLength(5)
+    expect(room.value.participants[0]).toMatchObject({
+      displayName: "User host",
+      isHost: true,
+      isViewer: false,
+    })
+    expect(room.value.participants[1]).toMatchObject({
+      displayName: "User two",
+      isHost: false,
+      isViewer: true,
+    })
 
     const hostSession = lobby.getSession(gameId, host.uid)
     const viewerSession = lobby.getSession(gameId, "viewer")
@@ -209,7 +259,39 @@ describe("Lobby Durable Object RPC", () => {
     expect(await lobby.consumeSocketTicket(issued.value.ticket)).toBeNull()
   })
 
-  test("bindt initialisatie aan exact de serverseats en archiveert de open lobby", () => {
+  test("laat alleen de host een wachtende lobby verwijderen", () => {
+    const store = new MemoryLobbyStore()
+    const lobby = new LobbyDurableObject(
+      state,
+      {} as Env,
+      store,
+      new MemorySocketTicketRepository(),
+    )
+    const host = identity("host")
+    const created = lobby.createLobby(
+      {
+        title: "Tijdelijke tafel",
+        format: "Commander",
+        visibility: "public",
+        maxPlayers: 4,
+      },
+      host,
+    )
+    if (!created.ok) throw new Error("Lobby creation failed.")
+    lobby.joinByCode(created.value.code, "player", identity("guest"))
+
+    expect(
+      lobby.deleteLobby(created.value.id, identity("guest")),
+    ).toMatchObject({ ok: false, code: "FORBIDDEN" })
+    expect(lobby.deleteLobby(created.value.id, host)).toEqual({
+      ok: true,
+      value: null,
+    })
+    expect(lobby.listPublicLobbies()).toEqual([])
+    expect(lobby.getSession(created.value.id, host.uid)).toBeNull()
+  })
+
+  test("bindt geregistreerde decks aan serverseats en archiveert de open lobby", () => {
     const store = new MemoryLobbyStore()
     const lobby = new LobbyDurableObject(
       state,
@@ -230,44 +312,93 @@ describe("Lobby Durable Object RPC", () => {
     if (!created.ok) throw new Error("Lobby creation failed.")
     lobby.joinByCode(created.value.code, "player", identity("guest"))
     const players = store.listPlayers(created.value.id)
-    const submission = {
-      gameId: created.value.id,
-      title: "Duel",
-      players: players.map(player => ({
-        playerId: player.playerId ?? "",
-        displayName: "Client value wordt niet vertrouwd",
-        deckSnapshotId: `deck-${player.uid}`,
+    const submission = (uid: string) => ({
+      deckSnapshotId: `deck-${uid}`,
+      deckName: `Deck van ${uid}`,
+      cards: [
+        {
+          definitionId: `card-${uid}`,
+          name: "Testkaart",
+          quantity: 10,
+          isCommander: false,
+        },
+      ],
+    })
+    expect(lobby.prepareRegisteredGame(created.value.id, host)).toMatchObject({
+      ok: false,
+      code: "LOBBY_NOT_READY",
+    })
+    for (const player of players) {
+      expect(
+        lobby.registerDeck(
+          created.value.id,
+          identity(player.uid),
+          submission(player.uid),
+        ),
+      ).toEqual({ ok: true, value: null })
+    }
+    const room = lobby.getLobbyRoom(created.value.id, host)
+    expect(room).toMatchObject({
+      ok: true,
+      value: {
+        participants: [
+          {
+            deckReady: true,
+            deckName: "Deck van host",
+          },
+          {
+            deckReady: true,
+            deckName: "Deck van guest",
+          },
+        ],
+      },
+    })
+
+    const prepared = lobby.prepareRegisteredGame(created.value.id, host)
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    expect(prepared.value.seed.players).toEqual([
+      expect.objectContaining({
+        uid: "host",
+        displayName: "User host",
+        deckSnapshotId: "deck-host",
         cards: [
           {
-            definitionId: `card-${player.uid}`,
+            definitionId: "card-host",
             name: "Testkaart",
             quantity: 10,
             isCommander: false,
           },
         ],
-      })),
-    }
-    const prepared = lobby.prepareGame(created.value.id, host, submission)
-    expect(prepared.ok).toBe(true)
-    if (!prepared.ok) return
-    expect(prepared.value.seed.players.map(player => player.uid)).toEqual([
-      "host",
-      "guest",
+      }),
+      expect.objectContaining({
+        uid: "guest",
+        displayName: "User guest",
+        deckSnapshotId: "deck-guest",
+      }),
     ])
     expect(
-      lobby.prepareGame(created.value.id, identity("guest"), submission),
+      lobby.prepareRegisteredGame(created.value.id, identity("guest")),
     ).toMatchObject({ ok: false, code: "FORBIDDEN" })
-    expect(
-      lobby.prepareGame(created.value.id, host, {
-        ...submission,
-        players: submission.players.slice(0, 1),
-      }),
-    ).toMatchObject({ ok: false, code: "INVALID_REQUEST" })
 
     expect(lobby.markGameActive(created.value.id, host)).toEqual({
       ok: true,
       value: null,
     })
     expect(lobby.listPublicLobbies()).toEqual([])
+    expect(lobby.listPublicLobbies(host.uid)).toEqual([
+      expect.objectContaining({
+        id: created.value.id,
+        status: "active",
+        viewerRole: "host",
+      }),
+    ])
+    expect(lobby.listPublicLobbies("guest")).toEqual([
+      expect.objectContaining({
+        id: created.value.id,
+        status: "active",
+        viewerRole: "player",
+      }),
+    ])
   })
 })

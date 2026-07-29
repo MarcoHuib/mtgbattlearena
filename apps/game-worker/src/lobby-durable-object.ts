@@ -1,9 +1,11 @@
 import { DurableObject } from "cloudflare:workers"
 import {
+  onlineDeckSubmissionSchema,
+  type OnlineDeckSubmission,
+} from "@mtg/game-protocol"
+import {
   onlineGameSeedSchema,
-  onlineGameSubmissionSchema,
   type OnlineGameSeed,
-  type OnlineGameSubmission,
 } from "./game-server-adapter"
 import {
   SqliteLobbyStore,
@@ -23,6 +25,7 @@ import type {
   Env,
   GameSession,
   JoinLobbyResult,
+  LobbyRoom,
   LobbySummary,
   RpcResult,
   VerifiedIdentity,
@@ -87,8 +90,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
     )
   }
 
-  listPublicLobbies(): LobbySummary[] {
-    return this.store.listPublic()
+  listPublicLobbies(viewerUid?: string): LobbySummary[] {
+    return this.store
+      .listVisible(viewerUid)
+      .map(lobby => this.toSummary(lobby, viewerUid))
   }
 
   createLobby(
@@ -124,7 +129,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
       joinedAt: createdAt,
     }
     this.store.insertLobbyWithHost(lobby, host)
-    return { ok: true, value: this.toSummary(lobby) }
+    return { ok: true, value: this.toSummary(lobby, identity.uid) }
   }
 
   joinByCode(
@@ -163,11 +168,103 @@ export class LobbyDurableObject extends DurableObject<Env> {
     return {
       ok: true,
       value: {
-        lobby: this.toSummary(updated),
+        lobby: this.toSummary(updated, identity.uid),
         gameId: lobby.id,
         role: added.participant.role,
       },
     }
+  }
+
+  getLobbyRoom(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): RpcResult<LobbyRoom> {
+    const lobby = this.store.getById(gameId)
+    const viewer = this.store.getParticipant(gameId, identity.uid)
+    if (!lobby || !viewer) {
+      return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
+    }
+    const decks = new Map(
+      this.store
+        .listDecks(gameId)
+        .map(record => [record.uid, record.submission] as const),
+    )
+    return {
+      ok: true,
+      value: {
+        lobby: this.toSummary(lobby, identity.uid),
+        participants: this.store.listParticipants(gameId).map(participant => {
+          const deck = decks.get(participant.uid)
+          return {
+            displayName: participant.displayName,
+            role: participant.role,
+            seatNumber: participant.seatNumber,
+            isHost: participant.uid === lobby.hostUid,
+            isViewer: participant.uid === identity.uid,
+            deckReady: participant.role === "player" && Boolean(deck),
+            deckName:
+              participant.role === "player" ? (deck?.deckName ?? null) : null,
+          }
+        }),
+      },
+    }
+  }
+
+  registerDeck(
+    gameId: string,
+    identity: VerifiedIdentity,
+    submission: OnlineDeckSubmission,
+  ): RpcResult<null> {
+    const lobby = this.store.getById(gameId)
+    const participant = this.store.getParticipant(gameId, identity.uid)
+    if (!lobby || !participant) {
+      return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
+    }
+    if (
+      lobby.status !== "waiting" ||
+      participant.role !== "player" ||
+      !participant.playerId
+    ) {
+      return failure(
+        409,
+        "LOBBY_NOT_READY",
+        "Voor deze deelnemer kan geen deck worden geregistreerd.",
+      )
+    }
+    const parsed = onlineDeckSubmissionSchema.safeParse(submission)
+    if (!parsed.success) {
+      return failure(400, "INVALID_REQUEST", "Het gekozen deck is ongeldig.")
+    }
+    this.store.upsertDeck({
+      gameId,
+      uid: identity.uid,
+      submission: parsed.data,
+      registeredAt: new Date().toISOString(),
+    })
+    return { ok: true, value: null }
+  }
+
+  deleteLobby(gameId: string, identity: VerifiedIdentity): RpcResult<null> {
+    const lobby = this.store.getById(gameId)
+    if (!lobby) {
+      return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
+    }
+    if (lobby.hostUid !== identity.uid) {
+      return failure(
+        403,
+        "FORBIDDEN",
+        "Alleen de geverifieerde host kan deze lobby verwijderen.",
+      )
+    }
+    if (lobby.status !== "waiting") {
+      return failure(
+        409,
+        "LOBBY_ACTIVE",
+        "Een gestarte battle kan niet als lobby worden verwijderd.",
+      )
+    }
+    this.store.deleteLobby(gameId)
+    return { ok: true, value: null }
   }
 
   getSession(gameId: string, uid: string): GameSession | null {
@@ -198,10 +295,9 @@ export class LobbyDurableObject extends DurableObject<Env> {
     return this.tickets.consume(ticket)
   }
 
-  prepareGame(
+  prepareRegisteredGame(
     gameId: string,
     identity: VerifiedIdentity,
-    submission: OnlineGameSubmission,
   ): RpcResult<{
     seed: OnlineGameSeed
     session: GameSession
@@ -214,41 +310,46 @@ export class LobbyDurableObject extends DurableObject<Env> {
         "Alleen de geverifieerde host kan de game starten.",
       )
     }
-    const parsed = onlineGameSubmissionSchema.safeParse(submission)
-    if (!parsed.success || parsed.data.gameId !== gameId) {
+    const lobby = this.store.getById(gameId)
+    if (lobby?.status !== "waiting") {
       return failure(
-        400,
-        "INVALID_REQUEST",
-        "De game-initialisatie is ongeldig.",
+        409,
+        "LOBBY_NOT_READY",
+        "Deze lobby kan niet worden gestart.",
       )
     }
     const players = this.store.listPlayers(gameId)
-    const submittedPlayerIds = parsed.data.players.map(
-      player => player.playerId,
-    )
-    const assignedPlayerIds = players.flatMap(player =>
-      player.playerId ? [player.playerId] : [],
-    )
-    if (
-      assignedPlayerIds.length !== submittedPlayerIds.length ||
-      assignedPlayerIds.some(playerId => !submittedPlayerIds.includes(playerId))
-    ) {
+    if (players.length !== lobby.maxPlayers) {
       return failure(
-        400,
-        "INVALID_REQUEST",
-        "De initialisatie moet exact de server-toegewezen seats bevatten.",
+        409,
+        "LOBBY_NOT_READY",
+        "Alle seats moeten bezet zijn voordat de battle start.",
+      )
+    }
+    const decks = new Map(
+      this.store
+        .listDecks(gameId)
+        .map(record => [record.uid, record.submission] as const),
+    )
+    if (players.some(player => !decks.has(player.uid))) {
+      return failure(
+        409,
+        "LOBBY_NOT_READY",
+        "Iedere speler moet eerst een deck kiezen.",
       )
     }
     const seed = onlineGameSeedSchema.safeParse({
-      ...parsed.data,
-      players: parsed.data.players.map(player => {
-        const participant = players.find(
-          candidate => candidate.playerId === player.playerId,
-        )
+      gameId,
+      title: lobby.title,
+      players: players.map(participant => {
+        const deck = decks.get(participant.uid)
         return {
-          ...player,
-          uid: participant?.uid ?? "",
-          displayName: participant?.displayName ?? player.displayName,
+          playerId: participant.playerId ?? "",
+          uid: participant.uid,
+          displayName: participant.displayName,
+          deckSnapshotId: deck?.deckSnapshotId ?? "",
+          deckName: deck?.deckName ?? "",
+          cards: deck?.cards ?? [],
         }
       }),
     })
@@ -285,7 +386,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
     throw new Error("JOIN_CODE_EXHAUSTED")
   }
 
-  private toSummary(lobby: LobbyRecord): LobbySummary {
+  private toSummary(lobby: LobbyRecord, viewerUid?: string): LobbySummary {
+    const participant = viewerUid
+      ? this.store.getParticipant(lobby.id, viewerUid)
+      : null
     return {
       id: lobby.id,
       code: lobby.code,
@@ -297,6 +401,8 @@ export class LobbyDurableObject extends DurableObject<Env> {
       playerCount: lobby.playerCount,
       maxPlayers: lobby.maxPlayers,
       createdAt: lobby.createdAt,
+      viewerRole:
+        viewerUid === lobby.hostUid ? "host" : (participant?.role ?? null),
     }
   }
 }
