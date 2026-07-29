@@ -31,6 +31,10 @@ omzeilen.
 - De zonebrowser bewaart open/dicht, zoekterm, filters, weergave en tijdelijke
   selectie lokaal in React. Alleen definitieve kaart-, attachment- en
   groepsacties worden naar Redux gestuurd.
+- Library, graveyard en exile delen één compacte zijrail. Graveyard en exile
+  renderen op tafel alleen het laatste instance-ID uit hun zonevolgorde als
+  open bovenste kaart; alle overige kaarten blijven via dezelfde doorzoekbare
+  zonebrowser beschikbaar. Dit verandert de duurzame zonevolgorde niet.
 - Savegames gebruiken schema 5. De migratie van schema 4 initialiseert
   `groupsById` en verwijdert ongeldige of cyclische oude attachmentverwijzingen.
   History-snapshots worden met dezelfde migratie behandeld.

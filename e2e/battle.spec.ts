@@ -290,6 +290,14 @@ test("herstelt een gedownloade battle volledig offline", async ({
   expect(firstPositionX).toBeLessThan(0.65)
   expect(firstPositionY).toBeGreaterThan(0.35)
   expect(firstPositionY).toBeLessThan(0.65)
+  expect(await battlefieldCard.getAttribute("data-dnd-dropping")).toBeNull()
+  const immediateDropBox = await battlefieldCard.boundingBox()
+  await page.waitForTimeout(300)
+  const delayedDropBox = await battlefieldCard.boundingBox()
+  expect(immediateDropBox).not.toBeNull()
+  expect(delayedDropBox).not.toBeNull()
+  expect(delayedDropBox?.x).toBeCloseTo(immediateDropBox?.x ?? 0, 0)
+  expect(delayedDropBox?.y).toBeCloseTo(immediateDropBox?.y ?? 0, 0)
   await expect(battlefieldCard).not.toHaveAttribute("data-dnd-dropping", "")
   await expect(battlefieldCard).not.toHaveAttribute("data-dnd-dragging", "true")
 
@@ -558,10 +566,47 @@ test("herstelt een gedownloade battle volledig offline", async ({
     )
     .toBeLessThan((tappedBaseBox?.width ?? 0) + 5)
   await expect(battlefieldCard).not.toHaveClass(/card--pointer-held/)
-  await expect(battlefieldCard).not.toHaveAttribute("data-dnd-dropping", "")
+  expect(await battlefieldCard.getAttribute("data-dnd-dropping")).toBeNull()
+  const immediateTappedDropBox = await battlefieldCard.boundingBox()
+  await page.waitForTimeout(300)
+  const delayedTappedDropBox = await battlefieldCard.boundingBox()
+  expect(immediateTappedDropBox).not.toBeNull()
+  expect(delayedTappedDropBox).not.toBeNull()
+  expect(delayedTappedDropBox?.x).toBeCloseTo(immediateTappedDropBox?.x ?? 0, 0)
+  expect(delayedTappedDropBox?.y).toBeCloseTo(immediateTappedDropBox?.y ?? 0, 0)
+  await page.mouse.move(0, 0)
   await expect(page.locator("html")).not.toHaveClass(/card-pointer-active/)
-  const movedPositionX = await positionedCard.getAttribute("data-position-x")
-  const movedPositionY = await positionedCard.getAttribute("data-position-y")
+
+  const tappedEdgeStart = await battlefieldCard.boundingBox()
+  const edgeDropPoint = {
+    x: battlefieldSurfaceBox!.x + 2,
+    y: battlefieldSurfaceBox!.y + 2,
+  }
+  expect(tappedEdgeStart).not.toBeNull()
+  const tappedEdgeGrabPoint = await battlefieldCard.evaluate(element => {
+    const bounds = element.getBoundingClientRect()
+    for (let y = Math.floor(bounds.bottom - 2); y > bounds.top; y -= 1) {
+      for (let x = Math.floor(bounds.right - 2); x > bounds.left; x -= 1) {
+        if (document.elementFromPoint(x, y)?.closest(".card") === element) {
+          return { x, y }
+        }
+      }
+    }
+    return null
+  })
+  expect(tappedEdgeGrabPoint).not.toBeNull()
+  await page.mouse.move(tappedEdgeGrabPoint!.x, tappedEdgeGrabPoint!.y)
+  await page.mouse.down()
+  await page.mouse.move(edgeDropPoint.x, edgeDropPoint.y, { steps: 12 })
+  await expect(battlefieldCard).toHaveAttribute("data-dnd-dragging", "true")
+  await page.mouse.up()
+  const tappedEdgeY = Number(
+    await positionedCard.getAttribute("data-position-y"),
+  )
+  const tappedEdgeX = Number(
+    await positionedCard.getAttribute("data-position-x"),
+  )
+  await page.mouse.move(0, 0)
 
   const matchStatus = page.getByRole("region", { name: "Matchstatus" })
   const nextTurnButton = matchStatus.getByRole("button", {
@@ -582,6 +627,49 @@ test("herstelt een gedownloade battle volledig offline", async ({
       battlefieldCard.evaluate(element => getComputedStyle(element).transform),
     )
     .toBe("none")
+
+  await battlefieldCard.scrollIntoViewIfNeeded()
+  const uprightBattlefieldSurfaceBox = await battlefield
+    .locator(".zone__cards")
+    .boundingBox()
+  const uprightEdgeStart = await battlefieldCard.boundingBox()
+  expect(uprightBattlefieldSurfaceBox).not.toBeNull()
+  expect(uprightEdgeStart).not.toBeNull()
+  const uprightEdgeGrabPoint = await battlefieldCard.evaluate(element => {
+    const bounds = element.getBoundingClientRect()
+    for (let y = Math.floor(bounds.bottom - 2); y > bounds.top; y -= 1) {
+      for (let x = Math.floor(bounds.right - 2); x > bounds.left; x -= 1) {
+        if (document.elementFromPoint(x, y)?.closest(".card") === element) {
+          return { x, y }
+        }
+      }
+    }
+    return null
+  })
+  expect(uprightEdgeGrabPoint).not.toBeNull()
+  await page.mouse.move(uprightEdgeGrabPoint!.x, uprightEdgeGrabPoint!.y)
+  await page.mouse.down()
+  await page.mouse.move(
+    uprightBattlefieldSurfaceBox!.x + 2,
+    uprightBattlefieldSurfaceBox!.y + 2,
+    { steps: 12 },
+  )
+  await expect(battlefieldCard).toHaveAttribute("data-dnd-dragging", "true")
+  await page.mouse.up()
+  await expect
+    .poll(async () =>
+      Number(await positionedCard.getAttribute("data-position-y")),
+    )
+    .toBeCloseTo(tappedEdgeY, 3)
+  await expect
+    .poll(async () =>
+      Number(await positionedCard.getAttribute("data-position-x")),
+    )
+    .toBeCloseTo(tappedEdgeX, 3)
+  await page.mouse.move(0, 0)
+  const movedPositionX = await positionedCard.getAttribute("data-position-x")
+  const movedPositionY = await positionedCard.getAttribute("data-position-y")
+
   await expect(hand.locator(".card")).toHaveCount(7)
 
   await page.getByRole("button", { name: "Volgende fase" }).click()
@@ -660,14 +748,92 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await page.getByRole("button", { name: "Kaartacties sluiten" }).click()
 
   const multiSelectCards = hand.locator(".card")
+  const selectedGraveyardCardNames = await Promise.all([
+    multiSelectCards.nth(0).getAttribute("data-card-name"),
+    multiSelectCards.nth(1).getAttribute("data-card-name"),
+  ])
   await multiSelectCards.nth(0).click({ modifiers: ["Meta"] })
   await multiSelectCards.nth(1).click({ modifiers: ["Meta"] })
   await expect(page.getByText("2 geselecteerd")).toBeVisible()
   await page
     .getByLabel("Verplaats geselecteerde kaarten")
     .selectOption("graveyard")
-  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)
+  const graveyard = playerOneBoard.locator(".zone--graveyard")
+  const exile = playerOneBoard.locator(".zone--exile")
+  await expect(graveyard).toHaveAttribute("aria-label", "Graveyard, 2 kaarten")
+  await expect(graveyard.locator(".card")).toHaveCount(1)
+  await expect(graveyard.locator(".card")).toHaveAttribute(
+    "data-card-name",
+    selectedGraveyardCardNames[1] ?? "",
+  )
   await expect(page.getByText("2 geselecteerd")).not.toBeVisible()
+
+  const pileZones = playerOneBoard.locator(".pile-rail > .zone")
+  await expect(pileZones).toHaveCount(3)
+  await expect(pileZones.nth(0)).toHaveClass(/zone--library/)
+  await expect(pileZones.nth(1)).toHaveClass(/zone--graveyard/)
+  await expect(pileZones.nth(2)).toHaveClass(/zone--exile/)
+  const graveyardBox = await graveyard.boundingBox()
+  const exileBox = await exile.boundingBox()
+  expect(graveyardBox).not.toBeNull()
+  expect(exileBox).not.toBeNull()
+  expect(exileBox?.y).toBeGreaterThan(
+    (graveyardBox?.y ?? 0) + (graveyardBox?.height ?? 0),
+  )
+
+  await playerOneBoard
+    .getByRole("button", { name: "Graveyard-acties openen" })
+    .click()
+  const graveyardMenu = playerOneBoard.getByRole("menu")
+  await graveyardMenu
+    .getByRole("menuitem", { name: "Doorzoek graveyard" })
+    .click()
+  const graveyardBrowser = page.getByRole("dialog", {
+    name: "Graveyard bekijken",
+  })
+  await expect(graveyardBrowser.getByLabel("Zoek op kaartnaam")).toBeFocused()
+  await expect(graveyardBrowser.locator(".zone-browser__item")).toHaveCount(2)
+  await graveyardBrowser
+    .getByLabel("Zoek op kaartnaam")
+    .fill(selectedGraveyardCardNames[0] ?? "")
+  await expect(
+    graveyardBrowser.getByText(selectedGraveyardCardNames[0] ?? "").first(),
+  ).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  const graveyardTopCard = graveyard.locator(".card")
+  const graveyardTopCardName =
+    (await graveyardTopCard.getAttribute("data-card-name")) ?? ""
+  await graveyardTopCard.click({ button: "right" })
+  await page
+    .getByLabel(`Verplaats ${graveyardTopCardName}`)
+    .selectOption("exile")
+  await expect(graveyard).toHaveAttribute("aria-label", "Graveyard, 1 kaart")
+  await expect(exile).toHaveAttribute("aria-label", "Exile, 1 kaart")
+  await expect(exile.locator(".card")).toHaveCount(1)
+  await expect(exile.locator(".card")).toHaveAttribute(
+    "data-card-name",
+    graveyardTopCardName,
+  )
+  await playerOneBoard
+    .getByRole("button", { name: "Exile-acties openen" })
+    .click()
+  await playerOneBoard
+    .getByRole("menu")
+    .getByRole("menuitem", { name: "Doorzoek exile" })
+    .click()
+  const exileBrowser = page.getByRole("dialog", { name: "Exile bekijken" })
+  await expect(exileBrowser.getByLabel("Zoek op kaartnaam")).toBeFocused()
+  await expect(exileBrowser.locator(".zone-browser__item")).toHaveCount(1)
+  await page.keyboard.press("Escape")
+  await exile.locator(".card").click({ button: "right" })
+  await page
+    .getByLabel(`Verplaats ${graveyardTopCardName}`)
+    .selectOption("graveyard")
+  await expect(graveyard).toHaveAttribute("aria-label", "Graveyard, 2 kaarten")
+  await expect(graveyard.locator(".card")).toHaveCount(1)
+  await expect(exile).toHaveAttribute("aria-label", "Exile, 0 kaarten")
+  await expect(exile.locator(".card")).toHaveCount(0)
 
   await page
     .getByRole("button", { name: /Verlaag leven van Verdant Resolve/ })
@@ -681,7 +847,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
   ).toBeVisible()
   await expect(treasureTokens).toHaveCount(2)
   await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
-  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)
+  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(1)
   await expect(page.getByText(/Lokaal opgeslagen/)).toBeVisible()
 
   await page.reload()
@@ -717,7 +883,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
   )
   await expect(treasureTokens).toHaveCount(2)
   await expect(treasureTokens.first().getByText("shield ×1")).toBeVisible()
-  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(2)
+  await expect(playerOneBoard.locator(".zone--graveyard .card")).toHaveCount(1)
   await expect(positionedCard).toHaveAttribute(
     "data-position-x",
     movedPositionX ?? "",

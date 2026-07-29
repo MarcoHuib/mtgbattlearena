@@ -67,17 +67,6 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
               setBrowser({ zone: "command" })
             }}
           />
-          <ZoneArea
-            playerId={playerId}
-            zone="exile"
-            title="Exile"
-            instances={instancesFor("exile")}
-            definitions={game.cardDefinitionsById}
-            compact
-            onOpen={() => {
-              setBrowser({ zone: "exile" })
-            }}
-          />
         </div>
         <ZoneArea
           playerId={playerId}
@@ -117,9 +106,26 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           title="Graveyard"
           instances={instancesFor("graveyard")}
           definitions={game.cardDefinitionsById}
-          compact
+          faceUpStack
           onOpen={() => {
             setBrowser({ zone: "graveyard" })
+          }}
+          onSearch={() => {
+            setBrowser({ zone: "graveyard", search: true })
+          }}
+        />
+        <ZoneArea
+          playerId={playerId}
+          zone="exile"
+          title="Exile"
+          instances={instancesFor("exile")}
+          definitions={game.cardDefinitionsById}
+          faceUpStack
+          onOpen={() => {
+            setBrowser({ zone: "exile" })
+          }}
+          onSearch={() => {
+            setBrowser({ zone: "exile", search: true })
           }}
         />
       </aside>

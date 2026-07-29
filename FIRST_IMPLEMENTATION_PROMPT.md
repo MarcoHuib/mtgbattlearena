@@ -1,3 +1,5 @@
+> **Status:** historische prompt voor de oorspronkelijke offline verticale slice. Gebruik voor de online uitbreiding `ONLINE_MULTIPLAYER_PROMPT.md`. De beperkingen in dit bestand gelden alleen voor deze eerste mijlpaal.
+
 Lees `AGENTS.md` volledig voordat je wijzigingen maakt. Dit bestand is leidend.
 
 We bouwen de eerste production-ready verticale slice van **MTG Battle Mode**. Bouw nog geen volledige Magic-regelsimulator en voeg nog geen accounts, cloud sync, online multiplayer of React Native-app toe.

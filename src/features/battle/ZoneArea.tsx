@@ -14,6 +14,7 @@ import {
 import { CardView } from "./CardView"
 import { CardGroupOverlay } from "./CardGroupOverlay"
 import { CommanderTaxControl } from "./CommanderTaxControl"
+import { ZoneBrowseMenu } from "./ZoneBrowseMenu"
 
 type ZoneAreaProps = {
   playerId: PlayerId
@@ -23,7 +24,9 @@ type ZoneAreaProps = {
   definitions: Record<string, CardDefinition>
   compact?: boolean
   countOnly?: boolean
+  faceUpStack?: boolean
   onOpen?: () => void
+  onSearch?: () => void
   onActions?: (request: {
     point: { x: number; y: number }
     position?: { x: number; y: number }
@@ -51,7 +54,9 @@ export const ZoneArea = ({
   definitions,
   compact = false,
   countOnly = false,
+  faceUpStack = false,
   onOpen,
+  onSearch,
   onActions,
 }: ZoneAreaProps) => {
   const groupsById = useAppSelector(state => state.game.present?.groupsById)
@@ -79,14 +84,22 @@ export const ZoneArea = ({
         )
       : instances
   const hasCommanderGroup = zone === "command" && instances.length > 1
+  const topInstance = faceUpStack ? instances.at(-1) : undefined
+  const topDefinition = topInstance
+    ? definitions[topInstance.definitionId]
+    : undefined
 
   return (
     <section
       ref={ref}
       className={`zone zone--${zone} ${
         isDropTarget ? "zone--drop-target" : ""
-      } ${hasCommanderGroup ? "zone--commander-group" : ""}`}
-      aria-label={`${title}, ${instances.length} kaarten`}
+      } ${hasCommanderGroup ? "zone--commander-group" : ""} ${
+        faceUpStack ? "zone--face-up-stack" : ""
+      }`}
+      aria-label={`${title}, ${instances.length} ${
+        instances.length === 1 ? "kaart" : "kaarten"
+      }`}
       onContextMenu={event => {
         if (
           !onActions ||
@@ -121,7 +134,9 @@ export const ZoneArea = ({
       <div className="zone__label">
         <span>{title}</span>
         <strong>{instances.length}</strong>
-        {onActions || onOpen ? (
+        {onOpen && onSearch ? (
+          <ZoneBrowseMenu title={title} onBrowse={onOpen} onSearch={onSearch} />
+        ) : onActions || onOpen ? (
           <button
             type="button"
             className="zone__menu-trigger"
@@ -148,6 +163,22 @@ export const ZoneArea = ({
           <span />
           <span />
           <img src="/magic-card-back.webp" alt="" />
+        </div>
+      ) : faceUpStack ? (
+        <div className="zone__cards zone__cards--face-up-stack">
+          {topInstance && topDefinition ? (
+            <div className="face-up-card-stack">
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+              <CardView
+                instance={topInstance}
+                definition={topDefinition}
+                compact
+              />
+            </div>
+          ) : (
+            <span className="zone__empty">Sleep hierheen</span>
+          )}
         </div>
       ) : (
         <div className="zone__cards">

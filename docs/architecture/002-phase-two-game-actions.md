@@ -23,6 +23,13 @@ continue pointerbewegingen in Redux te bewaren.
 - Selectie, hover, menucoördinaten en de actuele pointerpositie zijn vluchtige
   UI-state. Tijdens slepen volgt geen Redux-dispatch; alleen de definitieve drop
   wordt vastgelegd.
+- De drag-feedback animeert na een geldige drop niet terug naar de oude DOM-
+  placeholder. Redux rendert de kaart direct in de doelzone of op de nieuwe
+  genormaliseerde battlefieldpositie; hoverzoom wordt pas na een volgende
+  pointerbeweging weer toegestaan. Zo is er maar één zichtbare eindpositie.
+- De begrenzing aan de battlefieldrand gebruikt voor beide assen de halve korte
+  kaartzijde. Een rotatie van 90° verandert daardoor niet welke x/y-positie is
+  toegestaan en rechte en getapte kaarten kunnen aan de rand op één rij staan.
 - Tokens zijn gewone stabiele kaartinstanties met een lokale kaartdefinitie.
   Daardoor werken zones, counters, positionering, undo/redo en persistence
   zonder een tweede tokensysteem. Een ontbrekende afbeelding is een ondersteund

@@ -4,34 +4,34 @@ Lees dit bestand volledig voordat je wijzigingen maakt. Dit bestand is leidend v
 
 ## 1. Projectdoel
 
-Bouw een onofficiële, lokale Magic: The Gathering Battle Mode waarmee één gebruiker twee geïmporteerde decks tegenover elkaar kan spelen.
+Bouw een onofficiële Magic: The Gathering Battle Mode die zowel **volledig lokaal/offline** als **optioneel online multiplayer** kan worden gebruikt.
 
-De gebruiker bestuurt beide kanten van het speelveld. De applicatie is een digitale tafel en geen automatische Magic-regelsimulator.
+De applicatie is een digitale tafel en geen automatische Magic-regelsimulator. In offline modus kan één gebruiker meerdere zijden lokaal bedienen. In online modus bestuurt iedere deelnemer zijn eigen speler binnen één gedeelde game.
 
 De kernervaring:
 
-1. Twee openbare Archidekt-deck-URL’s invoeren.
-2. Beide decks importeren en normaliseren.
-3. Een battle starten met twee gespiegeld weergegeven spelers.
-4. Kaarten handmatig tussen zones verplaatsen.
-5. Leven, counters, tapstatus, commander tax en commander damage bijhouden.
-6. De game automatisch lokaal opslaan.
-7. Een battle expliciet downloaden voor volledig offline gebruik, inclusief kaartafbeeldingen.
-8. Een eerder opgeslagen battle zonder internet kunnen starten en hervatten.
+1. Openbare Archidekt-deck-URL’s invoeren, importeren en normaliseren.
+2. Zonder account een lokale battle starten en volledig offline kunnen hervatten.
+3. Kaarten handmatig tussen zones verplaatsen en spelstatussen bijhouden.
+4. De game automatisch lokaal opslaan en expliciet downloaden voor offline gebruik, inclusief kaartafbeeldingen.
+5. Optioneel inloggen via Firebase Authentication.
+6. Een online lobby aanmaken, openbare games bekijken of deelnemen via gamecode/uitnodiging.
+7. Online Commander-games met 2 tot 6 spelers spelen, met 4 als standaard.
+8. Dezelfde pure game-core en kaartmodellen hergebruiken zonder offline van de backend afhankelijk te maken.
 
 ## 2. Productprincipes
 
 ### 2.1 Local-first
 
-Een gestarte game mag niet verloren gaan door een verbroken internetverbinding, refresh, crash of gesloten browser.
+Een gestarte offline game mag niet verloren gaan door een verbroken internetverbinding, refresh, crash of gesloten browser.
 
-Internet is alleen noodzakelijk voor:
+Voor offline gebruik is internet alleen noodzakelijk voor:
 
 * het eerste importeren van een deck;
 * het ophalen van nog niet lokaal beschikbare kaartafbeeldingen;
 * het bewust controleren op een nieuwere deckversie.
 
-Na import moeten deckdata en spelstatus lokaal beschikbaar blijven.
+Na import moeten deckdata en offline spelstatus lokaal beschikbaar blijven. Online multiplayer vereist vanzelfsprekend een netwerkverbinding, maar mag de offline routes, repositories of gameflow nooit blokkeren.
 
 ### 2.2 Handmatige tafel, geen rules engine
 
@@ -81,6 +81,19 @@ Domeinmodellen, reducers, actions, selectors, importnormalisatie en savegameform
 
 Ze moeten later herbruikbaar zijn in een Expo/React Native-app.
 
+### 2.6 Offline en online zijn uitvoeringsmodi
+
+Maak het onderscheid expliciet:
+
+```ts
+type GameMode = "offline" | "online";
+```
+
+* In `offline` is de lokale game-state leidend en zijn login, Firebase en Cloudflare niet nodig.
+* In `online` is de serverstate leidend en bevat Redux uitsluitend de toegestane clientweergave.
+* Bouw geen tweede game-engine. Deel pure modellen, commando’s en transities waar veilig, maar gebruik aparte dispatchers/adapters voor lokaal en online uitvoeren.
+* Een online fout of ontbrekende configuratie mag offline gebruik nooit onbruikbaar maken.
+
 ## 3. Aanbevolen stack
 
 Gebruik voor de webapp:
@@ -98,7 +111,16 @@ Gebruik voor de webapp:
 
 Gebruik geen Next.js tenzij de bestaande repository daar al bewust op is ingericht en migratie meer risico dan voordeel oplevert. SSR is niet nodig voor de battle-interface.
 
-Gebruik geen Firebase voor de MVP. Accounts, cloud saves en online multiplayer vallen buiten de eerste scope.
+Gebruik voor de online uitbreiding bij voorkeur:
+
+* Firebase Authentication voor identiteit, inclusief optionele anonieme login;
+* een Cloudflare Worker in TypeScript voor HTTP-API, tokenvalidatie, lobby-routing en WebSocket-upgrades;
+* één SQLite-backed Durable Object per actieve game;
+* WebSocket Hibernation voor langdurige verbindingen met lage idle-kosten;
+* Cloudflare D1 voor openbare/private lobbymetadata, deelnemers, profielen en eventueel match history;
+* gedeelde TypeScript-contracten met runtimevalidatie, bijvoorbeeld Zod.
+
+Firebase Realtime Database is niet nodig voor de actieve wedstrijd. Gebruik niet tegelijk Realtime Database en Durable Objects als twee concurrerende bronnen van waarheid.
 
 ## 4. Gewenste repositorystructuur
 
@@ -108,8 +130,10 @@ Wanneer de repository leeg of eenvoudig te herstructureren is, heeft een workspa
 apps/
   web/
   import-worker/
+  game-worker/
 packages/
   game-core/
+  game-protocol/
   store/
   archidekt-client/
   persistence/
@@ -119,8 +143,10 @@ packages/
 Betekenis:
 
 * `apps/web`: React-webapp en webspecifieke interacties.
-* `apps/import-worker`: kleine proxy/BFF voor externe deckimport.
+* `apps/import-worker`: kleine proxy/BFF voor externe deckimport; mag later met `game-worker` worden samengevoegd wanneer dat de bestaande deployment vereenvoudigt.
+* `apps/game-worker`: Cloudflare Worker, D1-toegang, Firebase-tokenvalidatie, lobby-API en Durable Objects.
 * `packages/game-core`: pure TypeScript-domeinlogica.
+* `packages/game-protocol`: gedeelde, runtime-gevalideerde commands en serverberichten zonder geheime serverstate.
 * `packages/store`: Redux Toolkit-configuratie, slices en selectors.
 * `packages/archidekt-client`: URL-parser, externe response-schema’s en normalisatie.
 * `packages/persistence`: interfaces en implementaties voor savegames, decks en offlinepakketten.
@@ -217,6 +243,32 @@ Alle blijvende gamewijzigingen lopen via expliciete domeinacties, bijvoorbeeld:
 
 Componenten mogen niet rechtstreeks geneste game-state muteren.
 
+### 5.4 Spelers en multiplayer
+
+Modelleer spelers als een collectie en niet als vaste velden:
+
+```ts
+type PlayerId = string;
+
+interface GameState {
+  mode: GameMode;
+  players: Record<PlayerId, PlayerState>;
+  turnOrder: PlayerId[];
+  activePlayerId: PlayerId;
+}
+```
+
+* De domeinlaag mag nergens aannemen dat er exact twee spelers zijn.
+* Ondersteun technisch 2 tot 6 spelers; Commander gebruikt standaard 4.
+* De bestaande offline UI mag gefaseerd nog een tweespelerlayout gebruiken, zolang game-core, persistence en protocol niet op twee spelers worden vastgezet.
+* Bereid `player` en `spectator` als afzonderlijke verbindingsrollen voor.
+
+### 5.5 Commands versus state
+
+De offline dispatcher mag bestaande Redux-actions uitvoeren. De online client stuurt uitsluitend intenties/commands naar de server, bijvoorbeeld `DRAW_CARD`, `MOVE_CARD` of `CHANGE_LIFE`.
+
+Stuur online nooit de volledige Redux-state als wijzigingsverzoek. Ieder command bevat minimaal een type, command-ID en `expectedVersion`. Het Durable Object valideert de structurele invarianten, past de officiële state toe en verhoogt de versie. Bouw hierbij geen volledige Magic-regelsimulator.
+
 ## 6. Redux-regels
 
 Redux Toolkit beheert:
@@ -280,6 +332,16 @@ Hydrateer Redux bij opstarten vanuit lokale opslag.
 Alle duurzame gegevens hebben een expliciete schemaversie.
 
 Voeg migratiefuncties toe zodra het savegameformaat verandert. Breek bestaande lokale games niet stilzwijgend.
+
+### 7.4 Online state en reconnect
+
+Online state heeft een andere bron van waarheid dan offline state:
+
+* het Durable Object bewaart de officiële actieve wedstrijdstate;
+* D1 bewaart lobby- en deelnemersmetadata, niet de geheime actieve hand/library-state;
+* de browser mag reconnectmetadata en de laatst ontvangen view cachen, maar behandelt die niet als officiële serverstate;
+* na reconnect vraagt de client een verse persoonlijke snapshot en verwerkt daarna versioned events;
+* offline savegames en online metadata gebruiken afzonderlijke repositoryinterfaces.
 
 ## 8. Archidekt-import
 
@@ -454,16 +516,17 @@ Gebruik geen Redux-dispatch voor iedere pointerbeweging.
 
 ### 12.1 Tafelindeling
 
-Render één herbruikbare `PlayerBoard` tweemaal:
+Render één herbruikbare `PlayerBoard` voor iedere speler:
 
 ```tsx
 <BattleTable>
-  <PlayerBoard playerId="player-2" orientation="opponent" />
-  <PlayerBoard playerId="player-1" orientation="self" />
+  {turnOrder.map((playerId) => (
+    <PlayerBoard key={playerId} playerId={playerId} />
+  ))}
 </BattleTable>
 ```
 
-Maak geen twee los gekopieerde implementaties.
+De huidige tweespelerlayout mag een gespecialiseerde compositie blijven, maar maak geen los gekopieerde spelerimplementaties. Voeg voor online Commander een schaalbare 2–6-spelerweergave toe, bijvoorbeeld met een actieve-spelerfocus en compacte tegenstanderborden.
 
 ### 12.2 Spelerfuncties
 
@@ -510,6 +573,18 @@ Toon duidelijk:
 * laatste lokale opslagdatum;
 * acties: spelen, bijwerken, hervatten, verwijderen, cache legen.
 
+### 12.5 Hoofdmenu en online-UI
+
+Het hoofdmenu bevat minimaal:
+
+* **Offline spelen** — direct beschikbaar zonder login;
+* **Online spelen** — login, lobbylijst, game aanmaken en deelnemen met code;
+* **Decks beheren**;
+* **Spel hervatten** — offline en online duidelijk gescheiden;
+* **Instellingen**.
+
+Online schermen tonen verbindingsstatus, spelerbezetting, host, formaat, zichtbaarheid en join/start-status. Een ontbrekende backendconfiguratie levert een nette lege/foutstatus op en blokkeert offline routes niet.
+
 ## 13. Toegankelijkheid
 
 Drag-and-drop mag niet de enige manier zijn om kaarten te verplaatsen.
@@ -544,6 +619,8 @@ Voorkom dat één kaartactie het volledige speelveld onnodig rerendert.
 
 ## 15. Security en betrouwbaarheid
 
+### 15.1 Algemeen
+
 * Vertrouw externe API-data niet blind; valideer responses runtime.
 * Sta alleen bekende externe hosts en routes toe in de importproxy.
 * Bouw geen generieke URL-fetchproxy.
@@ -551,6 +628,20 @@ Voorkom dat één kaartactie het volledige speelveld onnodig rerendert.
 * Sanitize geen kaarttekst via ongecontroleerde HTML-rendering; render als tekst tenzij een veilige parser bewust is toegevoegd.
 * Geen secrets in frontendcode of repository.
 * Maak foutmeldingen bruikbaar zonder interne stacktraces of gevoelige details te tonen.
+
+### 15.2 Server-authoritative online games
+
+* Firebase Authentication levert identiteit; de Cloudflare Worker valideert ieder Firebase ID-token server-side en gebruikt uitsluitend de geverifieerde `uid`.
+* Vertrouw nooit een `uid`, `playerId`, stoel of rol die alleen door de browser wordt meegestuurd.
+* Gebruik voor browser-WebSockets bij voorkeur eerst een geauthenticeerde HTTPS-joinrequest en geef daarna een kortlevend, eenmalig socket-ticket uit.
+* Eén Durable Object beheert één game met 2–6 spelers en eventuele spectators.
+* Het Durable Object bewaart de volledige state, maar maakt per verbinding een persoonlijke view.
+* Stuur naar iedere speler alleen publieke state, de eigen hand/zichtbare libraryinformatie en aantallen voor verborgen zones van anderen.
+* Tegenstandershanden, libraryvolgorde en andere geheime metadata mogen nooit in hun Redux-store, HTML, WebSocketpayload of voorspelbare kaart-ID terechtkomen.
+* Spectators krijgen standaard uitsluitend publieke informatie en kunnen geen gamecommands uitvoeren.
+* Valideer commands runtime, beperk berichtgrootte en snelheid, controleer game-lidmaatschap, rol, versie, instance-ID en zone-invarianten.
+* Client-side Redux is in online modus een view/cache. Lokale manipulatie verandert nooit de officiële serverstate.
+* Encryptie-at-rest is geen productdoel voor speldata; besteed implementatietijd primair aan authenticatie, autorisatie, dataminimalisatie en server-clientintegriteit.
 
 ## 16. Teststrategie
 
@@ -580,7 +671,11 @@ Test minimaal:
 * kaartactiemenu;
 * autosave-indicator;
 * offline downloadvoortgang;
-* hervatten na reload.
+* hervatten na reload;
+* hoofdmenu met werkende offline route zonder login;
+* online loading-, empty-, auth- en foutstatussen;
+* lobbyweergave voor 2–6 spelers;
+* persoonlijke online state zonder verborgen tegenstanderkaarten.
 
 ### End-to-end
 
@@ -600,17 +695,18 @@ Kritieke flow:
 
 Gebruik fixtures/mocks in CI zodat tests niet afhankelijk zijn van beschikbaarheid of wijzigingen van externe diensten.
 
-## 17. Buiten scope van de eerste versie
+Voeg voor de online uitbreiding tests toe voor Firebase-tokenvalidatie, eenmalige socket-tickets, join/leave/reconnect, version conflicts, commandvalidatie en verschillende views voor speler A, speler B en spectator. Gebruik lokaal Miniflare/Wrangler of passende mocks; tests mogen geen productieproject of echte betaalde resource vereisen.
 
-Bouw niet zonder expliciete nieuwe opdracht:
+## 17. Buiten scope tenzij expliciet gevraagd
+
+Bouw niet automatisch mee met de online uitbreiding:
 
 * automatische Magic-regels;
-* mana- of legaliteitsvalidatie tijdens spelen;
-* online realtime multiplayer;
-* matchmaking;
-* accounts en cloud sync;
-* chat of video;
-* vier spelers;
+* mana- of kaartlegaliteitsvalidatie tijdens spelen;
+* automatische combat of triggers;
+* skill-based matchmaking of ranking;
+* chat, audio of video;
+* cloudsync van volledige offline savegames;
 * deckeditor;
 * private Archidekt-authenticatie;
 * Moxfield-import;
@@ -618,7 +714,7 @@ Bouw niet zonder expliciete nieuwe opdracht:
 * volledige React Native-interface;
 * monetisatie.
 
-Ontwerp grenzen wel zo dat later uitbreiden mogelijk blijft.
+Openbare lobby’s, deelnemen met code, Firebase-login en realtime games met 2–6 spelers horen wél bij de huidige uitbreidingsrichting, maar bouw ze incrementeel.
 
 ## 18. Werkwijze voor coding agents
 
@@ -679,6 +775,21 @@ De eerste betekenisvolle mijlpaal is een end-to-end verticale slice waarin de ge
 
 Optimaliseer pas daarna richting uitgebreide counters, tokens, commander damage, multiselect, groepen en een native app.
 
+## 21. Huidige uitbreidingsmijlpaal: online multiplayer
+
+De volgende productmijlpaal voegt online functionaliteit toe zonder de bestaande offline ervaring te vervangen:
+
+1. Hoofdmenu met offline spelen, online spelen, decks, hervatten en instellingen.
+2. Offline routes blijven zonder account en zonder backend werken.
+3. Firebase Authentication achter een `AuthService`-interface.
+4. Lobbylijst, game aanmaken en deelnemen met code achter een `OnlineGameService`-interface.
+5. D1 voor lobbymetadata en één TypeScript Durable Object per actieve game.
+6. WebSocketprotocol met versioned commands en persoonlijke serverviews.
+7. Online games ondersteunen 2–6 spelers en standaard 4 voor Commander.
+8. Eerst mocks en duidelijke adapters; daarna echte Cloudflare- en Firebase-integratie zonder frontendcomponenten direct aan SDK’s te koppelen.
+
+De specifieke online besluiten staan in `docs/architecture/006-online-multiplayer.md`. Gebruik voor de eerstvolgende coding-agentopdracht `ONLINE_MULTIPLAYER_PROMPT.md`.
+
 ## Visuele richting
 
 Gebruik de referentieafbeelding `docs/reference/mtg-duelist-layout.png` als inspiratie voor de ruimtelijke opzet van de battle-interface.
@@ -690,4 +801,4 @@ De battle-interface moet:
 - visuele diepte gebruiken om meer speelruimte te suggereren;
 - het midden van het battlefield vrij houden voor kaarten;
 - nevenzones compact en logisch aan de randen plaatsen;
-- gespiegeld en overzichtelijk werken voor twee spelers.
+- overzichtelijk werken voor 2–6 spelers, met een sterke tweespelerweergave en een compacte Commander-layout voor vier spelers.

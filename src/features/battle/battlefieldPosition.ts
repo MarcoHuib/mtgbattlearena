@@ -111,21 +111,24 @@ export const positionFromDrop = (
     return { x: 0.5, y: 0.5, z }
   }
 
-  const halfCardWidth = Math.min(0.5, card.width / 2 / battlefield.width)
-  const halfCardHeight = Math.min(0.5, card.height / 2 / battlefield.height)
+  // Gebruik aan iedere rand dezelfde helft van de korte kaartzijde. Breedte
+  // en hoogte wisselen bij tappen om, maar deze marge blijft daardoor gelijk.
+  const edgeClearance = Math.min(card.width, card.height) / 2
+  const horizontalInset = Math.min(0.5, edgeClearance / battlefield.width)
+  const verticalInset = Math.min(0.5, edgeClearance / battlefield.height)
   const centerX = card.left + card.width / 2
   const centerY = card.top + card.height / 2
 
   return {
     x: clamp(
       (centerX - battlefield.left) / battlefield.width,
-      halfCardWidth,
-      1 - halfCardWidth,
+      horizontalInset,
+      1 - horizontalInset,
     ),
     y: clamp(
       (centerY - battlefield.top) / battlefield.height,
-      halfCardHeight,
-      1 - halfCardHeight,
+      verticalInset,
+      1 - verticalInset,
     ),
     z,
   }

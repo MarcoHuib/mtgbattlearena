@@ -51,8 +51,11 @@ npm run preview      # productiebuild lokaal bekijken
   Op het ruime battlefield blijft iedere kaart exact op de gekozen, vrij
   schaalbare x/y-positie liggen, zonder raster-snap. Het vastgepakte punt blijft
   tijdens slepen onder de pointer, de kaart zoomt dan niet in en ook de onderste
-  rand blijft volledig bruikbaar. Opnieuw slepen verplaatst en verhoogt de
-  kaart.
+  rand blijft volledig bruikbaar. Een drop heeft geen terugspringanimatie naar
+  de oude zone: de kaart staat direct stil op de gekozen plek en hoverzoom wordt
+  pas na een nieuwe pointerbeweging actief. De compacte randmarge is gelijk voor
+  rechte en getapte kaarten, zodat ze ook langs de speelveldrand op dezelfde rij
+  kunnen staan. Opnieuw slepen verplaatst en verhoogt de kaart.
 - Kaarten zelf 1,5× vergroten via muis-hover of toetsenbordfocus; commander en
   Background worden als overlappende commandergroep getoond. Een ingezoomde
   hand- of commandkaart blijft volledig zichtbaar en ligt tijdelijk boven
@@ -121,6 +124,9 @@ npm run preview      # productiebuild lokaal bekijken
 - Library, graveyard, exile en command zone hebben een toegankelijke
   zonebrowser. Deze biedt grid- en lijstweergave, zoeken op naam, typefilter,
   sorteren op naam of mana value en multiselect voor veilige zoneacties.
+- Graveyard en exile zijn op tafel compacte open stapels: alleen de laatst
+  toegevoegde kaart ligt zichtbaar bovenop. Hun actiemenu opent zoeken of de
+  volledige zonebrowser; exile staat in de zijrail direct onder graveyard.
 - De library blijft als compacte stapel op tafel. In de browser kun je bewust
   de bovenste X kaarten bekijken, kaarten bovenop of onderop plaatsen en na een
   zoekactie expliciet kiezen of je schudt. Zoeken schudt nooit automatisch. Het

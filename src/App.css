@@ -995,7 +995,7 @@ html.card-drag-active .zone--drop-target {
 
 .edge-zones .zone {
   min-height: 135px;
-  flex: 1;
+  flex: 0 0 auto;
   background: rgb(2 11 7 / 18%);
 }
 
@@ -1088,8 +1088,8 @@ html.card-drag-active .zone--drop-target {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 16px;
-  padding: 20px;
+  gap: 10px;
+  padding: 12px 20px;
   border-left: 1px solid rgb(255 255 255 / 7%);
   background: rgb(4 14 10 / 23%);
 }
@@ -1100,7 +1100,7 @@ html.card-drag-active .zone--drop-target {
 }
 
 .pile-rail .zone {
-  min-height: 145px;
+  min-height: 138px;
   background: rgb(0 0 0 / 12%);
 }
 
@@ -1146,6 +1146,95 @@ html.card-drag-active .zone--drop-target {
 
 .card-stack span:nth-child(2) {
   transform: translate(3px, 2px) rotate(2deg);
+}
+
+.zone__cards--face-up-stack {
+  min-height: 112px;
+  justify-content: center;
+  overflow: visible;
+  padding: 3px 6px 6px;
+}
+
+.face-up-card-stack {
+  width: 86px;
+  height: 120px;
+  position: relative;
+  isolation: isolate;
+}
+
+.face-up-card-stack > span {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border: 1px solid rgb(215 182 111 / 22%);
+  border-radius: 6px;
+  background: #101a15;
+  box-shadow: 0 7px 18px rgb(0 0 0 / 24%);
+}
+
+.face-up-card-stack > span:first-child {
+  transform: translate(-4px, 3px) rotate(-1.5deg);
+}
+
+.face-up-card-stack > span:nth-child(2) {
+  transform: translate(4px, 3px) rotate(1.5deg);
+}
+
+.face-up-card-stack > .card {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+}
+
+.zone__browse-menu {
+  position: relative;
+}
+
+.zone__browse-menu-items {
+  min-width: 190px;
+  position: absolute;
+  z-index: 5200;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 9px;
+  background: rgb(35 41 38 / 98%);
+  box-shadow: 0 18px 38px rgb(0 0 0 / 48%);
+}
+
+.player-board--opponent .pile-rail .zone__browse-menu-items {
+  right: auto;
+  left: 0;
+}
+
+.zone__browse-menu-items button {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  color: #edf1ee;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.zone__browse-menu-items button:hover,
+.zone__browse-menu-items button:focus-visible {
+  color: #fff;
+  background: rgb(255 255 255 / 10%);
+}
+
+.zone__browse-menu-items button span {
+  width: 18px;
+  color: var(--gold-bright);
+  font-size: 16px;
+  text-align: center;
 }
 
 .table-divider {

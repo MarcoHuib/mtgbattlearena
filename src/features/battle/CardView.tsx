@@ -1,3 +1,4 @@
+import { Feedback } from "@dnd-kit/dom"
 import { useDraggable } from "@dnd-kit/react"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
@@ -51,6 +52,16 @@ const DRAG_FOLLOW_X = "--card-drag-follow-x"
 const DRAG_FOLLOW_Y = "--card-drag-follow-y"
 let pointerSessionSequence = 0
 let activePointerSession: number | null = null
+let clearHoverSuppression: (() => void) | null = null
+
+const CARD_DRAG_PLUGINS = [
+  Feedback.configure({
+    // De state wordt bij drop direct op de nieuwe zone/positie gerenderd.
+    // Een tweede animatie naar de oude placeholder veroorzaakt dan een
+    // zichtbare terugslag.
+    dropAnimation: null,
+  }),
+]
 
 const transformScale = (element: Element) => {
   const transform = getComputedStyle(element).transform
@@ -67,6 +78,7 @@ const beginPointerSession = (
   pointer: { x: number; y: number },
   tapped: boolean,
 ) => {
+  clearHoverSuppression?.()
   pointerSessionSequence += 1
   const session = pointerSessionSequence
   activePointerSession = session
@@ -103,18 +115,33 @@ const beginPointerSession = (
 }
 
 const finishPointerSession = (session: number, card: HTMLElement) => {
-  window.setTimeout(() => {
-    card.style.removeProperty(DRAG_OFFSET_X)
-    card.style.removeProperty(DRAG_OFFSET_Y)
-    card.style.removeProperty(DRAG_FOLLOW_X)
-    card.style.removeProperty(DRAG_FOLLOW_Y)
-    delete card.dataset.dragGrabX
-    delete card.dataset.dragGrabY
+  card.style.removeProperty(DRAG_OFFSET_X)
+  card.style.removeProperty(DRAG_OFFSET_Y)
+  card.style.removeProperty(DRAG_FOLLOW_X)
+  card.style.removeProperty(DRAG_FOLLOW_Y)
+  delete card.dataset.dragGrabX
+  delete card.dataset.dragGrabY
+  if (activePointerSession !== session) return
+
+  const releaseHoverSuppression = () => {
+    window.removeEventListener("pointermove", releaseHoverSuppression, true)
+    window.removeEventListener("pointerdown", releaseHoverSuppression, true)
+    window.removeEventListener("blur", releaseHoverSuppression)
     if (activePointerSession === session) {
       activePointerSession = null
       document.documentElement.classList.remove(POINTER_ACTIVE_CLASS)
     }
-  }, 350)
+    if (clearHoverSuppression === releaseHoverSuppression) {
+      clearHoverSuppression = null
+    }
+  }
+
+  // Laat de kaart na het neerleggen op normale grootte staan. Hoverzoom wordt
+  // pas opnieuw actief zodra de gebruiker de pointer bewust beweegt.
+  clearHoverSuppression = releaseHoverSuppression
+  window.addEventListener("pointermove", releaseHoverSuppression, true)
+  window.addEventListener("pointerdown", releaseHoverSuppression, true)
+  window.addEventListener("blur", releaseHoverSuppression)
 }
 
 const counterTypes = [
@@ -171,6 +198,7 @@ export const CardView = ({
     type: "card",
     data: { instanceId: instance.instanceId },
     disabled: displayOnly || disableDrag,
+    plugins: CARD_DRAG_PLUGINS,
   })
   const cardName = activeFace?.name ?? definition.name
   const cardLabel = `${cardName}, ${zoneLabels[instance.zone]}${

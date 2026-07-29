@@ -80,14 +80,31 @@ test("normaliseert een drop ten opzichte van het battlefield", () => {
   ).toEqual({ x: 0.5, y: 0.55, z: 4 })
 })
 
-test("houdt een gedropte kaart volledig binnen het battlefield", () => {
+test("houdt het kaartmidden met een compacte marge binnen het battlefield", () => {
   expect(
     positionFromDrop(
       { left: 40, top: 30, width: 100, height: 140 },
       { left: 100, top: 100, width: 500, height: 350 },
       2,
     ),
-  ).toEqual({ x: 0.1, y: 0.2, z: 2 })
+  ).toEqual({ x: 0.1, y: 1 / 7, z: 2 })
+})
+
+test("geeft een rechtop en getapt kaartformaat dezelfde randpositie", () => {
+  const battlefield = { left: 100, top: 100, width: 800, height: 400 }
+  const portrait = positionFromDrop(
+    { left: 300, top: 30, width: 100, height: 140 },
+    battlefield,
+    3,
+  )
+  const tapped = positionFromDrop(
+    { left: 280, top: 50, width: 140, height: 100 },
+    battlefield,
+    3,
+  )
+
+  expect(portrait).toEqual(tapped)
+  expect(portrait).toEqual({ x: 0.3125, y: 0.125, z: 3 })
 })
 
 test("spreidt oude kaarten zonder opgeslagen positie veilig uit", () => {
