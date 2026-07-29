@@ -22,7 +22,7 @@ const eslintConfig = config(
       "**/coverage/",
       "**/playwright-report/",
       "**/test-results/",
-      "worker/archidekt-worker.js",
+      "apps/import-worker/src/index.js",
     ],
   },
   {
@@ -74,7 +74,7 @@ const eslintConfig = config(
               name: "react-redux",
               importNames: ["useSelector", "useStore", "useDispatch"],
               message:
-                "Please use pre-typed versions from `src/app/hooks.ts` instead.",
+                "Please use pre-typed versions from `apps/web/src/app/hooks.ts` instead.",
             },
           ],
         },
@@ -95,20 +95,20 @@ const eslintConfig = config(
     },
   },
   {
-    files: ["**/*.test.ts", "**/*.test.tsx", "e2e/**/*.ts"],
+    files: ["**/*.test.ts", "**/*.test.tsx", "**/e2e/**/*.ts"],
     rules: {
       "@typescript-eslint/no-non-null-assertion": [0],
       "@typescript-eslint/no-unnecessary-type-assertion": [0],
     },
   },
   {
-    files: ["src/features/offline/offlineService.ts"],
+    files: ["apps/web/src/features/offline/offlineService.ts"],
     rules: {
       "@typescript-eslint/no-invalid-void-type": [0],
     },
   },
   {
-    files: ["worker/online/types.ts"],
+    files: ["apps/game-worker/src/types.ts"],
     rules: {
       "@typescript-eslint/no-unnecessary-type-parameters": [0],
     },

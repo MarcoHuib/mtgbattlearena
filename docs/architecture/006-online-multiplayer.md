@@ -110,10 +110,10 @@ De eerste infrastructuurslice volgt dit besluit als volgt:
 - `AuthService`, `OnlineGameService` en twee `GameCommandDispatcher`-adapters
   vormen de applicatiegrens; componenten importeren geen Firebase- of
   Cloudflare-SDK;
-- `src/game-protocol` bevat strikte Zod-schema’s. Een persoonlijke snapshot
+- `packages/game-protocol/src` bevat strikte Zod-schema’s. Een persoonlijke snapshot
   bevat publieke spelers plus maximaal één eigen `privateView`; een spectator
   kan nooit zo’n private view valideren;
-- `worker/online` bevat Firebase RS256/JWK-validatie, een SQLite-backed Lobby
+- `apps/game-worker/src` bevat Firebase RS256/JWK-validatie, een SQLite-backed Lobby
   Durable Object, server-toegewezen deelname, 30-seconden-tickets die atomair
   eenmaal worden gebruikt, RPC/HTTP/WebSocket-routing en een SQLite-backed
   Durable Object-klasse per game;

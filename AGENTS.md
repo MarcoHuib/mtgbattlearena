@@ -154,7 +154,10 @@ Betekenis:
 * `packages/persistence`: interfaces en implementaties voor savegames, decks en offlinepakketten.
 * `packages/shared-ui`: alleen echt platformneutrale tokens en eenvoudige presentatielogica; geen geforceerde volledige UI-deling.
 
-Maak geen monorepo alleen om deze structuur letterlijk te volgen als de bestaande repository een goede andere basis heeft. Behoud dan dezelfde architectuurgrenzen binnen `src/`.
+De huidige repository volgt deze grens met `apps/web`, `apps/import-worker`,
+`apps/game-worker`, `packages/game-core` en `packages/game-protocol`. Houd
+frontendconfiguratie en browsercode onder `apps/web`; gedeelde pure domeincode
+mag niet terug naar de webapp worden verplaatst.
 
 ## 5. Domeinmodel
 

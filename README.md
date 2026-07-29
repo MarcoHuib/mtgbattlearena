@@ -1,326 +1,244 @@
-# MTG Battle Mode
+<a id="readme-top"></a>
 
-Een onofficiële, local-first digitale tafel waarop je twee openbare
-Archidekt-decks lokaal tegenover elkaar speelt, met een incrementele online
-multiplayerlaag voor 2–6 spelers. De app houdt toestand bij, maar is bewust geen
-automatische Magic-regelsimulator.
+[![Issues][issues-shield]][issues-url]
+[![Stars][stars-shield]][stars-url]
+[![Last Commit][last-commit-shield]][commits-url]
+[![TypeScript][typescript-shield]][typescript-url]
 
-## Lokale ontwikkeling
+<div align="center">
+  <h1 align="center">MTG Battle Mode</h1>
+  <p align="center">
+    Een local-first digitale tafel voor Magic: The Gathering.
+    <br />
+    Speel volledig offline of gebruik de optionele online multiplayerlaag voor 2–6 spelers.
+    <br />
+    <br />
+    <a href="docs/architecture/"><strong>Bekijk de architectuur »</strong></a>
+    <br />
+    <br />
+    <a href="#quick-start">Quick Start</a>
+    &middot;
+    <a href="#status">Status</a>
+    &middot;
+    <a href="#roadmap">Roadmap</a>
+  </p>
+</div>
+
+> [!NOTE]
+> Dit is een onofficieel fanproject en een handmatige digitale tafel, geen
+> automatische Magic-regelsimulator.
+
+<details>
+  <summary>Inhoudsopgave</summary>
+  <ol>
+    <li><a href="#over-het-project">Over het project</a></li>
+    <li><a href="#status">Status</a></li>
+    <li><a href="#quick-start">Quick Start</a></li>
+    <li><a href="#architectuur">Architectuur</a></li>
+    <li><a href="#ontwikkeling">Ontwikkeling</a></li>
+    <li><a href="#documentatie">Documentatie</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+  </ol>
+</details>
+
+## Over het project
+
+MTG Battle Mode importeert openbare Archidekt-decks en verandert de browser in
+een digitale Commander-tafel. De applicatie beheert kaarten, zones, leven,
+poison, counters, commanderstatus en beurten, terwijl spelers alle acties zelf
+uitvoeren.
+
+De belangrijkste uitgangspunten:
+
+- **Local-first:** offline spelen vereist geen account of backend.
+- **Veilige autosave:** games, undo/redo en deck snapshots blijven lokaal
+  beschikbaar.
+- **Expliciete offlinepakketten:** kaartdata en afbeeldingen kunnen bewust voor
+  offline gebruik worden gedownload.
+- **Optioneel online:** Firebase verzorgt identiteit; Cloudflare Durable Objects
+  beheren de authoritative multiplayerstate.
+- **Geen rules engine:** de app automatiseert geen mana, combat, triggers of
+  kaartregels.
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+## Status
+
+| Onderdeel                         | Status                       |
+| --------------------------------- | ---------------------------- |
+| Offline battle voor twee spelers  | ✅ Speelbaar                 |
+| Archidekt-import                  | ✅ Openbare decks            |
+| Autosave, hervatten en undo/redo  | ✅ Beschikbaar               |
+| Offlinepakket en PWA              | ✅ Beschikbaar               |
+| Commander-zones en statustracking | ✅ Beschikbaar               |
+| Online UI en vier-spelersmock     | ✅ Speelbaar                 |
+| Authoritative online game-core    | ✅ Geïmplementeerd en getest |
+| Firebase SDK-bootstrap            | 🚧 Nog te configureren       |
+| Cloudflare-productiedeployment    | 🚧 Nog niet uitgevoerd       |
+
+Online ondersteunt momenteel authoritative commands voor trekken, kaarten
+verplaatsen, leven en poison aanpassen, millen, schudden en de beurt doorgeven.
+Tegenstanders ontvangen nooit verborgen hand- of librarymetadata.
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+## Quick Start
 
 Vereisten: een actuele Node.js-versie en npm.
 
 ```sh
+git clone https://github.com/MarcoHuib/mtgbattlearena.git
+cd mtgbattlearena
 npm install
 npm run dev
 ```
 
-De Vite-devserver stuurt uitsluitend
-`/api/import/archidekt/:numeriekDeckId` door naar de vaste Archidekt-deckroute.
-Dit is alleen een lokale ontwikkelfallback; productie hoort de meegeleverde
-Worker te gebruiken.
+Open daarna de URL die Vite in de terminal toont. Zonder online configuratie
+werkt de volledige offline flow en gebruikt het online scherm realistische
+mocks.
 
-## Scripts
+<details>
+  <summary>Belangrijkste bediening</summary>
 
-```sh
-npm run dev          # lokale Vite-server
-npm run format       # Prettier schrijft formatting
-npm run format:check # controleert formatting
-npm run lint         # ESLint
-npm run type-check   # strikte TypeScript-controle
-npm run worker:type-check # online Worker en gedeeld protocol
-npm test             # Vitest unit- en integratietests
-npm run test:e2e     # Playwright kritieke offlineflow
-npm run build        # TypeScript en productie-PWA-build
-npm run preview      # productiebuild lokaal bekijken
-```
+- Sleep kaarten tussen hand, battlefield en andere zones.
+- Dubbelklik een battlefieldkaart om deze te tappen of untappen.
+- Gebruik rechtermuisklik of `Shift+F10` voor het toegankelijke kaartmenu.
+- Gebruik Ctrl/⌘-klik of tik om meerdere kaarten te selecteren.
+- Open het librarymenu voor draw X, mill X, zoeken en schudden.
+- Open lege battlefieldruimte voor tafelacties en bekende tokens.
 
-## Fase 1 — local-first verticale slice
+</details>
 
-- Twee afzonderlijke Archidekt-URL's valideren en importeren.
-- Ruwe externe data runtime valideren en normaliseren naar `ImportedDeck`.
-- Deckpreview met naam, commanders, kaartenaantal en een onafhankelijk
-  fout-/laadpad.
-- Battle starten met commanders in de command zone, geschudde libraries en
-  zeven kaarten per hand.
-- Beide spelers doorlopen afzonderlijk een openingshandfase: de eerste twee
-  mulligans blijven zeven kaarten, de derde wordt zes en iedere volgende één
-  kaart minder.
-- Eén herbruikbaar `PlayerBoard` voor beide spelers: de battlefields liggen
-  tegenover elkaar aan de middenlijn en de handen aan de buitenranden, terwijl
-  alle kaarten rechtop en leesbaar blijven.
-- Kaarten slepen en via het kaartactiemenu tussen zones verplaatsen; open het
-  menu met de rechtermuisknop of met `Shift+F10` wanneer de kaart focus heeft.
-  Op het ruime battlefield blijft iedere kaart exact op de gekozen, vrij
-  schaalbare x/y-positie liggen, zonder raster-snap. Het vastgepakte punt blijft
-  tijdens slepen onder de pointer, de kaart zoomt dan niet in en ook de onderste
-  rand blijft volledig bruikbaar. Een drop heeft geen terugspringanimatie naar
-  de oude zone: de kaart staat direct stil op de gekozen plek en hoverzoom wordt
-  pas na een nieuwe pointerbeweging actief. De compacte randmarge is gelijk voor
-  rechte en getapte kaarten, zodat ze ook langs de speelveldrand op dezelfde rij
-  kunnen staan. Opnieuw slepen verplaatst en verhoogt de kaart.
-- Kaarten zelf 1,5× vergroten via muis-hover of toetsenbordfocus; commander en
-  Background worden als overlappende commandergroep getoond. Een ingezoomde
-  hand- of commandkaart blijft volledig zichtbaar en ligt tijdelijk boven
-  naburige zones en battlefieldkaarten.
-- Battlefieldkaarten exact 90° tappen/untappen en veelgebruikte counters
-  (`+1/+1`, `-1/-1`, loyalty en charge) bijhouden.
-- Met **Next turn** van actieve speler wisselen, diens battlefield untappen en
-  automatisch de bovenste kaart trekken.
-- Leven aanpassen en de laatste actie undo/redo uitvoeren.
-- Libraries tonen een lokaal meegeleverde natuurlijke Magic-kaartachterkant.
-- Iedere relevante actie gedebouncet opslaan in IndexedDB en de laatste battle
-  bij reload hervatten.
-- Een expliciet offlinepakket met duurzame voortgang per unieke kaartzijde
-  downloaden, annuleren en mislukte assets opnieuw proberen.
-- PWA-app-shell met zichtbare updateprompt en tekstuele kaartfallbacks.
-
-## Fase 2 — Commander-playtest
-
-- Alle zes zones zijn bruikbaar: library, hand, battlefield, graveyard, exile
-  en command zone. Het kaartmenu kan een kaart naar iedere andere zone
-  verplaatsen.
-- Kaarten blijven vrij en genormaliseerd op het battlefield staan. Met
-  Ctrl/⌘-klik of een tik selecteer je meerdere kaarten; de selectiebalk
-  verplaatst ze samen. Een geselecteerde kaart kan daar ook worden
-  getapt/untapt, naar voren of achteren gezet en van een snelle
-  `+1/+1`-counter worden voorzien.
-- Rechtermuisklik of `Shift+F10` opent het volledige kaartmenu. Op touch zijn
-  selectie en de selectiebalk de zichtbare alternatieven voor essentiële
-  acties.
-- Dubbelzijdige kaarten kunnen van actieve zijde wisselen. Alle zijden blijven
-  onderdeel van een expliciet offlinepakket.
-- Draw, draw X, mill X, shuffle, mulligan en library zoeken/bekijken staan in
-  het library-contextmenu. **Untap alles** staat bij de battlefieldacties.
-  **Volgende fase** doorloopt beginfase, beide hoofdfasen, combat en eindfase;
-  **Volgende beurt** wisselt de actieve speler, untapt en trekt automatisch.
-- Elke speler begint met 40 leven. De compacte spelerstatus toont poison met
-  de `10`-drempel, optioneel Energy, Experience en Rad, City’s Blessing,
-  handmatig uitschakelen en ontvangen commander damage met de `21`-drempel.
-  Pure Background-enchantments krijgen geen commander-damageteller; twee
-  creature-commanders worden volgens de Commander-regel afzonderlijk
-  bijgehouden.
-- Commander tax staat per commanderkaart in de command zone. Partner- en
-  Background-decks behouden daar beide afzonderlijke taxwaarden.
-- Monarch, Initiative en Day/Night staan eenmaal centraal op de battle line,
-  samen met actieve speler, beurt en fase. Monarch en Initiative hebben ieder
-  maximaal één houder; Day/Night is globale matchstate.
-- De import neemt bekende tokenkaarten uit het deck mee. Rechtermuisklik op
-  lege battlefieldruimte opent **Tafelacties**, waar tokens met hun echte
-  kaartafbeelding vanaf Archidekts kaart-CDN en eventuele power/toughness
-  gekozen worden. Tokens kunnen vervolgens worden gedupliceerd; oudere
-  fallbacktokens blijven leesbaar. De Foretell-helper wordt daarnaast afgeleid
-  uit het gevalideerde deckkeyword, omdat Archidekt die niet als gewone
-  token-ID terugstuurt.
-- Naast snelle `+1/+1`- en `-1/-1`-acties ondersteunt het kaartmenu vrij
-  benoemde counters met verhogen en verlagen.
-- Alle blijvende fase-2-gegevens vallen onder dezelfde undo/redo- en
-  autosaveketen. Selectie en pointerpositie zijn bewust vluchtig en worden niet
-  duurzaam opgeslagen.
-
-### Belangrijkste bediening
-
-- Slepen: kaart of geselecteerde groep definitief verplaatsen.
-
-## Fase 3 — zonebeheer, attachments en groepen
-
-- Library, graveyard, exile en command zone hebben een toegankelijke
-  zonebrowser. Deze biedt grid- en lijstweergave, zoeken op naam, typefilter,
-  sorteren op naam of mana value en multiselect voor veilige zoneacties.
-- Graveyard en exile zijn op tafel compacte open stapels: alleen de laatst
-  toegevoegde kaart ligt zichtbaar bovenop. Hun actiemenu opent zoeken of de
-  volledige zonebrowser; exile staat in de zijrail direct onder graveyard.
-- De library blijft als compacte stapel op tafel. In de browser kun je bewust
-  de bovenste X kaarten bekijken, kaarten bovenop of onderop plaatsen en na een
-  zoekactie expliciet kiezen of je schudt. Zoeken schudt nooit automatisch. Het
-  zonelabel heeft nog maar één actiemenuknop; hetzelfde menu opent met
-  rechtermuisklik op de library.
-- Battlefieldkaarten kunnen handmatig als attachment aan een ander permanent
-  worden gekoppeld. Meerdere attachments zijn mogelijk; cycli worden geweigerd.
-  Als een betrokken kaart het battlefield verlaat, wordt alleen de
-  administratieve koppeling verwijderd. Er worden geen Magic-regels uitgevoerd.
-- Twee of meer geselecteerde permanents kunnen als duurzame, benoemde groep
-  worden opgeslagen. Groepen kunnen worden in- en uitgeklapt, als geheel worden
-  verplaatst, uitgebreid, verkleind en opgeheven. De kaarten blijven gewone
-  battlefieldinstances en vormen geen nieuwe zone.
-- Alle duurzame acties lopen via Redux en doen mee met autosave, undo en redo.
-  Dialogstatus, zoekfilters en tijdelijke browserselecties blijven lokale
-  UI-state.
-- Dubbelklik: battlefieldkaart exact 90 graden tappen/untappen.
-- Rechtermuisklik / `Shift+F10`: volledig kaartactiemenu.
-- Tappen of untappen vanuit het kaartmenu sluit dat menu direct. De
-  tapstatus wordt alleen door de 90°-rotatie getoond, zonder extra badge.
-- Rechtermuisklik op de library: trekken, draw X, mill X, zoeken, top-X bekijken
-  en schudden. De knop met drie puntjes biedt hetzelfde zonder rechtermuisklik.
-- Rechtermuisklik op lege battlefieldruimte: tafelacties en bekende decktokens
-  toevoegen op de aangeklikte positie.
-- Ctrl/⌘-klik of tik: kaart aan de multiselect toevoegen of eruit verwijderen.
-- Spelerrail: leven, poison, optionele trackers, City’s Blessing, handmatige
-  uitschakeling en compacte commander-damageregistratie.
-
-## Online multiplayer — eerste speelbare authoritative slice
-
-- URL-routes en een hoofdmenu voor offline, online, decks, hervatten en
-  instellingen. Offline import, battle, autosave en offlinepakketten hebben geen
-  login of backend nodig.
-- Online UI voor loginstatus, openbare lobby’s, game aanmaken en deelnemen met
-  code. Zonder `VITE_ONLINE_API_URL` gebruikt de app zichtbare, realistische
-  mocks; met die variabele gebruikt hij de Cloudflare HTTP- en
-  WebSocket-adapters.
-- `AuthService`, `OnlineGameService` en aparte offline/online
-  `GameCommandDispatcher`-implementaties houden SDK’s en transport uit
-  componenten en reducers.
-- Een strikt Zod-protocol voor versioned commands, persoonlijke snapshots,
-  serverevents en protocolerrors. Tegenstanders hebben alleen openbare zones en
-  aantallen voor verborgen zones; uitsluitend `privateView` kan de eigen hand
-  bevatten.
-- Een TypeScript Cloudflare Worker-basis met Firebase JWT/JWK-validatie, één
-  SQLite-backed Lobby Durable Object, server-toegewezen spelers/rollen,
-  kortlevende eenmalige socket-tickets en één SQLite-backed Durable Object per
-  game.
-- Het Durable Object beheert de officiële 2–6-spelerstate via een adapter op de
-  bestaande pure game-core. Trek, verplaats, wijzig leven/poison, mill, schud en
-  geef de beurt door zijn werkende versioned commands.
-- Iedere verbinding krijgt een eigen snapshot: publieke zones, de volledige
-  eigen hand en alleen aantallen voor verborgen zones van anderen. De online
-  Redux-slice bevat uitsluitend deze persoonlijke view.
-- De online battlepagina gebruikt acknowledgements en snapshots via WebSocket.
-  Na verbindingsverlies vraagt de adapter een nieuw eenmalig ticket en vervangt
-  hij de cache met een volledige verse snapshot.
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
 ## Architectuur
 
-De code blijft bewust één Vite-app; er is voor deze slice geen monorepo
-geïntroduceerd.
+De repository is een npm-workspace met afzonderlijke deploybare applicaties en
+gedeelde TypeScript-packages:
 
 ```text
-src/
-  game-core/       pure modellen, state-overgangen, assets en migraties
-  game-protocol/   runtime-gevalideerde online commands en persoonlijke views
-  archidekt/       URL-parser, Zod-schema, adapter en netwerkclient
-  app/             store, routing, listener middleware, typed hooks en thunks
-  features/
-    setup/         importstate en setupinterface
-    game/          actieve genormaliseerde game en undo/redo
-    battle/        gespiegeld tafeloppervlak en kaartinteracties
-    offline/       manifeststate, downloadservice en voortgangsinterface
-    online/        service-adapters, dispatchers, mocks en lobbyschermen
-    menu/          hoofdmenu, hervatten, decks en instellingen
-    ui/            gedeelde scherm-, boot- en autosavestatus
-  persistence/     repositoryinterfaces, Dexie en Cache API-adapters
-worker/
-  archidekt-worker.js  begrensde Archidekt-importproxy
-  online/              Firebase en SQLite-backed Durable Objects
-e2e/               Playwright kritieke flow
+apps/
+  web/              React, Redux, IndexedDB, PWA en Playwright
+  game-worker/      Firebase-validatie en SQLite Durable Objects
+  import-worker/    Afgeschermde Archidekt-proxy
+
+packages/
+  game-core/        Pure game-state en state-overgangen
+  game-protocol/    Zod-commands, snapshots, events en errors
+
+docs/
+  architecture/     Architecture Decision Records
 ```
 
-Kaartdefinities en fysieke kaartinstanties zijn gescheiden. `cardsById` is
-genormaliseerd en spelerzones bevatten alleen instance-ID's. Reducers benaderen
-IndexedDB of Cache API nooit direct; listener middleware en services gebruiken
-repositoryinterfaces.
+De webapp en game-worker delen dezelfde pure game-core en hetzelfde
+runtime-gevalideerde protocol. Offline Redux blijft lokaal authoritative;
+online Redux bevat uitsluitend de persoonlijke serverview.
 
-De actuele savegame heeft schemaversie 6. Hydratie migreert versies 1–5 en
-voegt veilige defaults toe voor fase, spelertrackers, City’s Blessing,
-handmatige uitschakeling en centrale matchstatus. Tokens, counters, actieve
-kaartzijde, vrije posities, tax, damage en statuswaarden staan in de duurzame
-game-state; geopende panelen, multiselect en lopende pointerinteractie niet.
+Meer achtergrond:
 
-Zie [ADR 001](docs/architecture/001-local-first-boundaries.md) voor het
-onderscheid tussen Redux, duurzame opslag, tijdelijke cache en expliciete
-offlinepakketten.
+- [Local-first grenzen](docs/architecture/001-local-first-boundaries.md)
+- [Game actions](docs/architecture/002-phase-two-game-actions.md)
+- [Zones, attachments en groepen](docs/architecture/003-zone-management-attachments-groups.md)
+- [Contextacties en tokens](docs/architecture/004-context-actions-and-deck-tokens.md)
+- [Speler- en matchstatus](docs/architecture/005-player-and-match-status.md)
+- [Online multiplayer](docs/architecture/006-online-multiplayer.md)
 
-## Offlinegedrag
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
-Een gestart spel wordt na relevante acties in IndexedDB opgeslagen. De
-serviceworker bewaart daarnaast de app-shell en mag remote afbeeldingen
-opportunistisch cachen.
+## Ontwikkeling
 
-De knop **Download voor offline gebruik** is een aparte, expliciete handeling:
+### Scripts
 
-1. alle bekende kaartzijdes worden op een stabiele assetsleutel
-   gededupliceerd;
-2. maximaal vier assets worden tegelijk opgehaald;
-3. afbeeldingen komen in `mtg-battle-offline-assets-v1`;
-4. voortgang, bytes en fouten worden per asset in IndexedDB bijgewerkt;
-5. het pakket wordt pas `complete` als iedere vereiste asset aanwezig is.
+| Command                     | Doel                                     |
+| --------------------------- | ---------------------------------------- |
+| `npm run dev`               | Start de webapp met Vite                 |
+| `npm run build`             | Typecheck en bouw de productie-PWA       |
+| `npm run preview`           | Bekijk de productiebuild lokaal          |
+| `npm run format`            | Formatteer met Prettier                  |
+| `npm run lint`              | Controleer met ESLint                    |
+| `npm run type-check`        | Typecheck alle workspaces                |
+| `npm run worker:type-check` | Typecheck de online Worker               |
+| `npm test`                  | Draai package-, web- en Workertests      |
+| `npm run test:integration`  | Draai de online integratiesuite          |
+| `npm run test:e2e`          | Draai de kritieke Playwright-offlineflow |
 
-Een kaart zonder afbeelding blijft speelbaar met naam en type als fallback. De
-UI meldt wanneer de browser geen persistente opslag garandeert.
+<details>
+  <summary>Online Worker lokaal starten</summary>
 
-## Import-Worker
-
-`worker/archidekt-worker.js` accepteert alleen
-`GET /api/import/archidekt/:numeriekDeckId` en de begrensde tokenroute
-`GET /api/import/archidekt/tokens?ids=…`. Voor offlinepakketten bestaat ook de
-strikt gevalideerde afbeeldingsroute
-`GET /api/import/archidekt/image/:uuid?face=…&hash=…`; deze kan alleen naar het
-vaste Archidekt-CDN-pad. De Worker gebruikt een timeout en responslimiet, cachet
-kort en vertaalt upstreamfouten naar een stabiel formaat. Er zijn geen secrets
-nodig.
-
-Voor een eigen Cloudflare-account:
+De Worker gebruikt Firebase uitsluitend voor identiteit. Kopieer eerst de
+frontendomgeving:
 
 ```sh
-npx wrangler dev
-npx wrangler deploy
+cp apps/web/.env.example apps/web/.env.local
 ```
 
-Koppel in productie dezelfde `/api/import/archidekt/*`-route aan de Worker.
-Deployment zelf is niet uitgevoerd en vereist eigen Cloudflare-toegang.
-
-## Online Worker lokaal configureren
-
-De afzonderlijke configuratie staat in `wrangler.online.toml`. De Worker heeft
-een `LOBBY`-binding voor het centrale Lobby Durable Object en een `GAMES`-binding
-die per game-ID een geïsoleerd Game Durable Object adresseert. Beide maken hun
-tabellen in de eigen SQLite-opslag aan; er is geen externe database of
-handmatige schemamigratie nodig.
-
-Stel `FIREBASE_PROJECT_ID` en `ALLOWED_ORIGIN` als omgevingsvariabelen voor de
-Worker in. Firebase-private keys horen niet in deze repository en zijn niet
-nodig: de Worker valideert ID-tokens met de openbare Google JWK-set.
+Start de online Worker met jouw Firebase-project-ID:
 
 ```sh
-npx wrangler dev --config wrangler.online.toml \
+npx wrangler dev --config apps/game-worker/wrangler.toml \
   --var FIREBASE_PROJECT_ID:jouw-firebase-project-id \
   --var ALLOWED_ORIGIN:http://localhost:5173
 ```
 
-Bij deployment past Wrangler de Durable Object classmigraties uit
-`wrangler.online.toml` toe. Een eerdere ontwikkelomgeving met de oude externe
-database wordt niet automatisch gemigreerd: maak lobby’s opnieuw aan; actieve
-lokale/offline savegames staan daar los van en blijven intact.
+Zet daarna `VITE_ONLINE_API_URL` in `apps/web/.env.local`. Een Firebase-private
+key of serviceaccount hoort niet in deze repository.
 
-De webapp gebruikt standaard mocks. Zet `VITE_ONLINE_API_URL` pas wanneer de
-Worker bereikbaar is én injecteer een echte Firebase SDK-port in
-`FirebaseAuthService`. Wanneer alleen de API-URL is ingesteld, toont de app
-bewust een loginconfiguratiefout en stuurt hij geen mocktoken naar de echte
-backend.
+</details>
 
-## Huidige beperkingen
+<details>
+  <summary>Archidekt Import Worker starten</summary>
 
-- Alleen openbare Archidekt-decks worden ondersteund.
-- Bekende tokens worden afgeleid uit de expliciete Archidekt-tokenverwijzingen,
-  niet uit vrije oracletekst. Reeds geïmporteerde decks moeten opnieuw worden
-  geïmporteerd om de nieuwe tokenlijst te krijgen. Als Archidekt geen tokenkaart
-  levert, blijft een functionele lege toestand beschikbaar.
-- Commander damage en tax worden handmatig bijgehouden. Waarden van `21`
-  commander damage, `10` poison of leven op nul tonen alleen een waarschuwing;
-  de app schakelt een speler nooit automatisch uit.
-- Multiselect ondersteunt samen verplaatsen en enkele snelle acties, maar nog
-  geen lasso-selectie.
-- Oudere battles zonder opgeslagen battlefieldposities krijgen eerst een
-  veilige automatische spreiding; na verslepen wordt de vrije positie duurzaam
-  opgeslagen.
-- Verwijderen en beheren van meerdere oude savegames/offlinepakketten heeft nog
-  geen aparte bibliotheekinterface.
-- Persistente browseropslag kan niet worden afgedwongen; de app toont de
-  werkelijk toegekende status.
-- De online lobby- en battleflow gebruikt zonder configuratie een speelbare
-  vier-spelersmock. De Firebase SDK-bootstrap en echte Cloudflare-deployment
-  zijn niet geconfigureerd.
-- De Worker heeft een host-only initialisatieroute voor gevalideerde
-  deelnemersdecks. De UI voor het per deelnemer registreren van een eigen
-  immutable decksnapshot en de expliciete host-startactie volgt nog.
-- Tappen, untappen, fasewissels, mulligans, tokens, counters, commander tax en
-  commander damage zijn nog geen online commands en antwoorden voorlopig met
-  `NOT_READY` wanneer ze al in het protocol bekend zijn.
+```sh
+npx wrangler dev --config apps/import-worker/wrangler.toml
+```
+
+De Worker accepteert uitsluitend de afgeschermde Archidekt-routes voor decks,
+tokens en kaartafbeeldingen; het is geen generieke fetchproxy.
+
+</details>
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+## Documentatie
+
+- [Alle architectuurbesluiten](docs/architecture/)
+- [Offline implementatieprompt](FIRST_IMPLEMENTATION_PROMPT.md)
+- [Online implementatieprompt](ONLINE_MULTIPLAYER_PROMPT.md)
+- [Coding-agentregels](AGENTS.md)
+- [Visuele tafelreferentie](docs/reference/mtg-duelist-layout.png)
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+## Roadmap
+
+- [x] Openbare Archidekt-decks importeren en normaliseren
+- [x] Local-first battle met autosave en hervatten
+- [x] Undo/redo, Commander-zones, counters, tokens en statustracking
+- [x] Expliciete offlinepakketten en PWA-app-shell
+- [x] Hoofdmenu, online lobby-UI en persoonlijke online Redux-view
+- [x] SQLite-backed Lobby en Game Durable Objects
+- [x] Authoritative online basiscommands en privacytests
+- [ ] Firebase Web SDK en accountproviders configureren
+- [ ] Per deelnemer een immutable online decksnapshot registreren
+- [ ] Expliciete host-startflow met echte backend configureren
+- [ ] Cloudflare staging- en productiedeployment
+- [ ] Overige online acties zoals tokens, counters en commander damage
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+## Disclaimer
+
+Magic: The Gathering en alle bijbehorende namen en afbeeldingen zijn eigendom
+van Wizards of the Coast. Dit project is niet verbonden aan of goedgekeurd door
+Wizards of the Coast.
+
+<!-- MARKDOWN LINKS & IMAGES -->
+
+[issues-shield]: https://img.shields.io/github/issues/MarcoHuib/mtgbattlearena?style=for-the-badge
+[issues-url]: https://github.com/MarcoHuib/mtgbattlearena/issues
+[stars-shield]: https://img.shields.io/github/stars/MarcoHuib/mtgbattlearena?style=for-the-badge
+[stars-url]: https://github.com/MarcoHuib/mtgbattlearena/stargazers
+[last-commit-shield]: https://img.shields.io/github/last-commit/MarcoHuib/mtgbattlearena?style=for-the-badge
+[commits-url]: https://github.com/MarcoHuib/mtgbattlearena/commits
+[typescript-shield]: https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white
+[typescript-url]: https://www.typescriptlang.org/

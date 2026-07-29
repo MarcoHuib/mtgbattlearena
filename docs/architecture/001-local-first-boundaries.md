@@ -13,7 +13,7 @@ hetzelfde zijn als een tijdelijke browsercache.
 
 ## Besluit
 
-- `src/game-core` bevat platformonafhankelijke modellen en pure
+- `packages/game-core/src` bevat platformonafhankelijke modellen en pure
   state-overgangen. Kaartdefinities en fysieke kaartinstanties zijn gescheiden;
   zones bevatten alleen instance-ID's.
 - Redux beheert de actieve battle, geschiedenis, setupstatus en zichtbare

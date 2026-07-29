@@ -1,0 +1,11 @@
+{
+  "name": "@mtg/game-worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@mtg/game-core": "*",
+    "@mtg/game-protocol": "*",
+    "zod": "^4.4.3"
+  }
+}

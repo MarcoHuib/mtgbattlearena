@@ -1,9 +1,13 @@
 {
   "files": [],
   "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.worker.json" },
-    { "path": "./e2e/tsconfig.json" }
+    { "path": "./apps/web/tsconfig.app.json" },
+    { "path": "./apps/web/tsconfig.node.json" },
+    { "path": "./apps/web/e2e/tsconfig.json" },
+    { "path": "./apps/game-worker/tsconfig.json" },
+    { "path": "./apps/game-worker/tsconfig.test.json" },
+    { "path": "./packages/game-core/tsconfig.json" },
+    { "path": "./packages/game-protocol/tsconfig.json" },
+    { "path": "./tsconfig.tools.json" }
   ]
 }
