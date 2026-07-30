@@ -1,6 +1,5 @@
 import { useDroppable } from "@dnd-kit/react"
 import { useMemo } from "react"
-import { useAppSelector } from "../../app/hooks"
 import type {
   CardDefinition,
   CardInstance,
@@ -9,12 +8,14 @@ import type {
 } from "@mtg/game-core/types"
 import {
   fallbackBattlefieldPosition,
+  positionForPerspective,
   safeBattlefieldPosition,
 } from "./battlefieldPosition"
 import { CardView } from "./CardView"
 import { CardGroupOverlay } from "./CardGroupOverlay"
 import { CommanderTaxControl } from "./CommanderTaxControl"
 import { ZoneBrowseMenu } from "./ZoneBrowseMenu"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 
 type ZoneAreaProps = {
   playerId: PlayerId
@@ -25,6 +26,7 @@ type ZoneAreaProps = {
   compact?: boolean
   countOnly?: boolean
   faceUpStack?: boolean
+  orientation?: "self" | "opponent"
   onOpen?: () => void
   onSearch?: () => void
   onActions?: (request: {
@@ -55,17 +57,20 @@ export const ZoneArea = ({
   compact = false,
   countOnly = false,
   faceUpStack = false,
+  orientation = "self",
   onOpen,
   onSearch,
   onActions,
 }: ZoneAreaProps) => {
-  const groupsById = useAppSelector(state => state.game.present?.groupsById)
+  const runtime = useBattleRuntime()
+  const groupsById = runtime.game.groupsById
+  const controllable = canControlPlayer(runtime, playerId)
+  const visibleCount =
+    runtime.hiddenZoneCounts[playerId]?.[zone] ?? instances.length
   const groups = useMemo(
     () =>
       zone === "battlefield"
-        ? Object.values(groupsById ?? {}).filter(
-            group => group.playerId === playerId,
-          )
+        ? Object.values(groupsById).filter(group => group.playerId === playerId)
         : [],
     [groupsById, playerId, zone],
   )
@@ -74,6 +79,7 @@ export const ZoneArea = ({
     type: "zone",
     data: { playerId, zone },
     accept: "card",
+    disabled: !controllable,
   })
   const displayedInstances =
     zone === "command"
@@ -92,16 +98,18 @@ export const ZoneArea = ({
   return (
     <section
       ref={ref}
+      data-battle-drop-zone={zone}
       className={`zone zone--${zone} ${
         isDropTarget ? "zone--drop-target" : ""
       } ${hasCommanderGroup ? "zone--commander-group" : ""} ${
         faceUpStack ? "zone--face-up-stack" : ""
       }`}
-      aria-label={`${title}, ${instances.length} ${
-        instances.length === 1 ? "kaart" : "kaarten"
+      aria-label={`${title}, ${visibleCount} ${
+        visibleCount === 1 ? "kaart" : "kaarten"
       }`}
       onContextMenu={event => {
         if (
+          !controllable ||
           !onActions ||
           (event.target as HTMLElement).closest(
             ".card, .card-group-overlay, button, input, select",
@@ -133,10 +141,10 @@ export const ZoneArea = ({
     >
       <div className="zone__label">
         <span>{title}</span>
-        <strong>{instances.length}</strong>
-        {onOpen && onSearch ? (
+        <strong>{visibleCount}</strong>
+        {controllable && onOpen && onSearch ? (
           <ZoneBrowseMenu title={title} onBrowse={onOpen} onSearch={onSearch} />
-        ) : onActions || onOpen ? (
+        ) : controllable && (onActions || onOpen) ? (
           <button
             type="button"
             className="zone__menu-trigger"
@@ -174,6 +182,7 @@ export const ZoneArea = ({
                 instance={topInstance}
                 definition={topDefinition}
                 compact
+                disableDrag={!controllable}
               />
             </div>
           ) : (
@@ -182,6 +191,26 @@ export const ZoneArea = ({
         </div>
       ) : (
         <div className="zone__cards">
+          {zone === "hand" &&
+          !controllable &&
+          visibleCount > instances.length ? (
+            <div
+              className="online-hidden-hand"
+              aria-label={`${visibleCount} verborgen kaarten`}
+            >
+              {Array.from({
+                length: Math.min(visibleCount - instances.length, 10),
+              }).map((_, index) => (
+                <img
+                  key={index}
+                  src="/magic-card-back.webp"
+                  alt=""
+                  aria-hidden="true"
+                />
+              ))}
+              <strong>{visibleCount}</strong>
+            </div>
+          ) : null}
           {zone === "battlefield"
             ? groups.map(group => (
                 <CardGroupOverlay key={group.id} group={group} />
@@ -200,9 +229,15 @@ export const ZoneArea = ({
               ) {
                 return null
               }
-              const position = safeBattlefieldPosition(
-                instance.position ??
-                  fallbackBattlefieldPosition(index, displayedInstances.length),
+              const position = positionForPerspective(
+                safeBattlefieldPosition(
+                  instance.position ??
+                    fallbackBattlefieldPosition(
+                      index,
+                      displayedInstances.length,
+                    ),
+                ),
+                orientation,
               )
               return (
                 <div
@@ -218,7 +253,11 @@ export const ZoneArea = ({
                     zIndex: position.z,
                   }}
                 >
-                  <CardView instance={instance} definition={definition} />
+                  <CardView
+                    instance={instance}
+                    definition={definition}
+                    disableDrag={!controllable}
+                  />
                 </div>
               )
             }
@@ -228,6 +267,7 @@ export const ZoneArea = ({
                   instance={instance}
                   definition={definition}
                   compact={compact}
+                  disableDrag={!controllable}
                 />
                 <CommanderTaxControl
                   instance={instance}
@@ -240,10 +280,12 @@ export const ZoneArea = ({
                 instance={instance}
                 definition={definition}
                 compact={compact}
+                disableDrag={!controllable}
               />
             )
           })}
-          {instances.length === 0 ? (
+          {instances.length === 0 &&
+          !(zone === "hand" && !controllable && visibleCount > 0) ? (
             <span className="zone__empty">Sleep hierheen</span>
           ) : null}
         </div>

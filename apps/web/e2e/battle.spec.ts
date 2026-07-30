@@ -13,7 +13,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
   page,
   context,
 }) => {
-  await page.route("**/api/import/archidekt/*", async route => {
+  await page.route("**/api/import/archidekt/**", async route => {
     const url = new URL(route.request().url())
     if (url.pathname.includes("/image/")) {
       await route.fulfill({ contentType: "image/png", body: pixel })
@@ -47,7 +47,11 @@ test("herstelt een gedownloade battle volledig offline", async ({
     })
   })
   await page.route("https://cards.test/**", async route => {
-    await route.fulfill({ contentType: "image/png", body: pixel })
+    await route.fulfill({
+      contentType: "image/png",
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: pixel,
+    })
   })
   await page.route("https://card-images.archidekt.com/**", async route => {
     await route.fulfill({

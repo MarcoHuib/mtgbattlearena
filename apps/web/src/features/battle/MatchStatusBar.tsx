@@ -1,12 +1,5 @@
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { DayNightStatus, PlayerId, TurnPhase } from "@mtg/game-core/types"
-import {
-  nextPhase,
-  nextTurn,
-  setDayNight,
-  setInitiative,
-  setMonarch,
-} from "../game/gameSlice"
+import { battlePlayerIds, useBattleRuntime } from "./BattleRuntime"
 
 const phaseLabels: Record<TurnPhase, string> = {
   beginning: "Beginfase",
@@ -16,17 +9,19 @@ const phaseLabels: Record<TurnPhase, string> = {
   ending: "Eindfase",
 }
 
-const holderValue = (value: string): PlayerId | null =>
-  value === "player-1" || value === "player-2" ? value : null
-
 export const MatchStatusBar = () => {
-  const dispatch = useAppDispatch()
-  const game = useAppSelector(state => state.game.present)
-  if (!game) return null
-
-  const openingHandsKept =
-    game.openingHands["player-1"].kept && game.openingHands["player-2"].kept
+  const { actions, game, mode, pending, viewerPlayerId } = useBattleRuntime()
+  const playerIds = battlePlayerIds(game)
+  const openingHandsKept = playerIds.every(
+    playerId => game.openingHands[playerId]?.kept,
+  )
+  const holderValue = (value: string): PlayerId | null =>
+    playerIds.includes(value) ? value : null
   const activePlayer = game.players[game.activePlayerId]
+  const canAdvance =
+    openingHandsKept &&
+    !pending &&
+    (mode === "offline" || viewerPlayerId === game.activePlayerId)
 
   return (
     <section className="match-status" aria-label="Matchstatus">
@@ -44,12 +39,15 @@ export const MatchStatusBar = () => {
           aria-label="Monarch-houder"
           value={game.matchStatus.monarchPlayerId ?? "none"}
           onChange={event => {
-            dispatch(setMonarch({ playerId: holderValue(event.target.value) }))
+            actions.setMonarch(holderValue(event.target.value))
           }}
         >
           <option value="none">Niemand</option>
-          <option value="player-1">{game.players["player-1"].name}</option>
-          <option value="player-2">{game.players["player-2"].name}</option>
+          {playerIds.map(playerId => (
+            <option value={playerId} key={playerId}>
+              {game.players[playerId].name}
+            </option>
+          ))}
         </select>
       </label>
 
@@ -59,14 +57,15 @@ export const MatchStatusBar = () => {
           aria-label="Initiative-houder"
           value={game.matchStatus.initiativePlayerId ?? "none"}
           onChange={event => {
-            dispatch(
-              setInitiative({ playerId: holderValue(event.target.value) }),
-            )
+            actions.setInitiative(holderValue(event.target.value))
           }}
         >
           <option value="none">Niemand</option>
-          <option value="player-1">{game.players["player-1"].name}</option>
-          <option value="player-2">{game.players["player-2"].name}</option>
+          {playerIds.map(playerId => (
+            <option value={playerId} key={playerId}>
+              {game.players[playerId].name}
+            </option>
+          ))}
         </select>
       </label>
 
@@ -76,11 +75,7 @@ export const MatchStatusBar = () => {
           aria-label="Dag- en nachtstatus"
           value={game.matchStatus.dayNight}
           onChange={event => {
-            dispatch(
-              setDayNight({
-                status: event.target.value as DayNightStatus,
-              }),
-            )
+            actions.setDayNight(event.target.value as DayNightStatus)
           }}
         >
           <option value="none">Geen</option>
@@ -92,18 +87,18 @@ export const MatchStatusBar = () => {
       <div className="match-status__actions">
         <button
           type="button"
-          disabled={!openingHandsKept}
+          disabled={!canAdvance}
           onClick={() => {
-            dispatch(nextPhase())
+            actions.nextPhase()
           }}
         >
           Volgende fase
         </button>
         <button
           type="button"
-          disabled={!openingHandsKept}
+          disabled={!canAdvance}
           onClick={() => {
-            dispatch(nextTurn())
+            actions.nextTurn()
           }}
         >
           Volgende beurt →

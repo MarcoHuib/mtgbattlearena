@@ -58,6 +58,10 @@ test("valideert één eigen deckregistratie zonder clientidentiteit of seat", ()
       {
         definitionId: "commander",
         name: "Atraxa",
+        faces: [
+          { name: "Atraxa", imageUrl: "https://example.test/front.jpg" },
+          { name: "Atraxa, Compleated", oracleText: "Andere zijde" },
+        ],
         quantity: 1,
         isCommander: true,
       },
@@ -65,6 +69,7 @@ test("valideert één eigen deckregistratie zonder clientidentiteit of seat", ()
   })
   expect(deck.deckName).toBe("Mijn Commander-deck")
   expect(deck.tokens).toEqual([])
+  expect(deck.cards[0]?.faces).toHaveLength(2)
   expect("uid" in deck).toBe(false)
   expect("playerId" in deck).toBe(false)
   expect(() =>
@@ -88,6 +93,24 @@ test("valideert alle speelbare online basiscommands strikt", () => {
       ...base,
       type: "MOVE_CARD",
       payload: { instanceId: "card", zone: "battlefield" },
+    },
+    {
+      ...base,
+      type: "MOVE_CARDS",
+      payload: {
+        moves: [
+          {
+            instanceId: "card",
+            zone: "battlefield",
+            position: { x: 0.5, y: 0.5, z: 1 },
+          },
+        ],
+      },
+    },
+    {
+      ...base,
+      type: "MOVE_CARD_IN_LIBRARY",
+      payload: { instanceId: "card", position: "top" },
     },
     { ...base, type: "CHANGE_LIFE", payload: { delta: -1 } },
     { ...base, type: "CHANGE_POISON", payload: { delta: 1 } },
@@ -131,6 +154,58 @@ test("valideert alle speelbare online basiscommands strikt", () => {
       payload: { commanderId: "opponent-card", delta: 1 },
     },
     { ...base, type: "TOGGLE_TAP", payload: { instanceId: "card" } },
+    {
+      ...base,
+      type: "TOGGLE_TAP",
+      payload: { instanceIds: ["card", "card-2"] },
+    },
+    {
+      ...base,
+      type: "SET_COUNTER",
+      payload: { instanceId: "card", counter: "+1/+1", value: 2 },
+    },
+    { ...base, type: "SWITCH_FACE", payload: { instanceId: "card" } },
+    {
+      ...base,
+      type: "SET_STACK_ORDER",
+      payload: { instanceId: "card", direction: "front" },
+    },
+    {
+      ...base,
+      type: "ATTACH_CARD",
+      payload: { attachmentId: "card", targetId: "card-2" },
+    },
+    { ...base, type: "DETACH_CARD", payload: { attachmentId: "card" } },
+    { ...base, type: "DUPLICATE_TOKEN", payload: { instanceId: "card" } },
+    {
+      ...base,
+      type: "CREATE_GROUP",
+      payload: { cardIds: ["card", "card-2"], name: "Aanvallers" },
+    },
+    {
+      ...base,
+      type: "ADD_TO_GROUP",
+      payload: { groupId: "group", cardIds: ["card"] },
+    },
+    {
+      ...base,
+      type: "REMOVE_FROM_GROUP",
+      payload: { groupId: "group", cardIds: ["card"] },
+    },
+    {
+      ...base,
+      type: "UPDATE_GROUP",
+      payload: { groupId: "group", collapsed: true },
+    },
+    {
+      ...base,
+      type: "MOVE_GROUP",
+      payload: {
+        groupId: "group",
+        position: { x: 0.4, y: 0.6, z: 2 },
+      },
+    },
+    { ...base, type: "DISSOLVE_GROUP", payload: { groupId: "group" } },
     { ...base, type: "PASS_TURN", payload: {} },
     { ...base, type: "NEXT_PHASE", payload: {} },
     { ...base, type: "SET_MONARCH", payload: { playerId: "p1" } },
@@ -144,6 +219,8 @@ test("valideert alle speelbare online basiscommands strikt", () => {
     "KEEP_HAND",
     "DRAW_CARD",
     "MOVE_CARD",
+    "MOVE_CARDS",
+    "MOVE_CARD_IN_LIBRARY",
     "CHANGE_LIFE",
     "CHANGE_POISON",
     "MILL",
@@ -159,6 +236,19 @@ test("valideert alle speelbare online basiscommands strikt", () => {
     "CHANGE_COMMANDER_TAX",
     "CHANGE_COMMANDER_DAMAGE",
     "TOGGLE_TAP",
+    "TOGGLE_TAP",
+    "SET_COUNTER",
+    "SWITCH_FACE",
+    "SET_STACK_ORDER",
+    "ATTACH_CARD",
+    "DETACH_CARD",
+    "DUPLICATE_TOKEN",
+    "CREATE_GROUP",
+    "ADD_TO_GROUP",
+    "REMOVE_FROM_GROUP",
+    "UPDATE_GROUP",
+    "MOVE_GROUP",
+    "DISSOLVE_GROUP",
     "PASS_TURN",
     "NEXT_PHASE",
     "SET_MONARCH",

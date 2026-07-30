@@ -1,23 +1,19 @@
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import { openingHandSizeAfterMulligan } from "@mtg/game-core/game"
 import type { PlayerId } from "@mtg/game-core/types"
-import { keepHand, mulliganHand } from "../game/gameSlice"
+import {
+  battlePlayerIds,
+  canControlPlayer,
+  useBattleRuntime,
+} from "./BattleRuntime"
 import { CardView } from "./CardView"
 
 type OpeningHandDialogProps = {
   playerId: PlayerId
 }
 
-const randomSeed = () => {
-  const values = new Uint32Array(1)
-  crypto.getRandomValues(values)
-  return values[0] ?? Date.now()
-}
-
 export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
-  const dispatch = useAppDispatch()
-  const game = useAppSelector(state => state.game.present)
-  if (!game) return null
+  const runtime = useBattleRuntime()
+  const { actions, game } = runtime
   const player = game.players[playerId]
   const state = game.openingHands[playerId]
   const nextMulliganCount = state.mulliganCount + 1
@@ -29,7 +25,9 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
       : undefined
     return instance && definition ? [{ instance, definition }] : []
   })
-  const playerNumber = playerId === "player-1" ? 1 : 2
+  const playerIds = battlePlayerIds(game)
+  const playerNumber = playerIds.indexOf(playerId) + 1
+  const enabled = canControlPlayer(runtime, playerId)
 
   return (
     <div className="opening-hand-layer">
@@ -41,7 +39,9 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
       >
         <header>
           <div>
-            <span className="eyebrow">Speler {playerNumber} van 2</span>
+            <span className="eyebrow">
+              Speler {playerNumber} van {playerIds.length}
+            </span>
             <h2 id={`opening-hand-title-${playerId}`}>
               Openingshand van {player.name}
             </h2>
@@ -80,9 +80,9 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
               className="button button--secondary"
               type="button"
               autoFocus
-              disabled={cards.length === 0}
+              disabled={!enabled || cards.length === 0}
               onClick={() => {
-                dispatch(mulliganHand({ playerId, seed: randomSeed() }))
+                actions.mulligan(playerId)
               }}
             >
               Mulligan ({state.mulliganCount})
@@ -92,8 +92,9 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
           <button
             className="button button--primary button--large"
             type="button"
+            disabled={!enabled}
             onClick={() => {
-              dispatch(keepHand({ playerId }))
+              actions.keepHand(playerId)
             }}
           >
             Deze hand houden

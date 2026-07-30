@@ -1,6 +1,5 @@
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { CardDefinition, CardInstance } from "@mtg/game-core/types"
-import { changeTax } from "../game/gameSlice"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 
 type CommanderTaxControlProps = {
   instance: CardInstance
@@ -11,13 +10,11 @@ export const CommanderTaxControl = ({
   instance,
   definition,
 }: CommanderTaxControlProps) => {
-  const dispatch = useAppDispatch()
-  const value = useAppSelector(
-    state =>
-      state.game.present?.players[instance.ownerId].commanderTax[
-        instance.instanceId
-      ] ?? 0,
-  )
+  const runtime = useBattleRuntime()
+  const value =
+    runtime.game.players[instance.ownerId].commanderTax[instance.instanceId] ??
+    0
+  const enabled = canControlPlayer(runtime, instance.ownerId)
 
   return (
     <div
@@ -27,15 +24,13 @@ export const CommanderTaxControl = ({
       <span>Tax</span>
       <button
         type="button"
-        disabled={value === 0}
+        disabled={!enabled || value === 0}
         aria-label={`Verlaag commander tax van ${definition.name}`}
         onClick={() => {
-          dispatch(
-            changeTax({
-              playerId: instance.ownerId,
-              commanderId: instance.instanceId,
-              delta: -2,
-            }),
+          runtime.actions.changeCommanderTax(
+            instance.ownerId,
+            instance.instanceId,
+            -2,
           )
         }}
       >
@@ -44,14 +39,13 @@ export const CommanderTaxControl = ({
       <strong>{value}</strong>
       <button
         type="button"
+        disabled={!enabled}
         aria-label={`Verhoog commander tax van ${definition.name}`}
         onClick={() => {
-          dispatch(
-            changeTax({
-              playerId: instance.ownerId,
-              commanderId: instance.instanceId,
-              delta: 2,
-            }),
+          runtime.actions.changeCommanderTax(
+            instance.ownerId,
+            instance.instanceId,
+            2,
           )
         }}
       >

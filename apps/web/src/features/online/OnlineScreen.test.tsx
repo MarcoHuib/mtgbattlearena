@@ -454,18 +454,16 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   expect(screen.getByRole("button", { name: "Trek een kaart" })).toBeEnabled()
   expect(screen.getByRole("button", { name: "Trek X" })).toBeEnabled()
   expect(screen.getByRole("button", { name: "Mill X" })).toBeEnabled()
-  expect(
-    screen.getByRole("button", { name: "Schud library" }),
-  ).toBeEnabled()
+  expect(screen.getByRole("button", { name: "Schud library" })).toBeEnabled()
   await user.click(
     screen.getByRole("button", { name: "Library-acties openen" }),
   )
   expect(screen.getAllByText(/Serverstate v/).length).toBeGreaterThan(0)
   expect(
-    document.querySelector('[data-online-draggable="true"]'),
+    document.querySelector('[data-battle-draggable="true"]'),
   ).toBeInTheDocument()
   expect(
-    document.querySelector('[data-online-drop-zone="battlefield"]'),
+    document.querySelector('[data-battle-drop-zone="battlefield"]'),
   ).toBeInTheDocument()
   expect(
     document.querySelector(".online-game-controls"),
@@ -473,10 +471,12 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   expect(
     document.querySelector('select[aria-label^="Verplaats "]'),
   ).not.toBeInTheDocument()
-  const cardActions = screen.getAllByRole("button", {
-    name: /Kaartacties voor/,
-  })
-  await user.click(cardActions[0]!)
+  await user.keyboard("{Escape}")
+  const draggableCard = document.querySelector<HTMLElement>(
+    '[data-battle-draggable="true"]',
+  )
+  expect(draggableCard).toBeInTheDocument()
+  fireEvent.contextMenu(draggableCard!, { clientX: 400, clientY: 300 })
   expect(
     screen.getByRole("dialog", { name: /Kaartacties voor/ }),
   ).toBeInTheDocument()
@@ -494,10 +494,9 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   expect(
     screen.getByRole("dialog", { name: "Battlefieldacties" }),
   ).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: /Token toevoegen/ })).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  )
+  expect(
+    screen.getByRole("button", { name: /Token toevoegen/ }),
+  ).toHaveAttribute("aria-expanded", "true")
   await user.click(screen.getByRole("button", { name: /Treasure/ }))
   expect(
     await within(ownBoard).findByRole("button", {

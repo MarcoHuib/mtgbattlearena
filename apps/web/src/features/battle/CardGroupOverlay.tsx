@@ -1,25 +1,21 @@
 import { useEffect, useState } from "react"
-import { useAppDispatch } from "../../app/hooks"
 import type { CardGroup } from "@mtg/game-core/types"
-import { dissolveGroup, moveGroup, updateGroup } from "../game/gameSlice"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 
 export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
-  const dispatch = useAppDispatch()
+  const runtime = useBattleRuntime()
+  const { actions } = runtime
+  const enabled = canControlPlayer(runtime, group.playerId)
   const [name, setName] = useState(group.name ?? "")
   useEffect(() => {
     setName(group.name ?? "")
   }, [group.name])
   const nudge = (x: number, y: number) => {
-    dispatch(
-      moveGroup({
-        groupId: group.id,
-        position: {
-          x: Math.max(0, Math.min(1, group.position.x + x)),
-          y: Math.max(0, Math.min(1, group.position.y + y)),
-          z: group.position.z,
-        },
-      }),
-    )
+    actions.moveGroup(group.id, {
+      x: Math.max(0, Math.min(1, group.position.x + x)),
+      y: Math.max(0, Math.min(1, group.position.y + y)),
+      z: group.position.z,
+    })
   }
   return (
     <aside
@@ -36,7 +32,7 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
       <form
         onSubmit={event => {
           event.preventDefault()
-          dispatch(updateGroup({ groupId: group.id, name }))
+          actions.updateGroup(group.id, { name })
         }}
       >
         <input
@@ -47,20 +43,18 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
             setName(event.target.value)
           }}
         />
-        <button type="submit">Opslaan</button>
+        <button type="submit" disabled={!enabled}>
+          Opslaan
+        </button>
       </form>
       <span>{group.cardIds.length} kaarten</span>
       <div className="card-group-overlay__actions">
         <button
           type="button"
-          onClick={() =>
-            dispatch(
-              updateGroup({
-                groupId: group.id,
-                collapsed: !group.collapsed,
-              }),
-            )
-          }
+          onClick={() => {
+            actions.updateGroup(group.id, { collapsed: !group.collapsed })
+          }}
+          disabled={!enabled}
         >
           {group.collapsed ? "Uitklappen" : "Inklappen"}
         </button>
@@ -68,6 +62,7 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
           <button
             type="button"
             aria-label="Groep naar links"
+            disabled={!enabled}
             onClick={() => {
               nudge(-0.05, 0)
             }}
@@ -77,6 +72,7 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
           <button
             type="button"
             aria-label="Groep omhoog"
+            disabled={!enabled}
             onClick={() => {
               nudge(0, -0.05)
             }}
@@ -86,6 +82,7 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
           <button
             type="button"
             aria-label="Groep omlaag"
+            disabled={!enabled}
             onClick={() => {
               nudge(0, 0.05)
             }}
@@ -95,6 +92,7 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
           <button
             type="button"
             aria-label="Groep naar rechts"
+            disabled={!enabled}
             onClick={() => {
               nudge(0.05, 0)
             }}
@@ -104,7 +102,10 @@ export const CardGroupOverlay = ({ group }: { group: CardGroup }) => {
         </div>
         <button
           type="button"
-          onClick={() => dispatch(dissolveGroup({ groupId: group.id }))}
+          disabled={!enabled}
+          onClick={() => {
+            actions.dissolveGroup(group.id)
+          }}
         >
           Groep opheffen
         </button>

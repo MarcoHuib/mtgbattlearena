@@ -165,6 +165,7 @@ Meer achtergrond:
 - [Contextacties en tokens](docs/architecture/004-context-actions-and-deck-tokens.md)
 - [Speler- en matchstatus](docs/architecture/005-player-and-match-status.md)
 - [Online multiplayer](docs/architecture/006-online-multiplayer.md)
+- [Gedeelde offline/online speeltafel](docs/architecture/007-shared-battle-runtime.md)
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 

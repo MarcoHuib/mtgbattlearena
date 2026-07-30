@@ -34,6 +34,20 @@ export const onlineDeckCardSchema = z
     typeLine: z.string().max(500).optional(),
     imageUrl: z.url().optional(),
     scryfallId: z.string().max(120).optional(),
+    faces: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(300),
+            typeLine: z.string().max(500).optional(),
+            oracleText: z.string().max(20_000).optional(),
+            imageUrl: z.url().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(10)
+      .optional(),
     quantity: z.number().int().min(1).max(100),
     isCommander: z.boolean().default(false),
   })
@@ -96,6 +110,187 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
           position: battlefieldPositionSchema.optional(),
         })
         .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("MOVE_CARDS"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          moves: z
+            .array(
+              z
+                .object({
+                  instanceId: cardInstanceIdSchema,
+                  zone: z.enum([
+                    "library",
+                    "hand",
+                    "battlefield",
+                    "graveyard",
+                    "exile",
+                    "command",
+                  ]),
+                  position: battlefieldPositionSchema.optional(),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(100),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("MOVE_CARD_IN_LIBRARY"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          instanceId: cardInstanceIdSchema,
+          position: z.enum(["top", "bottom"]),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_COUNTER"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          instanceId: cardInstanceIdSchema,
+          counter: z.string().trim().min(1).max(80),
+          value: z.number().int().min(0).max(100_000),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SWITCH_FACE"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ instanceId: cardInstanceIdSchema }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SET_STACK_ORDER"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          instanceId: cardInstanceIdSchema,
+          direction: z.enum(["front", "back"]),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ATTACH_CARD"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          attachmentId: cardInstanceIdSchema,
+          targetId: cardInstanceIdSchema,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DETACH_CARD"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ attachmentId: cardInstanceIdSchema }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DUPLICATE_TOKEN"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ instanceId: cardInstanceIdSchema }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("CREATE_GROUP"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          cardIds: z.array(cardInstanceIdSchema).min(2).max(100),
+          name: z.string().trim().max(80).optional(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ADD_TO_GROUP"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          groupId: z.string().min(1).max(120),
+          cardIds: z.array(cardInstanceIdSchema).min(1).max(100),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("REMOVE_FROM_GROUP"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          groupId: z.string().min(1).max(120),
+          cardIds: z.array(cardInstanceIdSchema).min(1).max(100),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("UPDATE_GROUP"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          groupId: z.string().min(1).max(120),
+          name: z.string().max(80).optional(),
+          collapsed: z.boolean().optional(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("MOVE_GROUP"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z
+        .object({
+          groupId: z.string().min(1).max(120),
+          position: battlefieldPositionSchema,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DISSOLVE_GROUP"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({ groupId: z.string().min(1).max(120) }).strict(),
     })
     .strict(),
   z
@@ -239,7 +434,14 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
       type: z.literal("TOGGLE_TAP"),
       commandId: z.uuid(),
       expectedVersion: z.number().int().nonnegative(),
-      payload: z.object({ instanceId: cardInstanceIdSchema }).strict(),
+      payload: z.union([
+        z.object({ instanceId: cardInstanceIdSchema }).strict(),
+        z
+          .object({
+            instanceIds: z.array(cardInstanceIdSchema).min(1).max(100),
+          })
+          .strict(),
+      ]),
     })
     .strict(),
   z
@@ -312,8 +514,32 @@ const visibleCardSchema = z
     tapped: z.boolean(),
     activeFaceIndex: z.number().int().nonnegative(),
     counters: z.record(z.string(), z.number().int()),
+    faces: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(300),
+            typeLine: z.string().max(500).optional(),
+            imageUrl: z.url().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .optional(),
+    attachedTo: cardInstanceIdSchema.optional(),
     position: battlefieldPositionSchema.optional(),
     isCommander: z.boolean(),
+  })
+  .strict()
+
+const publicCardGroupSchema = z
+  .object({
+    id: z.string().min(1).max(120),
+    playerId: playerIdSchema,
+    name: z.string().max(80).optional(),
+    cardIds: z.array(cardInstanceIdSchema).min(1).max(100),
+    position: battlefieldPositionSchema,
+    collapsed: z.boolean(),
   })
   .strict()
 
@@ -388,6 +614,7 @@ export const personalGameSnapshotSchema = z
     turnOrder: z.array(playerIdSchema).min(2).max(6),
     openingHands: z.record(playerIdSchema, openingHandStateSchema),
     players: z.record(playerIdSchema, publicPlayerSchema),
+    groupsById: z.record(z.string(), publicCardGroupSchema).optional(),
     privateView: privatePlayerViewSchema.nullable(),
   })
   .strict()
@@ -499,9 +726,7 @@ export const serverEventSchema = z.discriminatedUnion("type", [
 
 export type GameCommand = z.infer<typeof gameCommandSchema>
 export type OnlineDeckSubmission = z.infer<typeof onlineDeckSubmissionSchema>
-export type OnlineTokenDefinition = z.infer<
-  typeof onlineTokenDefinitionSchema
->
+export type OnlineTokenDefinition = z.infer<typeof onlineTokenDefinitionSchema>
 export type VisibleOnlineCard = z.infer<typeof visibleCardSchema>
 export type PublicOnlinePlayer = z.infer<typeof publicPlayerSchema>
 export type PersonalGameSnapshot = z.infer<typeof personalGameSnapshotSchema>

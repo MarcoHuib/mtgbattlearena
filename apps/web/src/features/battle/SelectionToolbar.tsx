@@ -1,17 +1,6 @@
 import { useState } from "react"
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { Zone } from "@mtg/game-core/types"
-import {
-  addToGroup,
-  changeStackOrder,
-  createGroup,
-  moveGameCards,
-  removeFromGroup,
-  setCounter,
-  switchFace,
-  toggleSelectedTap,
-} from "../game/gameSlice"
-import { clearCardSelection } from "../ui/uiSlice"
+import { useBattleRuntime } from "./BattleRuntime"
 
 const destinations: { zone: Zone; label: string }[] = [
   { zone: "battlefield", label: "Battlefield" },
@@ -23,11 +12,10 @@ const destinations: { zone: Zone; label: string }[] = [
 ]
 
 export const SelectionToolbar = () => {
-  const dispatch = useAppDispatch()
-  const selectedCardIds = useAppSelector(state => state.ui.selectedCardIds)
-  const game = useAppSelector(state => state.game.present)
+  const { actions, game, selectedCardIds, setSelectedCardIds } =
+    useBattleRuntime()
   const [groupName, setGroupName] = useState("")
-  if (selectedCardIds.length === 0 || !game) return null
+  if (selectedCardIds.length === 0) return null
   const cardsById = game.cardsById
   const singleCard =
     selectedCardIds.length === 1 ? cardsById[selectedCardIds[0] ?? ""] : null
@@ -61,23 +49,21 @@ export const SelectionToolbar = () => {
           aria-label="Verplaats geselecteerde kaarten"
           onChange={event => {
             const zone = event.target.value as Zone
-            dispatch(
-              moveGameCards({
-                moves: selectedCardIds.flatMap(instanceId => {
-                  const card = cardsById[instanceId]
-                  return card
-                    ? [
-                        {
-                          instanceId,
-                          playerId: card.controllerId,
-                          zone,
-                        },
-                      ]
-                    : []
-                }),
+            actions.moveCards(
+              selectedCardIds.flatMap(instanceId => {
+                const card = cardsById[instanceId]
+                return card
+                  ? [
+                      {
+                        instanceId,
+                        playerId: card.controllerId,
+                        zone,
+                      },
+                    ]
+                  : []
               }),
             )
-            dispatch(clearCardSelection())
+            setSelectedCardIds([])
           }}
         >
           <option value="" disabled>
@@ -93,7 +79,7 @@ export const SelectionToolbar = () => {
       <button
         type="button"
         onClick={() => {
-          dispatch(toggleSelectedTap({ instanceIds: selectedCardIds }))
+          actions.toggleSelectedTap(selectedCardIds)
         }}
       >
         Tap/untap
@@ -102,7 +88,7 @@ export const SelectionToolbar = () => {
         <button
           type="button"
           onClick={() => {
-            dispatch(switchFace({ instanceId: singleCard.instanceId }))
+            actions.switchFace(singleCard.instanceId)
           }}
         >
           Kaartzijde
@@ -113,12 +99,10 @@ export const SelectionToolbar = () => {
           <button
             type="button"
             onClick={() => {
-              dispatch(
-                setCounter({
-                  instanceId: singleCard.instanceId,
-                  counter: "+1/+1",
-                  value: (singleCard.counters["+1/+1"] ?? 0) + 1,
-                }),
+              actions.setCounter(
+                singleCard.instanceId,
+                "+1/+1",
+                (singleCard.counters["+1/+1"] ?? 0) + 1,
               )
             }}
           >
@@ -127,12 +111,7 @@ export const SelectionToolbar = () => {
           <button
             type="button"
             onClick={() => {
-              dispatch(
-                changeStackOrder({
-                  instanceId: singleCard.instanceId,
-                  direction: "front",
-                }),
-              )
+              actions.changeStackOrder(singleCard.instanceId, "front")
             }}
           >
             Naar voren
@@ -140,12 +119,7 @@ export const SelectionToolbar = () => {
           <button
             type="button"
             onClick={() => {
-              dispatch(
-                changeStackOrder({
-                  instanceId: singleCard.instanceId,
-                  direction: "back",
-                }),
-              )
+              actions.changeStackOrder(singleCard.instanceId, "back")
             }}
           >
             Naar achteren
@@ -157,16 +131,13 @@ export const SelectionToolbar = () => {
           className="selection-toolbar__group"
           onSubmit={event => {
             event.preventDefault()
-            dispatch(
-              createGroup({
-                groupId: `group-${crypto.randomUUID()}`,
-                playerId: selectionPlayerId,
-                cardIds: battlefieldCards.map(card => card.instanceId),
-                name: groupName,
-              }),
+            actions.createGroup(
+              selectionPlayerId,
+              battlefieldCards.map(card => card.instanceId),
+              groupName,
             )
             setGroupName("")
-            dispatch(clearCardSelection())
+            setSelectedCardIds([])
           }}
         >
           <input
@@ -187,13 +158,11 @@ export const SelectionToolbar = () => {
             defaultValue=""
             aria-label="Voeg selectie toe aan groep"
             onChange={event => {
-              dispatch(
-                addToGroup({
-                  groupId: event.target.value,
-                  cardIds: battlefieldCards.map(card => card.instanceId),
-                }),
+              actions.addToGroup(
+                event.target.value,
+                battlefieldCards.map(card => card.instanceId),
               )
-              dispatch(clearCardSelection())
+              setSelectedCardIds([])
             }}
           >
             <option value="" disabled>
@@ -211,13 +180,8 @@ export const SelectionToolbar = () => {
         <button
           type="button"
           onClick={() => {
-            dispatch(
-              removeFromGroup({
-                groupId: currentGroup.id,
-                cardIds: [singleCard.instanceId],
-              }),
-            )
-            dispatch(clearCardSelection())
+            actions.removeFromGroup(currentGroup.id, [singleCard.instanceId])
+            setSelectedCardIds([])
           }}
         >
           Uit groep
@@ -226,7 +190,7 @@ export const SelectionToolbar = () => {
       <button
         type="button"
         onClick={() => {
-          dispatch(clearCardSelection())
+          setSelectedCardIds([])
         }}
       >
         Selectie wissen

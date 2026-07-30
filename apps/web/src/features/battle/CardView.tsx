@@ -2,22 +2,10 @@ import { Feedback } from "@dnd-kit/dom"
 import { useDraggable } from "@dnd-kit/react"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { CardDefinition, CardInstance, Zone } from "@mtg/game-core/types"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
 import { resolveCardImage } from "../../persistence/imageResolver"
-import {
-  attach,
-  changeStackOrder,
-  copyToken,
-  detach,
-  moveGameCard,
-  moveGameCards,
-  setCounter,
-  switchFace,
-  toggleTap,
-} from "../game/gameSlice"
-import { clearCardSelection, toggleCardSelection } from "../ui/uiSlice"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 import { beginCardPointerSession } from "./cardPointerSession"
 
 type CardViewProps = {
@@ -78,7 +66,9 @@ export const CardView = ({
   displayOnly = false,
   disableDrag = false,
 }: CardViewProps) => {
-  const dispatch = useAppDispatch()
+  const runtime = useBattleRuntime()
+  const { actions, game, selectedCardIds, setSelectedCardIds } = runtime
+  const controllable = canControlPlayer(runtime, instance.controllerId)
   const online = useOnlineStatus()
   const activeFace =
     definition.faces[instance.activeFaceIndex] ?? definition.faces[0]
@@ -104,25 +94,23 @@ export const CardView = ({
       : instance.instanceId,
     type: "card",
     data: { instanceId: instance.instanceId },
-    disabled: displayOnly || disableDrag,
+    disabled: displayOnly || disableDrag || !controllable,
     plugins: CARD_DRAG_PLUGINS,
   })
   const cardName = activeFace?.name ?? definition.name
   const cardLabel = `${cardName}, ${zoneLabels[instance.zone]}${
     instance.tapped ? ", getapt" : ""
   }`
-  const selectedCardIds = useAppSelector(state => state.ui.selectedCardIds)
-  const game = useAppSelector(state => state.game.present)
-  const gameCards = game?.cardsById
+  const gameCards = game.cardsById
   const selected = selectedCardIds.includes(instance.instanceId)
   const destinationPlayer = instance.controllerId
   const attachedTarget = instance.attachedTo
-    ? gameCards?.[instance.attachedTo]
+    ? gameCards[instance.attachedTo]
     : undefined
   const attachedTargetName = attachedTarget
-    ? game?.cardDefinitionsById[attachedTarget.definitionId]?.name
+    ? game.cardDefinitionsById[attachedTarget.definitionId]?.name
     : undefined
-  const attachedCards = Object.values(gameCards ?? {}).filter(
+  const attachedCards = Object.values(gameCards).filter(
     card => card.attachedTo === instance.instanceId,
   )
 
@@ -199,40 +187,35 @@ export const CardView = ({
   const performAction = (value: string) => {
     if (value) {
       const selectedInstances = selectedCardIds.filter(
-        instanceId =>
-          gameCards?.[instanceId]?.controllerId === destinationPlayer,
+        instanceId => gameCards[instanceId]?.controllerId === destinationPlayer,
       )
       if (selected && selectedInstances.length > 1) {
-        dispatch(
-          moveGameCards({
-            moves: selectedInstances.map(instanceId => ({
-              instanceId,
-              playerId: destinationPlayer,
-              zone: value as Zone,
-            })),
-          }),
+        actions.moveCards(
+          selectedInstances.map(instanceId => ({
+            instanceId,
+            playerId: destinationPlayer,
+            zone: value as Zone,
+          })),
         )
-        dispatch(clearCardSelection())
+        setSelectedCardIds([])
       } else {
-        dispatch(
-          moveGameCard({
+        actions.moveCards([
+          {
             instanceId: instance.instanceId,
             playerId: destinationPlayer,
             zone: value as Zone,
-          }),
-        )
+          },
+        ])
       }
     }
     setMenuPoint(null)
   }
 
   const changeCounter = (counter: string, delta: number) => {
-    dispatch(
-      setCounter({
-        instanceId: instance.instanceId,
-        counter,
-        value: (instance.counters[counter] ?? 0) + delta,
-      }),
+    actions.setCounter(
+      instance.instanceId,
+      counter,
+      (instance.counters[counter] ?? 0) + delta,
     )
   }
 
@@ -291,7 +274,7 @@ export const CardView = ({
                   className="card-action-menu__primary"
                   type="button"
                   onClick={() => {
-                    dispatch(toggleTap({ instanceId: instance.instanceId }))
+                    actions.toggleTap(instance.instanceId)
                     setMenuPoint(null)
                   }}
                 >
@@ -304,7 +287,7 @@ export const CardView = ({
                   className="card-action-menu__primary"
                   type="button"
                   onClick={() => {
-                    dispatch(switchFace({ instanceId: instance.instanceId }))
+                    actions.switchFace(instance.instanceId)
                   }}
                 >
                   <span>◫</span>
@@ -316,12 +299,7 @@ export const CardView = ({
                   <button
                     type="button"
                     onClick={() => {
-                      dispatch(
-                        changeStackOrder({
-                          instanceId: instance.instanceId,
-                          direction: "front",
-                        }),
-                      )
+                      actions.changeStackOrder(instance.instanceId, "front")
                     }}
                   >
                     Naar voren
@@ -329,12 +307,7 @@ export const CardView = ({
                   <button
                     type="button"
                     onClick={() => {
-                      dispatch(
-                        changeStackOrder({
-                          instanceId: instance.instanceId,
-                          direction: "back",
-                        }),
-                      )
+                      actions.changeStackOrder(instance.instanceId, "back")
                     }}
                   >
                     Naar achteren
@@ -352,17 +325,14 @@ export const CardView = ({
                       }}
                     >
                       <option value="">Kies een permanent…</option>
-                      {(
-                        game?.players[instance.controllerId].zones
-                          .battlefield ?? []
-                      )
+                      {game.players[instance.controllerId].zones.battlefield
                         .filter(
                           instanceId => instanceId !== instance.instanceId,
                         )
                         .map(instanceId => {
-                          const card = gameCards?.[instanceId]
+                          const card = gameCards[instanceId]
                           const targetDefinition = card
-                            ? game?.cardDefinitionsById[card.definitionId]
+                            ? game.cardDefinitionsById[card.definitionId]
                             : undefined
                           return (
                             <option key={instanceId} value={instanceId}>
@@ -376,12 +346,7 @@ export const CardView = ({
                     type="button"
                     disabled={!attachmentTarget}
                     onClick={() => {
-                      dispatch(
-                        attach({
-                          attachmentId: instance.instanceId,
-                          targetId: attachmentTarget,
-                        }),
-                      )
+                      actions.attach(instance.instanceId, attachmentTarget)
                       setAttachmentTarget("")
                     }}
                   >
@@ -390,9 +355,9 @@ export const CardView = ({
                   {instance.attachedTo ? (
                     <button
                       type="button"
-                      onClick={() =>
-                        dispatch(detach({ attachmentId: instance.instanceId }))
-                      }
+                      onClick={() => {
+                        actions.detach(instance.instanceId)
+                      }}
                     >
                       Losmaken van {attachedTargetName ?? "permanent"}
                     </button>
@@ -404,12 +369,7 @@ export const CardView = ({
                   className="card-action-menu__primary"
                   type="button"
                   onClick={() => {
-                    dispatch(
-                      copyToken({
-                        instanceId: instance.instanceId,
-                        duplicateId: `token-${crypto.randomUUID()}`,
-                      }),
-                    )
+                    actions.duplicateToken(instance.instanceId)
                   }}
                 >
                   <span>⧉</span>
@@ -542,9 +502,18 @@ export const CardView = ({
         aria-keyshortcuts={displayOnly ? undefined : "Shift+F10"}
         aria-pressed={displayOnly ? undefined : selected}
         data-card-name={definition.name}
+        data-battle-card="true"
+        data-battle-draggable={
+          !displayOnly && !disableDrag && controllable ? "true" : "false"
+        }
         tabIndex={0}
         onPointerDownCapture={event => {
-          if (!displayOnly && !disableDrag && event.button === 0) {
+          if (
+            !displayOnly &&
+            !disableDrag &&
+            controllable &&
+            event.button === 0
+          ) {
             lastPointerWasTouch.current = event.pointerType === "touch"
             beginCardPointerSession(
               event.currentTarget,
@@ -581,23 +550,30 @@ export const CardView = ({
               event.shiftKey)
           ) {
             event.preventDefault()
-            dispatch(toggleCardSelection(instance.instanceId))
+            setSelectedCardIds(
+              selected
+                ? selectedCardIds.filter(
+                    instanceId => instanceId !== instance.instanceId,
+                  )
+                : [...selectedCardIds, instance.instanceId],
+            )
           }
           lastPointerWasTouch.current = false
         }}
         onDoubleClick={() => {
-          if (!displayOnly && instance.zone === "battlefield") {
-            dispatch(toggleTap({ instanceId: instance.instanceId }))
+          if (!displayOnly && controllable && instance.zone === "battlefield") {
+            actions.toggleTap(instance.instanceId)
           }
         }}
         onContextMenu={event => {
-          if (displayOnly) return
+          if (displayOnly || !controllable) return
           event.preventDefault()
           setMenuPoint({ x: event.clientX, y: event.clientY })
         }}
         onKeyDown={event => {
           if (
             displayOnly ||
+            !controllable ||
             (event.key !== "ContextMenu" &&
               !(event.shiftKey && event.key === "F10"))
           ) {

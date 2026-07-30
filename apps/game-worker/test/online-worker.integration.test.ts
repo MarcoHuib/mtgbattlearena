@@ -170,6 +170,16 @@ const seed: OnlineGameSeed = {
         typeLine: "Creature — Hidden",
         imageUrl: `https://cards.example/${playerId}-secret.jpg`,
         scryfallId: `scryfall-secret-${playerId}`,
+        faces: [
+          {
+            name: `Geheim van ${playerId}`,
+            imageUrl: `https://cards.example/${playerId}-secret.jpg`,
+          },
+          {
+            name: `Andere zijde van ${playerId}`,
+            imageUrl: `https://cards.example/${playerId}-back.jpg`,
+          },
+        ],
         quantity: 30,
         isCommander: false,
       },
@@ -534,6 +544,76 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
       name: "Treasure",
       position: { x: 0.3, y: 0.7, z: 4 },
     })
+  })
+
+  test("gebruikt dezelfde kaart-, selectie- en groeptransities authoritative", async () => {
+    const session = playerSession(0)
+    let version = await keepAllOpeningHands()
+    const hand = (await runtime.snapshot(session)).privateView?.hand ?? []
+    const first = hand[0]?.instanceId
+    const second = hand[1]?.instanceId
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+
+    const apply = async (
+      type: Parameters<typeof command>[0],
+      payload: unknown,
+    ) => {
+      expectAccepted(
+        await runtime.command(session, command(type, version, payload)),
+        version + 1,
+      )
+      version += 1
+    }
+
+    await apply("MOVE_CARDS", {
+      moves: [
+        {
+          instanceId: first,
+          zone: "battlefield",
+          position: { x: 0.35, y: 0.5, z: 1 },
+        },
+        {
+          instanceId: second,
+          zone: "battlefield",
+          position: { x: 0.55, y: 0.5, z: 2 },
+        },
+      ],
+    })
+    await apply("TOGGLE_TAP", { instanceIds: [first, second] })
+    await apply("SET_COUNTER", {
+      instanceId: first,
+      counter: "+1/+1",
+      value: 2,
+    })
+    await apply("SWITCH_FACE", { instanceId: first })
+    await apply("CREATE_GROUP", {
+      cardIds: [first, second],
+      name: "Gedeelde selectie",
+    })
+
+    const owner = await runtime.snapshot(session)
+    const opponent = await runtime.snapshot(playerSession(1))
+    expect(owner.players["seat-a"]?.battlefield).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          instanceId: first,
+          tapped: true,
+          activeFaceIndex: 1,
+          counters: { "+1/+1": 2 },
+          name: "Andere zijde van seat-a",
+        }),
+        expect.objectContaining({ instanceId: second, tapped: true }),
+      ]),
+    )
+    expect(Object.values(owner.groupsById ?? {})).toContainEqual(
+      expect.objectContaining({
+        playerId: "seat-a",
+        cardIds: [first, second],
+        name: "Gedeelde selectie",
+      }),
+    )
+    expect(opponent.groupsById).toEqual(owner.groupsById)
   })
 
   test("weigert rol-, kaart-, game- en playerId-manipulatie", async () => {

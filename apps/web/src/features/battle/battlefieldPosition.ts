@@ -19,6 +19,14 @@ export type DragAnchor = {
   height: number
 }
 
+export const positionForPerspective = (
+  position: BattlefieldPosition,
+  perspective: "self" | "opponent",
+): BattlefieldPosition =>
+  perspective === "opponent"
+    ? { x: 1 - position.x, y: 1 - position.y, z: position.z }
+    : position
+
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value))
 

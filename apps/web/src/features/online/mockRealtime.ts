@@ -165,6 +165,37 @@ export class MockRealtimeConnection implements OnlineGameConnection {
     if (!ownId || !next.privateView) return
     const own = next.players[ownId]
     if (!own) return
+    const publicZones = [own.battlefield, own.graveyard, own.exile, own.command]
+    const findVisibleCard = (instanceId: string) =>
+      next.privateView?.hand.find(item => item.instanceId === instanceId) ??
+      publicZones.flat().find(item => item.instanceId === instanceId)
+    const moveVisibleCard = (
+      instanceId: string,
+      zone:
+        "library" | "hand" | "battlefield" | "graveyard" | "exile" | "command",
+      position?: { x: number; y: number; z: number },
+    ) => {
+      const moving = findVisibleCard(instanceId)
+      if (!moving || !next.privateView) return false
+      next.privateView.hand = next.privateView.hand.filter(
+        item => item.instanceId !== moving.instanceId,
+      )
+      for (const publicZone of publicZones) {
+        const index = publicZone.findIndex(
+          item => item.instanceId === moving.instanceId,
+        )
+        if (index >= 0) publicZone.splice(index, 1)
+      }
+      if (zone === "hand") {
+        next.privateView.hand.push(moving)
+      } else if (zone !== "library") {
+        own[zone].push({ ...moving, position })
+      } else {
+        own.libraryCount += 1
+      }
+      own.handCount = next.privateView.hand.length
+      return true
+    }
 
     switch (command.type) {
       case "MULLIGAN_HAND": {
@@ -202,40 +233,34 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         break
       }
       case "MOVE_CARD": {
-        const fromHand = next.privateView.hand.find(
+        if (
+          !moveVisibleCard(
+            command.payload.instanceId,
+            command.payload.zone,
+            command.payload.position,
+          )
+        ) {
+          return
+        }
+        break
+      }
+      case "MOVE_CARDS": {
+        for (const move of command.payload.moves) {
+          if (!moveVisibleCard(move.instanceId, move.zone, move.position)) {
+            return
+          }
+        }
+        break
+      }
+      case "MOVE_CARD_IN_LIBRARY": {
+        const cards = next.privateView.revealedLibraryCards
+        const index = cards.findIndex(
           item => item.instanceId === command.payload.instanceId,
         )
-        const publicZones = [
-          own.battlefield,
-          own.graveyard,
-          own.exile,
-          own.command,
-        ]
-        const fromPublic = publicZones
-          .flat()
-          .find(item => item.instanceId === command.payload.instanceId)
-        const moving = fromHand ?? fromPublic
+        const [moving] = index >= 0 ? cards.splice(index, 1) : []
         if (!moving) return
-        next.privateView.hand = next.privateView.hand.filter(
-          item => item.instanceId !== moving.instanceId,
-        )
-        for (const zone of publicZones) {
-          const index = zone.findIndex(
-            item => item.instanceId === moving.instanceId,
-          )
-          if (index >= 0) zone.splice(index, 1)
-        }
-        if (command.payload.zone === "hand") {
-          next.privateView.hand.push(moving)
-        } else if (command.payload.zone !== "library") {
-          own[command.payload.zone].push({
-            ...moving,
-            position: command.payload.position,
-          })
-        } else {
-          own.libraryCount += 1
-        }
-        own.handCount = next.privateView.hand.length
+        if (command.payload.position === "top") cards.push(moving)
+        else cards.unshift(moving)
         break
       }
       case "CHANGE_LIFE":
@@ -361,13 +386,157 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         next.matchStatus.dayNight = command.payload.status
         break
       case "TOGGLE_TAP": {
-        const battlefieldCard = own.battlefield.find(
-          item => item.instanceId === command.payload.instanceId,
-        )
-        if (!battlefieldCard) return
-        battlefieldCard.tapped = !battlefieldCard.tapped
+        const instanceIds =
+          "instanceIds" in command.payload
+            ? command.payload.instanceIds
+            : [command.payload.instanceId]
+        for (const instanceId of instanceIds) {
+          const battlefieldCard = own.battlefield.find(
+            item => item.instanceId === instanceId,
+          )
+          if (!battlefieldCard) return
+          battlefieldCard.tapped = !battlefieldCard.tapped
+        }
         break
       }
+      case "SET_COUNTER": {
+        const visibleCard = findVisibleCard(command.payload.instanceId)
+        if (!visibleCard) return
+        if (command.payload.value === 0) {
+          visibleCard.counters = Object.fromEntries(
+            Object.entries(visibleCard.counters).filter(
+              ([counter]) => counter !== command.payload.counter,
+            ),
+          )
+        } else {
+          visibleCard.counters[command.payload.counter] = command.payload.value
+        }
+        break
+      }
+      case "SWITCH_FACE": {
+        const visibleCard = findVisibleCard(command.payload.instanceId)
+        if (!visibleCard) return
+        visibleCard.activeFaceIndex =
+          (visibleCard.activeFaceIndex + 1) %
+          Math.max(1, visibleCard.faces?.length ?? 1)
+        break
+      }
+      case "SET_STACK_ORDER": {
+        const visibleCard = own.battlefield.find(
+          item => item.instanceId === command.payload.instanceId,
+        )
+        if (!visibleCard) return
+        const levels = own.battlefield.map(item => item.position?.z ?? 0)
+        visibleCard.position = {
+          x: visibleCard.position?.x ?? 0.5,
+          y: visibleCard.position?.y ?? 0.5,
+          z:
+            command.payload.direction === "front"
+              ? Math.max(0, ...levels) + 1
+              : Math.max(0, Math.min(...levels) - 1),
+        }
+        break
+      }
+      case "ATTACH_CARD": {
+        const attachment = own.battlefield.find(
+          item => item.instanceId === command.payload.attachmentId,
+        )
+        const target = own.battlefield.find(
+          item => item.instanceId === command.payload.targetId,
+        )
+        if (!attachment || !target) return
+        attachment.attachedTo = target.instanceId
+        break
+      }
+      case "DETACH_CARD": {
+        const attachment = own.battlefield.find(
+          item => item.instanceId === command.payload.attachmentId,
+        )
+        if (!attachment) return
+        delete attachment.attachedTo
+        break
+      }
+      case "DUPLICATE_TOKEN": {
+        const source = own.battlefield.find(
+          item => item.instanceId === command.payload.instanceId,
+        )
+        if (!source) return
+        own.battlefield.push({
+          ...structuredClone(source),
+          instanceId: `mock-token-${this.nextCardIndex}`,
+          position: source.position
+            ? { ...source.position, x: Math.min(1, source.position.x + 0.05) }
+            : undefined,
+        })
+        this.nextCardIndex += 1
+        break
+      }
+      case "CREATE_GROUP": {
+        next.groupsById ??= {}
+        const groupId = `mock-group-${this.nextCardIndex}`
+        next.groupsById[groupId] = {
+          id: groupId,
+          playerId: ownId,
+          cardIds: command.payload.cardIds,
+          name: command.payload.name,
+          collapsed: false,
+          position: { x: 0.5, y: 0.5, z: 1 },
+        }
+        this.nextCardIndex += 1
+        break
+      }
+      case "ADD_TO_GROUP": {
+        const group = next.groupsById?.[command.payload.groupId]
+        if (!group) return
+        group.cardIds = [
+          ...new Set([...group.cardIds, ...command.payload.cardIds]),
+        ]
+        break
+      }
+      case "REMOVE_FROM_GROUP": {
+        const group = next.groupsById?.[command.payload.groupId]
+        if (!group) return
+        group.cardIds = group.cardIds.filter(
+          instanceId => !command.payload.cardIds.includes(instanceId),
+        )
+        break
+      }
+      case "UPDATE_GROUP": {
+        const group = next.groupsById?.[command.payload.groupId]
+        if (!group) return
+        if (command.payload.name !== undefined) {
+          group.name = command.payload.name
+        }
+        if (command.payload.collapsed !== undefined) {
+          group.collapsed = command.payload.collapsed
+        }
+        break
+      }
+      case "MOVE_GROUP": {
+        const group = next.groupsById?.[command.payload.groupId]
+        if (!group) return
+        group.cardIds.forEach((instanceId, index) => {
+          const groupedCard = own.battlefield.find(
+            item => item.instanceId === instanceId,
+          )
+          if (groupedCard) {
+            groupedCard.position = {
+              ...command.payload.position,
+              x: Math.min(1, command.payload.position.x + index * 0.03),
+              z: command.payload.position.z + index,
+            }
+          }
+        })
+        break
+      }
+      case "DISSOLVE_GROUP":
+        if (!next.groupsById?.[command.payload.groupId]) return
+        next.groupsById = Object.fromEntries(
+          Object.entries(next.groupsById).filter(
+            ([groupId]) => groupId !== command.payload.groupId,
+          ),
+        )
+        break
     }
     next.version += 1
     this.snapshot = parsePersonalSnapshot(next)

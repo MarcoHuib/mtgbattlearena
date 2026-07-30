@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type {
   BattlefieldPosition,
   CardDefinition,
@@ -8,14 +7,7 @@ import type {
 } from "@mtg/game-core/types"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
 import { resolveCardImage } from "../../persistence/imageResolver"
-import {
-  addKnownToken,
-  drawCard,
-  mill,
-  mulliganHand,
-  shufflePlayerLibrary,
-  untapAll,
-} from "../game/gameSlice"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 
 type MenuPoint = {
   x: number
@@ -29,12 +21,6 @@ type ZoneActionMenuProps = {
   battlefieldPosition?: BattlefieldPosition
   onBrowseLibrary: (options?: { search?: boolean; topAmount?: number }) => void
   onClose: () => void
-}
-
-const randomSeed = () => {
-  const values = new Uint32Array(1)
-  crypto.getRandomValues(values)
-  return values[0] ?? Date.now()
 }
 
 const menuStyle = ({ x, y }: MenuPoint): CSSProperties => {
@@ -93,22 +79,23 @@ export const ZoneActionMenu = ({
   onBrowseLibrary,
   onClose,
 }: ZoneActionMenuProps) => {
-  const dispatch = useAppDispatch()
-  const game = useAppSelector(state => state.game.present)
+  const runtime = useBattleRuntime()
+  const { actions, game } = runtime
   const [amount, setAmount] = useState(1)
   const [showTokens, setShowTokens] = useState(kind === "battlefield")
   const menuRef = useRef<HTMLDivElement>(null)
 
   const tokenDefinitions = useMemo(
     () =>
-      Object.values(game?.cardDefinitionsById ?? {})
+      Object.values(game.cardDefinitionsById)
         .filter(
           definition =>
-            definition.id.startsWith(`${playerId}:`) &&
+            (runtime.mode === "online" ||
+              definition.id.startsWith(`${playerId}:`)) &&
             definition.token?.source === "deck",
         )
         .sort((first, second) => first.name.localeCompare(second.name)),
-    [game?.cardDefinitionsById, playerId],
+    [game.cardDefinitionsById, playerId, runtime.mode],
   )
 
   useEffect(() => {
@@ -122,7 +109,7 @@ export const ZoneActionMenu = ({
     }
   }, [onClose])
 
-  if (!game) return null
+  if (!canControlPlayer(runtime, playerId)) return null
   const normalizedAmount = Math.max(1, Math.min(99, Math.floor(amount) || 1))
   const nextZ =
     Math.max(
@@ -133,18 +120,13 @@ export const ZoneActionMenu = ({
     ) + 1
 
   const addToken = (definitionId: string) => {
-    dispatch(
-      addKnownToken({
-        playerId,
-        definitionId,
-        instanceId: `token-${crypto.randomUUID()}`,
-        position: {
-          x: battlefieldPosition?.x ?? 0.5,
-          y: battlefieldPosition?.y ?? 0.5,
-          z: nextZ,
-        },
-      }),
-    )
+    const definition = game.cardDefinitionsById[definitionId]
+    if (!definition) return
+    actions.createToken(playerId, definition, {
+      x: battlefieldPosition?.x ?? 0.5,
+      y: battlefieldPosition?.y ?? 0.5,
+      z: nextZ,
+    })
     onClose()
   }
 
@@ -181,7 +163,7 @@ export const ZoneActionMenu = ({
             <button
               type="button"
               onClick={() => {
-                dispatch(drawCard({ playerId }))
+                actions.drawCards(playerId, 1)
                 onClose()
               }}
             >
@@ -203,7 +185,7 @@ export const ZoneActionMenu = ({
               <button
                 type="button"
                 onClick={() => {
-                  dispatch(drawCard({ playerId, amount: normalizedAmount }))
+                  actions.drawCards(playerId, normalizedAmount)
                   onClose()
                 }}
               >
@@ -212,7 +194,7 @@ export const ZoneActionMenu = ({
               <button
                 type="button"
                 onClick={() => {
-                  dispatch(mill({ playerId, amount: normalizedAmount }))
+                  actions.millCards(playerId, normalizedAmount)
                   onClose()
                 }}
               >
@@ -250,7 +232,7 @@ export const ZoneActionMenu = ({
             <button
               type="button"
               onClick={() => {
-                dispatch(shufflePlayerLibrary({ playerId, seed: randomSeed() }))
+                actions.shuffleLibrary(playerId)
                 onClose()
               }}
             >
@@ -259,7 +241,7 @@ export const ZoneActionMenu = ({
             <button
               type="button"
               onClick={() => {
-                dispatch(mulliganHand({ playerId, seed: randomSeed() }))
+                actions.mulligan(playerId)
                 onClose()
               }}
             >
@@ -271,7 +253,7 @@ export const ZoneActionMenu = ({
             <button
               type="button"
               onClick={() => {
-                dispatch(untapAll({ playerId }))
+                actions.untapAll(playerId)
                 onClose()
               }}
             >

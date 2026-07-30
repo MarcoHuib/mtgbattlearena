@@ -1,15 +1,10 @@
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import { getPlayerWarnings, isCreatureDefinition } from "@mtg/game-core/game"
 import type { OptionalPlayerTracker, PlayerId } from "@mtg/game-core/types"
 import {
-  changeDamage,
-  changeLife,
-  changePoison,
-  changeTracker,
-  setCitysBlessing,
-  setDisabled,
-  setTrackerVisibility,
-} from "../game/gameSlice"
+  battlePlayerIds,
+  canControlPlayer,
+  useBattleRuntime,
+} from "./BattleRuntime"
 
 type PlayerControlsProps = {
   playerId: PlayerId
@@ -24,23 +19,21 @@ const trackerLabels: Record<OptionalPlayerTracker, string> = {
 const optionalTrackers = Object.keys(trackerLabels) as OptionalPlayerTracker[]
 
 export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
-  const dispatch = useAppDispatch()
-  const game = useAppSelector(state => state.game.present)
-  if (!game) return null
-
+  const runtime = useBattleRuntime()
+  const { actions, game } = runtime
   const player = game.players[playerId]
-  const opponentId: PlayerId = playerId === "player-1" ? "player-2" : "player-1"
-  const opponent = game.players[opponentId]
-  const opposingCommanders = Object.keys(opponent.commanderTax).filter(
-    commanderId => {
+  const enabled = canControlPlayer(runtime, playerId)
+  const opposingCommanders = battlePlayerIds(game)
+    .filter(opponentId => opponentId !== playerId)
+    .flatMap(opponentId => Object.keys(game.players[opponentId].commanderTax))
+    .filter(commanderId => {
       const commander = game.cardsById[commanderId]
       return isCreatureDefinition(
         commander
           ? game.cardDefinitionsById[commander.definitionId]
           : undefined,
       )
-    },
-  )
+    })
   const warnings = getPlayerWarnings(game, playerId)
 
   return (
@@ -54,8 +47,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
         <button
           type="button"
           aria-label={`Verlaag leven van ${player.name}`}
+          disabled={!enabled}
           onClick={() => {
-            dispatch(changeLife({ playerId, delta: -1 }))
+            actions.changeLife(playerId, -1)
           }}
         >
           −
@@ -67,8 +61,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
         <button
           type="button"
           aria-label={`Verhoog leven van ${player.name}`}
+          disabled={!enabled}
           onClick={() => {
-            dispatch(changeLife({ playerId, delta: 1 }))
+            actions.changeLife(playerId, 1)
           }}
         >
           +
@@ -85,9 +80,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
         <button
           type="button"
           aria-label={`Verlaag poison van ${player.name}`}
-          disabled={player.poison === 0}
+          disabled={!enabled || player.poison === 0}
           onClick={() => {
-            dispatch(changePoison({ playerId, delta: -1 }))
+            actions.changePoison(playerId, -1)
           }}
         >
           −
@@ -98,8 +93,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
         <button
           type="button"
           aria-label={`Verhoog poison van ${player.name}`}
+          disabled={!enabled}
           onClick={() => {
-            dispatch(changePoison({ playerId, delta: 1 }))
+            actions.changePoison(playerId, 1)
           }}
         >
           +
@@ -118,9 +114,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
             <button
               type="button"
               aria-label={`Verlaag ${trackerLabels[tracker]} van ${player.name}`}
-              disabled={player.trackers[tracker] === 0}
+              disabled={!enabled || player.trackers[tracker] === 0}
               onClick={() => {
-                dispatch(changeTracker({ playerId, tracker, delta: -1 }))
+                actions.changeTracker(playerId, tracker, -1)
               }}
             >
               −
@@ -129,8 +125,9 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
             <button
               type="button"
               aria-label={`Verhoog ${trackerLabels[tracker]} van ${player.name}`}
+              disabled={!enabled}
               onClick={() => {
-                dispatch(changeTracker({ playerId, tracker, delta: 1 }))
+                actions.changeTracker(playerId, tracker, 1)
               }}
             >
               +
@@ -146,13 +143,12 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
               <input
                 type="checkbox"
                 checked={player.visibleTrackers[tracker]}
+                disabled={!enabled}
                 onChange={event => {
-                  dispatch(
-                    setTrackerVisibility({
-                      playerId,
-                      tracker,
-                      visible: event.target.checked,
-                    }),
+                  actions.setTrackerVisibility(
+                    playerId,
+                    tracker,
+                    event.target.checked,
                   )
                 }}
               />
@@ -183,16 +179,10 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
                 </span>
                 <button
                   type="button"
-                  disabled={value === 0}
+                  disabled={!enabled || value === 0}
                   aria-label={`Verlaag commander damage door ${definition?.name ?? "commander"}`}
                   onClick={() => {
-                    dispatch(
-                      changeDamage({
-                        damagedPlayerId: playerId,
-                        commanderId,
-                        delta: -1,
-                      }),
-                    )
+                    actions.changeCommanderDamage(playerId, commanderId, -1)
                   }}
                 >
                   −
@@ -202,15 +192,10 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
                 </strong>
                 <button
                   type="button"
+                  disabled={!enabled}
                   aria-label={`Verhoog commander damage door ${definition?.name ?? "commander"}`}
                   onClick={() => {
-                    dispatch(
-                      changeDamage({
-                        damagedPlayerId: playerId,
-                        commanderId,
-                        delta: 1,
-                      }),
-                    )
+                    actions.changeCommanderDamage(playerId, commanderId, 1)
                   }}
                 >
                   +
@@ -224,25 +209,22 @@ export const PlayerControls = ({ playerId }: PlayerControlsProps) => {
       <div className="player-status-toggles">
         <button
           type="button"
+          disabled={!enabled}
           className={player.citysBlessing ? "is-active" : ""}
           aria-pressed={player.citysBlessing}
           onClick={() => {
-            dispatch(
-              setCitysBlessing({
-                playerId,
-                active: !player.citysBlessing,
-              }),
-            )
+            actions.setCitysBlessing(playerId, !player.citysBlessing)
           }}
         >
           City&apos;s Blessing
         </button>
         <button
           type="button"
+          disabled={!enabled}
           className={player.disabled ? "is-disabled" : ""}
           aria-pressed={player.disabled}
           onClick={() => {
-            dispatch(setDisabled({ playerId, disabled: !player.disabled }))
+            actions.setDisabled(playerId, !player.disabled)
           }}
         >
           {player.disabled ? "Uitgeschakeld" : "Speler uitschakelen"}

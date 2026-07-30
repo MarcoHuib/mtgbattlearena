@@ -1,7 +1,12 @@
 import { DragDropProvider } from "@dnd-kit/react"
 import { screen } from "@testing-library/react"
-import type { CardDefinition, CardInstance } from "@mtg/game-core/types"
+import type {
+  CardDefinition,
+  CardInstance,
+  GameState,
+} from "@mtg/game-core/types"
 import { renderWithProviders } from "../../utils/test-utils"
+import { BattleRuntimeProvider, type BattleRuntime } from "./BattleRuntime"
 import { ZoneArea } from "./ZoneArea"
 
 const definitions: Record<string, CardDefinition> = {
@@ -32,17 +37,48 @@ const instance = (instanceId: string, definitionId: string): CardInstance => ({
 })
 
 test("toont op een open stapel alleen de laatst toegevoegde kaart", () => {
+  const cards = [instance("one", "first"), instance("two", "last")]
+  const game = {
+    players: {
+      "player-1": {
+        zones: {
+          library: [],
+          hand: [],
+          battlefield: [],
+          graveyard: cards.map(card => card.instanceId),
+          exile: [],
+          command: [],
+        },
+      },
+    },
+    cardsById: Object.fromEntries(cards.map(card => [card.instanceId, card])),
+    cardDefinitionsById: definitions,
+    groupsById: {},
+  } as unknown as GameState
+  const runtime = {
+    mode: "offline",
+    game,
+    viewerPlayerId: "player-1",
+    controllablePlayerIds: new Set(["player-1"]),
+    hiddenZoneCounts: {},
+    selectedCardIds: [],
+    setSelectedCardIds: () => undefined,
+    pending: false,
+    actions: {},
+  } as unknown as BattleRuntime
   renderWithProviders(
-    <DragDropProvider>
-      <ZoneArea
-        playerId="player-1"
-        zone="graveyard"
-        title="Graveyard"
-        instances={[instance("one", "first"), instance("two", "last")]}
-        definitions={definitions}
-        faceUpStack
-      />
-    </DragDropProvider>,
+    <BattleRuntimeProvider runtime={runtime}>
+      <DragDropProvider>
+        <ZoneArea
+          playerId="player-1"
+          zone="graveyard"
+          title="Graveyard"
+          instances={cards}
+          definitions={definitions}
+          faceUpStack
+        />
+      </DragDropProvider>
+    </BattleRuntimeProvider>,
   )
 
   expect(screen.getByLabelText("Graveyard, 2 kaarten")).toBeInTheDocument()

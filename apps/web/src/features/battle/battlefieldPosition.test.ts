@@ -5,6 +5,7 @@ import {
   dragAnchorFromPointer,
   dragAnchorFromRelativePoint,
   fallbackBattlefieldPosition,
+  positionForPerspective,
   positionFromDrop,
   relativePointInRectangle,
   safeBattlefieldPosition,
@@ -118,4 +119,15 @@ test("spreidt oude kaarten zonder opgeslagen positie veilig uit", () => {
     y: 0,
     z: 0,
   })
+})
+
+test("spiegelt de positie voor het tegenoverliggende spelersbord", () => {
+  const position = positionForPerspective(
+    { x: 0.72, y: 0.84, z: 3 },
+    "opponent",
+  )
+
+  expect(position.x).toBeCloseTo(0.28)
+  expect(position.y).toBeCloseTo(0.16)
+  expect(position.z).toBe(3)
 })

@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import type { PlayerId, Zone } from "@mtg/game-core/types"
-import {
-  moveCardInLibrary,
-  moveGameCards,
-  shufflePlayerLibrary,
-} from "../game/gameSlice"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 import { CardView } from "./CardView"
 
 type BrowsableZone = Extract<
@@ -46,8 +41,9 @@ export const ZoneBrowser = ({
   initialTopAmount,
   onClose,
 }: ZoneBrowserProps) => {
-  const dispatch = useAppDispatch()
-  const game = useAppSelector(state => state.game.present)
+  const runtime = useBattleRuntime()
+  const { actions, game } = runtime
+  const enabled = canControlPlayer(runtime, playerId)
   const [query, setQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState("")
   const [sort, setSort] = useState<"zone" | "name" | "mana">("zone")
@@ -85,16 +81,16 @@ export const ZoneBrowser = ({
     }
   }, [initialSearch, onClose])
 
-  const zoneIds = game?.players[playerId].zones[zone] ?? emptyZoneIds
+  const zoneIds = game.players[playerId]?.zones[zone] ?? emptyZoneIds
   const visibleIds = useMemo(() => {
     const topIds =
       zone === "library" && topOnly
         ? zoneIds.slice(-Math.max(0, topAmount)).reverse()
         : [...zoneIds]
     const filtered = topIds.filter(instanceId => {
-      const card = game?.cardsById[instanceId]
+      const card = game.cardsById[instanceId]
       const definition = card
-        ? game?.cardDefinitionsById[card.definitionId]
+        ? game.cardDefinitionsById[card.definitionId]
         : undefined
       const typeLine =
         definition?.typeLine ?? definition?.faces[0]?.typeLine ?? ""
@@ -109,24 +105,24 @@ export const ZoneBrowser = ({
     })
     if (sort === "name") {
       filtered.sort((firstId, secondId) => {
-        const first = game?.cardsById[firstId]
-        const second = game?.cardsById[secondId]
+        const first = game.cardsById[firstId]
+        const second = game.cardsById[secondId]
         return (
-          game?.cardDefinitionsById[
+          game.cardDefinitionsById[
             first?.definitionId ?? ""
           ]?.name.localeCompare(
-            game?.cardDefinitionsById[second?.definitionId ?? ""]?.name ?? "",
+            game.cardDefinitionsById[second?.definitionId ?? ""]?.name ?? "",
           ) ?? 0
         )
       })
     } else if (sort === "mana") {
       filtered.sort((firstId, secondId) => {
-        const first = game?.cardsById[firstId]
-        const second = game?.cardsById[secondId]
+        const first = game.cardsById[firstId]
+        const second = game.cardsById[secondId]
         return (
-          (game?.cardDefinitionsById[first?.definitionId ?? ""]?.manaValue ??
+          (game.cardDefinitionsById[first?.definitionId ?? ""]?.manaValue ??
             Number.POSITIVE_INFINITY) -
-          (game?.cardDefinitionsById[second?.definitionId ?? ""]?.manaValue ??
+          (game.cardDefinitionsById[second?.definitionId ?? ""]?.manaValue ??
             Number.POSITIVE_INFINITY)
         )
       })
@@ -135,15 +131,13 @@ export const ZoneBrowser = ({
   }, [game, query, sort, topAmount, topOnly, typeFilter, zone, zoneIds])
 
   const moveSelected = (destination: Zone) => {
-    if (!game || selected.length === 0) return
-    dispatch(
-      moveGameCards({
-        moves: selected.map(instanceId => ({
-          instanceId,
-          playerId,
-          zone: destination,
-        })),
-      }),
+    if (!enabled || selected.length === 0) return
+    actions.moveCards(
+      selected.map(instanceId => ({
+        instanceId,
+        playerId,
+        zone: destination,
+      })),
     )
     setSelected([])
   }
@@ -165,7 +159,7 @@ export const ZoneBrowser = ({
       >
         <header>
           <div>
-            <span className="eyebrow">{game?.players[playerId].name}</span>
+            <span className="eyebrow">{game.players[playerId].name}</span>
             <h2 id={`zone-browser-title-${playerId}-${zone}`}>
               {labels[zone]} bekijken
             </h2>
@@ -263,14 +257,9 @@ export const ZoneBrowser = ({
                 <span>Zoeken schudt niet automatisch.</span>
                 <button
                   type="button"
-                  onClick={() =>
-                    dispatch(
-                      shufflePlayerLibrary({
-                        playerId,
-                        seed: Date.now(),
-                      }),
-                    )
-                  }
+                  onClick={() => {
+                    actions.shuffleLibrary(playerId)
+                  }}
                 >
                   Library nu schudden
                 </button>
@@ -305,15 +294,9 @@ export const ZoneBrowser = ({
                 <button
                   type="button"
                   onClick={() => {
-                    selected.forEach(instanceId =>
-                      dispatch(
-                        moveCardInLibrary({
-                          instanceId,
-                          playerId,
-                          position: "top",
-                        }),
-                      ),
-                    )
+                    selected.forEach(instanceId => {
+                      actions.moveCardInLibrary(instanceId, playerId, "top")
+                    })
                     setSelected([])
                   }}
                 >
@@ -322,15 +305,9 @@ export const ZoneBrowser = ({
                 <button
                   type="button"
                   onClick={() => {
-                    ;[...selected].reverse().forEach(instanceId =>
-                      dispatch(
-                        moveCardInLibrary({
-                          instanceId,
-                          playerId,
-                          position: "bottom",
-                        }),
-                      ),
-                    )
+                    ;[...selected].reverse().forEach(instanceId => {
+                      actions.moveCardInLibrary(instanceId, playerId, "bottom")
+                    })
                     setSelected([])
                   }}
                 >
@@ -343,9 +320,9 @@ export const ZoneBrowser = ({
 
         <div className={`zone-browser__cards zone-browser__cards--${view}`}>
           {visibleIds.map(instanceId => {
-            const instance = game?.cardsById[instanceId]
+            const instance = game.cardsById[instanceId]
             const definition = instance
-              ? game?.cardDefinitionsById[instance.definitionId]
+              ? game.cardDefinitionsById[instance.definitionId]
               : undefined
             if (!instance || !definition) return null
             const checked = selected.includes(instanceId)

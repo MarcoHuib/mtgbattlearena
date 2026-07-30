@@ -1,19 +1,31 @@
 import { z } from "zod"
 import {
+  addCardsToGroup,
+  attachCard,
   changeCommanderDamage,
   changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
   changePlayerTracker,
   createKnownToken,
+  createCardGroup,
   createToken,
+  detachCard,
+  dissolveCardGroup,
   drawCards,
+  duplicateToken,
   keepOpeningHand,
   millCards,
   moveCard,
+  moveCards,
+  moveCardGroup,
+  moveCardToLibraryPosition,
   mulliganOpeningHand,
+  removeCardsFromGroup,
   seededRandom,
   setDayNightStatus,
+  setCardCounter,
+  setCardStackOrder,
   setInitiativeHolder,
   setMonarchHolder,
   setPlayerCitysBlessing,
@@ -21,13 +33,17 @@ import {
   setPlayerTrackerVisibility,
   shuffle,
   shuffleLibrary,
+  switchCardFace,
   toggleCardTapped,
+  toggleCardsTapped,
   untapAllCards,
+  updateCardGroup,
   type IdFactory,
   type RandomSource,
 } from "@mtg/game-core/game"
 import type {
   CardDefinition,
+  CardGroup,
   CardInstance,
   GameMode,
   GameState,
@@ -103,6 +119,7 @@ export type AuthoritativeGameState = {
   playerUids: Record<PlayerId, string>
   cardDefinitionsById: Record<string, CardDefinition>
   cardsById: Record<string, CardInstance>
+  groupsById?: Record<string, CardGroup>
 }
 
 export type ServerAdapterOptions = {
@@ -169,7 +186,7 @@ const toCoreGame = (state: AuthoritativeGameState): GameState => ({
   players: state.players,
   cardDefinitionsById: state.cardDefinitionsById,
   cardsById: state.cardsById,
-  groupsById: {},
+  groupsById: state.groupsById ?? {},
 })
 
 const fromCoreGame = (
@@ -186,6 +203,7 @@ const fromCoreGame = (
   players: core.players,
   cardDefinitionsById: core.cardDefinitionsById,
   cardsById: core.cardsById,
+  groupsById: core.groupsById,
 })
 
 export const createAuthoritativeGame = (
@@ -215,28 +233,31 @@ export const createAuthoritativeGame = (
         playerSeed.playerId,
         entry.definitionId,
       )
+      const faces = entry.faces ?? [
+        {
+          name: entry.name,
+          typeLine: entry.typeLine,
+          imageUrl: entry.imageUrl,
+        },
+      ]
       cardDefinitionsById[keyedDefinitionId] = {
         id: keyedDefinitionId,
         name: entry.name,
         scryfallId: entry.scryfallId,
         typeLine: entry.typeLine,
-        faces: [
-          {
-            name: entry.name,
-            typeLine: entry.typeLine,
-            imageUrl: entry.imageUrl,
-          },
-        ],
-        imageRefs: entry.imageUrl
-          ? [
-              {
-                assetKey: `${keyedDefinitionId}:0:normal`,
-                faceIndex: 0,
-                variant: "normal",
-                url: entry.imageUrl,
-              },
-            ]
-          : [],
+        faces,
+        imageRefs: faces.flatMap((face, faceIndex) =>
+          face.imageUrl
+            ? [
+                {
+                  assetKey: `${keyedDefinitionId}:${faceIndex}:normal`,
+                  faceIndex,
+                  variant: "normal" as const,
+                  url: face.imageUrl,
+                },
+              ]
+            : [],
+        ),
       }
       for (let copy = 0; copy < entry.quantity; copy += 1) {
         const instanceId = options.createId("online-card")
@@ -323,6 +344,7 @@ export const createAuthoritativeGame = (
     playerUids,
     cardDefinitionsById,
     cardsById,
+    groupsById: {},
   }
   for (const playerId of turnOrder) {
     game = fromCoreGame(
@@ -547,6 +569,232 @@ export const applyAuthoritativeCommand = (
       )
       break
     }
+    case "MOVE_CARDS": {
+      const invalid = command.payload.moves.some(move => {
+        const card = state.cardsById[move.instanceId]
+        return (
+          card?.controllerId !== playerId ||
+          card.ownerId !== playerId ||
+          !state.players[playerId]?.zones[card.zone].includes(card.instanceId)
+        )
+      })
+      if (invalid) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "De selectie bevat een kaart die je niet mag verplaatsen.",
+        }
+      }
+      nextCore = moveCards(
+        core,
+        command.payload.moves.map(move => ({ ...move, playerId })),
+        now,
+      )
+      break
+    }
+    case "MOVE_CARD_IN_LIBRARY": {
+      const card = state.cardsById[command.payload.instanceId]
+      if (
+        card?.ownerId !== playerId ||
+        card.controllerId !== playerId ||
+        card.zone !== "library"
+      ) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Alleen een eigen librarykaart kan worden herschikt.",
+        }
+      }
+      nextCore = moveCardToLibraryPosition(
+        core,
+        card.instanceId,
+        playerId,
+        command.payload.position,
+        now,
+      )
+      break
+    }
+    case "SET_COUNTER": {
+      const card = state.cardsById[command.payload.instanceId]
+      if (card?.controllerId !== playerId || card.zone !== "battlefield") {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Counters kunnen alleen op een eigen permanent staan.",
+        }
+      }
+      nextCore = setCardCounter(
+        core,
+        card.instanceId,
+        command.payload.counter,
+        command.payload.value,
+        now,
+      )
+      break
+    }
+    case "SWITCH_FACE": {
+      const card = state.cardsById[command.payload.instanceId]
+      if (card?.controllerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Alleen een eigen kaart kan van zijde wisselen.",
+        }
+      }
+      nextCore = switchCardFace(core, card.instanceId, now)
+      break
+    }
+    case "SET_STACK_ORDER": {
+      const card = state.cardsById[command.payload.instanceId]
+      if (card?.controllerId !== playerId || card.zone !== "battlefield") {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message:
+            "Alleen een eigen permanent kan van stapelvolgorde wijzigen.",
+        }
+      }
+      nextCore = setCardStackOrder(
+        core,
+        card.instanceId,
+        command.payload.direction,
+        now,
+      )
+      break
+    }
+    case "ATTACH_CARD": {
+      const attachment = state.cardsById[command.payload.attachmentId]
+      const target = state.cardsById[command.payload.targetId]
+      if (
+        attachment?.controllerId !== playerId ||
+        target?.controllerId !== playerId
+      ) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Alleen eigen permanents kunnen worden gekoppeld.",
+        }
+      }
+      nextCore = attachCard(core, attachment.instanceId, target.instanceId, now)
+      break
+    }
+    case "DETACH_CARD": {
+      const attachment = state.cardsById[command.payload.attachmentId]
+      if (attachment?.controllerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Alleen een eigen permanent kan worden losgemaakt.",
+        }
+      }
+      nextCore = detachCard(core, attachment.instanceId, now)
+      break
+    }
+    case "DUPLICATE_TOKEN": {
+      const token = state.cardsById[command.payload.instanceId]
+      if (token?.controllerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Alleen een eigen token kan worden gedupliceerd.",
+        }
+      }
+      nextCore = duplicateToken(core, token.instanceId, options.createId, now)
+      break
+    }
+    case "CREATE_GROUP": {
+      const invalid = command.payload.cardIds.some(instanceId => {
+        const card = state.cardsById[instanceId]
+        return card?.controllerId !== playerId || card.zone !== "battlefield"
+      })
+      if (invalid) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Een groep kan alleen eigen permanents bevatten.",
+        }
+      }
+      nextCore = createCardGroup(
+        core,
+        {
+          groupId: options.createId("group"),
+          playerId,
+          cardIds: command.payload.cardIds,
+          name: command.payload.name,
+        },
+        now,
+      )
+      break
+    }
+    case "ADD_TO_GROUP": {
+      const group = core.groupsById[command.payload.groupId]
+      const invalidCard = command.payload.cardIds.some(instanceId => {
+        const card = state.cardsById[instanceId]
+        return card?.controllerId !== playerId || card.zone !== "battlefield"
+      })
+      if (group?.playerId !== playerId || invalidCard) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Deze kaartgroep is niet van jou.",
+        }
+      }
+      nextCore = addCardsToGroup(core, group.id, command.payload.cardIds, now)
+      break
+    }
+    case "REMOVE_FROM_GROUP": {
+      const group = core.groupsById[command.payload.groupId]
+      if (group?.playerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Deze kaartgroep is niet van jou.",
+        }
+      }
+      nextCore = removeCardsFromGroup(
+        core,
+        group.id,
+        command.payload.cardIds,
+        now,
+      )
+      break
+    }
+    case "UPDATE_GROUP": {
+      const group = core.groupsById[command.payload.groupId]
+      if (group?.playerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Deze kaartgroep is niet van jou.",
+        }
+      }
+      nextCore = updateCardGroup(core, group.id, command.payload, now)
+      break
+    }
+    case "MOVE_GROUP": {
+      const group = core.groupsById[command.payload.groupId]
+      if (group?.playerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Deze kaartgroep is niet van jou.",
+        }
+      }
+      nextCore = moveCardGroup(core, group.id, command.payload.position, now)
+      break
+    }
+    case "DISSOLVE_GROUP": {
+      const group = core.groupsById[command.payload.groupId]
+      if (group?.playerId !== playerId) {
+        return {
+          accepted: false,
+          code: "INVALID_COMMAND",
+          message: "Deze kaartgroep is niet van jou.",
+        }
+      }
+      nextCore = dissolveCardGroup(core, group.id, now)
+      break
+    }
     case "CHANGE_LIFE":
       nextCore = changePlayerLife(core, playerId, command.payload.delta, now)
       break
@@ -572,8 +820,7 @@ export const applyAuthoritativeCommand = (
         state.cardDefinitionsById[submittedToken.definitionId] ??
         state.cardDefinitionsById[knownDefinitionId]
       nextCore =
-        knownDefinition?.token &&
-        knownDefinition.id.startsWith(`${playerId}:`)
+        knownDefinition?.token && knownDefinition.id.startsWith(`${playerId}:`)
           ? createKnownToken(core, {
               playerId,
               definitionId: knownDefinition.id,
@@ -651,8 +898,17 @@ export const applyAuthoritativeCommand = (
     case "PASS_TURN":
       return applyPassTurn(state, playerId, now)
     case "TOGGLE_TAP": {
-      const card = state.cardsById[command.payload.instanceId]
-      if (card?.controllerId !== playerId || card.zone !== "battlefield") {
+      const instanceIds =
+        "instanceIds" in command.payload
+          ? command.payload.instanceIds
+          : [command.payload.instanceId]
+      const cards = instanceIds.map(instanceId => state.cardsById[instanceId])
+      if (
+        cards.some(
+          card =>
+            card?.controllerId !== playerId || card.zone !== "battlefield",
+        )
+      ) {
         return {
           accepted: false,
           code: "INVALID_COMMAND",
@@ -660,7 +916,10 @@ export const applyAuthoritativeCommand = (
             "Alleen een eigen kaart op het battlefield kan worden getapt.",
         }
       }
-      nextCore = toggleCardTapped(core, card.instanceId, now)
+      nextCore =
+        instanceIds.length === 1
+          ? toggleCardTapped(core, instanceIds[0] ?? "", now)
+          : toggleCardsTapped(core, instanceIds, now)
       break
     }
     case "NEXT_PHASE": {
@@ -747,6 +1006,14 @@ const visibleCard = (
     tapped: card.tapped,
     activeFaceIndex: card.activeFaceIndex,
     counters: card.counters,
+    faces: definition.faces.map((face, faceIndex) => ({
+      name: face.name,
+      typeLine: face.typeLine,
+      imageUrl:
+        face.imageUrl ??
+        definition.imageRefs.find(ref => ref.faceIndex === faceIndex)?.url,
+    })),
+    attachedTo: card.attachedTo,
     position: card.position,
     isCommander: card.isCommander ?? false,
   }
@@ -833,8 +1100,7 @@ export const serializePersonalSnapshot = (
             visibleCard(state, instanceId),
           ),
           revealedLibraryCards: (() => {
-            const revealCount =
-              state.libraryRevealCounts[session.playerId] ?? 0
+            const revealCount = state.libraryRevealCounts[session.playerId] ?? 0
             if (revealCount === 0) {
               return []
             }
@@ -868,6 +1134,7 @@ export const serializePersonalSnapshot = (
     turnOrder: state.turnOrder,
     openingHands: state.openingHands,
     players,
+    groupsById: state.groupsById ?? {},
     privateView,
   })
 }

@@ -102,6 +102,10 @@ markeert de lobby als `finished`, het Game Durable Object stuurt
 `GAME_ABORTED` naar alle verbonden spelers en sluit daarna de sockets. Nieuwe
 socket-tickets en reconnects voor die game worden vervolgens geweigerd.
 
+De volledige speeltafelpresentatie en alle gebruikersacties worden sinds
+[ADR 007](007-shared-battle-runtime.md) door offline en online gedeeld. Alleen
+de lokale Redux-adapter en de persoonlijke-snapshot/commandadapter verschillen.
+
 De openingshand is eveneens authoritative. Iedere speler ontvangt alleen de
 eigen zeven kaarten en stuurt `MULLIGAN_HAND` of `KEEP_HAND` als versioned
 command. De server voert de shuffle en nieuwe draw uit, bewaart per speler het
@@ -171,14 +175,13 @@ De eerste infrastructuurslice volgt dit besluit als volgt:
 - de online React-route bewaart alleen deze gevalideerde persoonlijke view in
   de online Redux-slice. De WebSocket-adapter vraagt voor iedere reconnect een
   nieuw eenmalig ticket en vervangt de clientview met de eerste verse snapshot;
-- de online battle-route gebruikt dezelfde volledige, verticale
-  tegenover-elkaar-compositie als de offline tafel. De componenten lezen
-  uitsluitend de persoonlijke serverview: de eigen hand wordt als kaarten
-  getoond en handen van tegenstanders blijven kaartachterkanten met een aantal;
-- dezelfde dnd-kit-interactie wordt online gebruikt voor de eigen zichtbare
-  kaarten en zones. Een drop dispatcht geen lokale Redux-mutatie maar één
-  versioned `MOVE_CARD`-command, inclusief genormaliseerde battlefieldpositie;
-  pas de volgende persoonlijke serversnapshot bevestigt de verplaatsing;
+- offline en online renderen exact dezelfde `BattleTable`, spelerpanelen,
+  zones, kaarten, contextmenu's, browsers, openingshand en dnd-kit-interactie.
+  De offline adapter dispatcht lokale transitions; de online adapter verstuurt
+  versioned commands en wacht op de bevestigende persoonlijke snapshot;
+- multiselect, kaartposities, tappen, counters, kaartzijden, attachments,
+  groepen, tokens, libraryacties en speler-/matchstatus gebruiken dezelfde
+  actie-interface en dezelfde pure game-core-transities;
 - één gedeelde arena-statusprovider controleert bij opstarten, terugkeer naar
   het tabblad, browser-reconnect en vervolgens periodiek de publieke
   `/api/online/health`-route. Alleen de hoofdbalk toont deze serverstatus;

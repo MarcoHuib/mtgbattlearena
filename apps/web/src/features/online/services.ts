@@ -51,6 +51,14 @@ export const createOnlineDeckSubmission = (
         typeLine: firstFace?.typeLine ?? definition.typeLine,
         imageUrl: firstFace?.imageUrl ?? definition.imageRefs[0]?.url,
         scryfallId: definition.scryfallId,
+        faces: definition.faces.map((face, faceIndex) => ({
+          name: face.name,
+          typeLine: face.typeLine,
+          oracleText: face.oracleText,
+          imageUrl:
+            face.imageUrl ??
+            definition.imageRefs.find(ref => ref.faceIndex === faceIndex)?.url,
+        })),
         quantity: card.quantity,
         isCommander: card.isCommander,
       }

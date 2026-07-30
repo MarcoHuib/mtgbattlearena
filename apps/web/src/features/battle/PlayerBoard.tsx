@@ -1,10 +1,10 @@
 import { useState } from "react"
-import { useAppSelector } from "../../app/hooks"
 import type { CardInstance, PlayerId, Zone } from "@mtg/game-core/types"
 import { PlayerControls } from "./PlayerControls"
 import { ZoneActionMenu } from "./ZoneActionMenu"
 import { ZoneArea } from "./ZoneArea"
 import { ZoneBrowser } from "./ZoneBrowser"
+import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
 
 type BrowsableZone = Extract<
   Zone,
@@ -17,7 +17,8 @@ type PlayerBoardProps = {
 }
 
 export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
-  const game = useAppSelector(state => state.game.present)
+  const runtime = useBattleRuntime()
+  const { game } = runtime
   const [browser, setBrowser] = useState<{
     zone: BrowsableZone
     search?: boolean
@@ -28,8 +29,8 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
     point: { x: number; y: number }
     position?: { x: number; y: number }
   } | null>(null)
-  if (!game) return null
   const player = game.players[playerId]
+  const controllable = canControlPlayer(runtime, playerId)
   const isActivePlayer = game.activePlayerId === playerId
   const instancesFor = (zone: Zone): CardInstance[] =>
     player.zones[zone].flatMap(instanceId => {
@@ -47,7 +48,7 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
       <aside className="player-rail">
         <div>
           <span className="eyebrow">
-            {orientation === "self" ? "Speler één" : "Speler twee"}
+            {orientation === "self" ? "Jouw speelveld" : "Tegenstander"}
           </span>
           <h2>{player.name}</h2>
         </div>
@@ -63,9 +64,13 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
             instances={instancesFor("command")}
             definitions={game.cardDefinitionsById}
             compact
-            onOpen={() => {
-              setBrowser({ zone: "command" })
-            }}
+            onOpen={
+              controllable
+                ? () => {
+                    setBrowser({ zone: "command" })
+                  }
+                : undefined
+            }
           />
         </div>
         <ZoneArea
@@ -74,9 +79,14 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           title="Battlefield"
           instances={instancesFor("battlefield")}
           definitions={game.cardDefinitionsById}
-          onActions={request => {
-            setActionMenu({ kind: "battlefield", ...request })
-          }}
+          orientation={orientation}
+          onActions={
+            controllable
+              ? request => {
+                  setActionMenu({ kind: "battlefield", ...request })
+                }
+              : undefined
+          }
         />
         <ZoneArea
           playerId={playerId}
@@ -96,9 +106,13 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           instances={instancesFor("library")}
           definitions={game.cardDefinitionsById}
           countOnly
-          onActions={request => {
-            setActionMenu({ kind: "library", ...request })
-          }}
+          onActions={
+            controllable
+              ? request => {
+                  setActionMenu({ kind: "library", ...request })
+                }
+              : undefined
+          }
         />
         <ZoneArea
           playerId={playerId}
@@ -107,12 +121,20 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           instances={instancesFor("graveyard")}
           definitions={game.cardDefinitionsById}
           faceUpStack
-          onOpen={() => {
-            setBrowser({ zone: "graveyard" })
-          }}
-          onSearch={() => {
-            setBrowser({ zone: "graveyard", search: true })
-          }}
+          onOpen={
+            controllable
+              ? () => {
+                  setBrowser({ zone: "graveyard" })
+                }
+              : undefined
+          }
+          onSearch={
+            controllable
+              ? () => {
+                  setBrowser({ zone: "graveyard", search: true })
+                }
+              : undefined
+          }
         />
         <ZoneArea
           playerId={playerId}
@@ -121,12 +143,20 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           instances={instancesFor("exile")}
           definitions={game.cardDefinitionsById}
           faceUpStack
-          onOpen={() => {
-            setBrowser({ zone: "exile" })
-          }}
-          onSearch={() => {
-            setBrowser({ zone: "exile", search: true })
-          }}
+          onOpen={
+            controllable
+              ? () => {
+                  setBrowser({ zone: "exile" })
+                }
+              : undefined
+          }
+          onSearch={
+            controllable
+              ? () => {
+                  setBrowser({ zone: "exile", search: true })
+                }
+              : undefined
+          }
         />
       </aside>
       {browser ? (
@@ -136,6 +166,9 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
           initialSearch={browser.search}
           initialTopAmount={browser.topAmount}
           onClose={() => {
+            if (browser.zone === "library") {
+              runtime.actions.hideLibrary(playerId)
+            }
             setBrowser(null)
           }}
         />
@@ -149,6 +182,12 @@ export const PlayerBoard = ({ playerId, orientation }: PlayerBoardProps) => {
             actionMenu.position ? { ...actionMenu.position, z: 0 } : undefined
           }
           onBrowseLibrary={options => {
+            runtime.actions.revealLibrary(
+              playerId,
+              options?.topAmount ??
+                runtime.hiddenZoneCounts[playerId]?.library ??
+                game.players[playerId].zones.library.length,
+            )
             setBrowser({
               zone: "library",
               search: options?.search,
