@@ -10,9 +10,9 @@ test("migreert een versie 1-savegame met veilige beurtdefaults", () => {
   }
   const hydrated = hydratePersistedGame(JSON.parse(JSON.stringify(stored)))
   expect(hydrated).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     game: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       id: "game",
       activePlayerId: "player-1",
       turnNumber: 1,
@@ -43,9 +43,9 @@ test("hervat een versie 2-battle zonder opnieuw een openingshand te vragen", () 
   }
 
   expect(hydratePersistedGame(stored)).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     game: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       activePlayerId: "player-2",
       turnNumber: 4,
       phase: "beginning",
@@ -92,9 +92,9 @@ test("migreert versie 3 met commander- en poisondefaults zonder zones te verliez
   }
 
   expect(hydratePersistedGame(stored)).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     game: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       phase: "beginning",
       players: {
         "player-1": {
@@ -148,7 +148,7 @@ test("behoudt fase-2-data bij serialisatie en hydratatie", () => {
 
   const hydrated = hydratePersistedGame(stored)
   expect(hydrated.game).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     groupsById: {},
     phase: "combat",
     players: {
@@ -201,9 +201,9 @@ test("migreert versie 4 naar groepen en ruimt ongeldige attachments op", () => {
 
   const hydrated = hydratePersistedGame(stored)
   expect(hydrated).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     game: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       groupsById: {},
       cardsById: { card: { attachedTo: undefined } },
     },
@@ -260,13 +260,17 @@ test("migreert versie 5 naar centrale matchstatus en spelertrackers", () => {
   })
 
   expect(hydrated).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     game: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       matchStatus: {
         monarchPlayerId: null,
         initiativePlayerId: null,
         dayNight: "none",
+      },
+      firstPlayerRoll: {
+        status: "completed",
+        startPlayerId: "player-1",
       },
       players: {
         "player-1": {
@@ -278,6 +282,6 @@ test("migreert versie 5 naar centrale matchstatus en spelertrackers", () => {
         },
       },
     },
-    past: [{ schemaVersion: 6 }],
+    past: [{ schemaVersion: 7 }],
   })
 })

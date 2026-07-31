@@ -488,6 +488,22 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("ROLL_FOR_FIRST_PLAYER"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({}).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("COMPLETE_FIRST_PLAYER_ROLL"),
+      commandId: z.uuid(),
+      expectedVersion: z.number().int().nonnegative(),
+      payload: z.object({}).strict(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("MULLIGAN_HAND"),
       commandId: z.uuid(),
       expectedVersion: z.number().int().nonnegative(),
@@ -499,7 +515,11 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
       type: z.literal("KEEP_HAND"),
       commandId: z.uuid(),
       expectedVersion: z.number().int().nonnegative(),
-      payload: z.object({}).strict(),
+      payload: z
+        .object({
+          bottomCardIds: z.array(cardInstanceIdSchema).max(7).default([]),
+        })
+        .strict(),
     })
     .strict(),
 ])
@@ -587,6 +607,21 @@ const openingHandStateSchema = z
   })
   .strict()
 
+export const firstPlayerRollSchema = z
+  .object({
+    status: z.enum(["rolling", "tie", "winner_determined", "completed"]),
+    round: z.number().int().positive(),
+    participantIds: z.array(playerIdSchema).min(2).max(6),
+    eligiblePlayerIds: z.array(playerIdSchema).max(6),
+    rolls: z.record(playerIdSchema, z.number().int().min(1).max(20)),
+    eliminatedPlayerIds: z.array(playerIdSchema).max(6),
+    tiedPlayerIds: z.array(playerIdSchema).max(6),
+    winnerPlayerId: playerIdSchema.nullable(),
+    startPlayerId: playerIdSchema.nullable(),
+    rollSequence: z.number().int().nonnegative(),
+  })
+  .strict()
+
 export const personalGameSnapshotSchema = z
   .object({
     type: z.literal("PERSONAL_SNAPSHOT"),
@@ -611,6 +646,7 @@ export const personalGameSnapshotSchema = z
         dayNight: z.enum(["none", "day", "night"]),
       })
       .strict(),
+    firstPlayerRoll: firstPlayerRollSchema,
     turnOrder: z.array(playerIdSchema).min(2).max(6),
     openingHands: z.record(playerIdSchema, openingHandStateSchema),
     players: z.record(playerIdSchema, publicPlayerSchema),
@@ -670,6 +706,15 @@ export const personalGameSnapshotSchema = z
           code: "custom",
           message: "Iedere speler moet een openingshandstatus hebben.",
           path: ["openingHands", playerId],
+        })
+      }
+    }
+    for (const playerId of snapshot.firstPlayerRoll.participantIds) {
+      if (!snapshot.turnOrder.includes(playerId)) {
+        context.addIssue({
+          code: "custom",
+          message: "Een dobbelsteendeelnemer moet aan de game deelnemen.",
+          path: ["firstPlayerRoll", "participantIds"],
         })
       }
     }

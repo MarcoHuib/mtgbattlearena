@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import type { DeckSnapshot } from "@mtg/game-core/types"
 import { App } from "../../App"
 import { repositories } from "../../persistence/database"
@@ -431,6 +431,28 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   expect(start).toBeEnabled()
 
   await user.click(start)
+  expect(
+    await screen.findByRole("heading", { name: "Wie mag beginnen?" }),
+  ).toBeInTheDocument()
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const startGame = screen.queryByRole("button", {
+      name: "Start wedstrijd",
+    })
+    if (startGame) {
+      await user.click(startGame)
+      break
+    }
+    await user.click(screen.getByRole("button", { name: "Gooi dobbelsteen" }))
+    await waitFor(
+      () => {
+        expect(
+          screen.queryByRole("button", { name: "Start wedstrijd" }) ??
+            screen.queryByRole("button", { name: "Gooi dobbelsteen" }),
+        ).toBeTruthy()
+      },
+      { timeout: 2_000 },
+    )
+  }
   expect(
     await screen.findByRole("heading", { name: "Openingshand van Jij" }),
   ).toBeInTheDocument()

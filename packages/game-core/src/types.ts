@@ -115,6 +115,22 @@ export type OpeningHandState = {
   kept: boolean
 }
 
+export type FirstPlayerRollStatus =
+  "rolling" | "tie" | "winner_determined" | "completed"
+
+export type FirstPlayerRollState = {
+  status: FirstPlayerRollStatus
+  round: number
+  participantIds: PlayerId[]
+  eligiblePlayerIds: PlayerId[]
+  rolls: Partial<Record<PlayerId, number>>
+  eliminatedPlayerIds: PlayerId[]
+  tiedPlayerIds: PlayerId[]
+  winnerPlayerId: PlayerId | null
+  startPlayerId: PlayerId | null
+  rollSequence: number
+}
+
 export type CardGroup = {
   id: string
   playerId: PlayerId
@@ -133,7 +149,7 @@ export type MatchStatus = {
 }
 
 export type GameState = {
-  schemaVersion: 6
+  schemaVersion: 7
   id: string
   title: string
   createdAt: string
@@ -142,6 +158,7 @@ export type GameState = {
   turnNumber: number
   phase: TurnPhase
   matchStatus: MatchStatus
+  firstPlayerRoll: FirstPlayerRollState
   openingHands: Record<PlayerId, OpeningHandState>
   deckSnapshotIds: [string, string]
   players: Record<PlayerId, PlayerState>
@@ -189,7 +206,7 @@ export type OfflineBattlePackage = {
 }
 
 export type PersistedGame = {
-  schemaVersion: 6
+  schemaVersion: 7
   game: GameState
   past: GameState[]
   future: GameState[]

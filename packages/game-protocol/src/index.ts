@@ -1,5 +1,6 @@
 export {
   gameCommandSchema,
+  firstPlayerRollSchema,
   parseGameCommand,
   parsePersonalSnapshot,
   parseServerEvent,

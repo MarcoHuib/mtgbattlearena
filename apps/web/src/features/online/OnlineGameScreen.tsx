@@ -10,7 +10,7 @@ import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
 import { repositories } from "../../persistence/database"
 import { BattleRuntimeProvider } from "../battle/BattleRuntime"
-import { BattleTable } from "../battle/BattleTable"
+import { BattleExperience } from "../battle/BattleExperience"
 import {
   beginOnlineConnection,
   clearOnlineGame,
@@ -253,7 +253,7 @@ export const OnlineGameScreen = ({
               Spectatormodus: je ziet uitsluitend publieke informatie.
             </p>
           ) : null}
-          <BattleTable />
+          <BattleExperience />
         </BattleRuntimeProvider>
       )}
 

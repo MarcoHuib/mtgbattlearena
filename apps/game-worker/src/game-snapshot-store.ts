@@ -20,6 +20,7 @@ const storedGameRecordSchema = z
           z.literal(2),
           z.literal(3),
           z.literal(4),
+          z.literal(5),
         ]),
         mode: z.literal("online"),
         gameId: z.string().min(1),

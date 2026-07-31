@@ -3,6 +3,7 @@ import {
   addCardsToGroup,
   advancePhase,
   advanceTurn,
+  applyFirstPlayerRoll,
   attachCard,
   changeCommanderDamage,
   changeCommanderTax,
@@ -10,6 +11,7 @@ import {
   changePlayerPoison,
   changePlayerTracker,
   createGame,
+  createFirstPlayerRollState,
   createCardGroup,
   createKnownToken,
   createToken,
@@ -24,7 +26,9 @@ import {
   moveCardToLibraryPosition,
   moveCards,
   mulliganOpeningHand,
+  openingHandKeepCount,
   removeCardsFromGroup,
+  resolveFirstPlayerRoll,
   setCardCounter,
   setCardStackOrder,
   setDayNightStatus,
@@ -174,7 +178,7 @@ describe("game-core", () => {
     const next = advanceTurn(tapped, "2026-01-02T00:00:00.000Z")
 
     expect(next.activePlayerId).toBe("player-2")
-    expect(next.turnNumber).toBe(2)
+    expect(next.turnNumber).toBe(1)
     expect(next.cardsById[cardId]?.tapped).toBe(false)
     expect(next.players["player-2"].zones.hand).toHaveLength(7)
     expect(next.players["player-2"].zones.library).toHaveLength(4)
@@ -191,6 +195,9 @@ describe("game-core", () => {
   })
 
   it("past de vrije mulligans onafhankelijk per speler toe", () => {
+    expect(
+      Array.from({ length: 8 }, (_, count) => openingHandKeepCount(count)),
+    ).toEqual([7, 7, 6, 5, 4, 3, 2, 1])
     const initial = makeGame()
     const first = mulliganOpeningHand(initial, "player-1", () => 0.4)
     const second = mulliganOpeningHand(first, "player-1", () => 0.4)
@@ -199,13 +206,24 @@ describe("game-core", () => {
 
     expect(first.players["player-1"].zones.hand).toHaveLength(7)
     expect(second.players["player-1"].zones.hand).toHaveLength(7)
-    expect(third.players["player-1"].zones.hand).toHaveLength(6)
-    expect(fourth.players["player-1"].zones.hand).toHaveLength(5)
+    expect(third.players["player-1"].zones.hand).toHaveLength(7)
+    expect(fourth.players["player-1"].zones.hand).toHaveLength(7)
     expect(fourth.openingHands["player-1"].mulliganCount).toBe(4)
     expect(fourth.players["player-2"].zones.hand).toHaveLength(7)
     expect(fourth.openingHands["player-2"].mulliganCount).toBe(0)
 
-    const kept = keepOpeningHand(fourth, "player-1")
+    expect(keepOpeningHand(fourth, "player-1")).toBe(fourth)
+    const cardsForBottom = fourth.players["player-1"].zones.hand.slice(0, 3)
+    const kept = keepOpeningHand(fourth, "player-1", cardsForBottom)
+    expect(kept.players["player-1"].zones.hand).toHaveLength(4)
+    expect(kept.players["player-1"].zones.library.slice(0, 3)).toEqual(
+      cardsForBottom,
+    )
+    expect(
+      cardsForBottom.every(
+        instanceId => kept.cardsById[instanceId]?.zone === "library",
+      ),
+    ).toBe(true)
     expect(mulliganOpeningHand(kept, "player-1", () => 0.4)).toBe(kept)
   })
 
@@ -579,5 +597,96 @@ describe("game-core", () => {
     expect(moved.cardsById[first!]?.position?.x).toBeGreaterThan(0.5)
     expect(reduced.groupsById.lands?.cardIds).toEqual([first, second])
     expect(dissolved.groupsById.lands).toBeUndefined()
+  })
+})
+
+describe("startspeler bepalen met een D20", () => {
+  const rollState = (playerIds: string[]) =>
+    createFirstPlayerRollState(playerIds)
+
+  it("kiest bij twee spelers de unieke hoogste worp", () => {
+    let state = rollState(["a", "b"])
+    state = resolveFirstPlayerRoll(state, "a", 12)
+    state = resolveFirstPlayerRoll(state, "b", 18)
+
+    expect(state).toMatchObject({
+      status: "winner_determined",
+      winnerPlayerId: "b",
+      startPlayerId: "b",
+    })
+  })
+
+  it("laat na een hoogste tie alleen de tied spelers opnieuw gooien", () => {
+    let state = rollState(["a", "b"])
+    state = resolveFirstPlayerRoll(state, "a", 15)
+    state = resolveFirstPlayerRoll(state, "b", 15)
+    expect(state).toMatchObject({
+      status: "tie",
+      round: 2,
+      eligiblePlayerIds: ["a", "b"],
+      rolls: {},
+    })
+
+    state = resolveFirstPlayerRoll(state, "a", 7)
+    state = resolveFirstPlayerRoll(state, "b", 14)
+    expect(state.winnerPlayerId).toBe("b")
+  })
+
+  it("negeert een gelijke waarde onder de unieke hoogste worp", () => {
+    let state = rollState(["a", "b", "c", "d"])
+    state = resolveFirstPlayerRoll(state, "a", 18)
+    state = resolveFirstPlayerRoll(state, "b", 12)
+    state = resolveFirstPlayerRoll(state, "c", 12)
+    state = resolveFirstPlayerRoll(state, "d", 5)
+
+    expect(state.winnerPlayerId).toBe("a")
+    expect(state.status).toBe("winner_determined")
+  })
+
+  it("elimineert bij vier spelers alleen deelnemers onder de hoogste tie", () => {
+    let state = rollState(["a", "b", "c", "d"])
+    state = resolveFirstPlayerRoll(state, "a", 19)
+    state = resolveFirstPlayerRoll(state, "b", 19)
+    state = resolveFirstPlayerRoll(state, "c", 14)
+    state = resolveFirstPlayerRoll(state, "d", 2)
+
+    expect(state.eligiblePlayerIds).toEqual(["a", "b"])
+    expect(state.eliminatedPlayerIds).toEqual(["c", "d"])
+    expect(state.rolls).toEqual({ c: 14, d: 2 })
+  })
+
+  it("verwerkt meerdere opeenvolgende ties met zes spelers", () => {
+    let state = rollState(["a", "b", "c", "d", "e", "f"])
+    for (const [playerId, value] of [
+      ["a", 20],
+      ["b", 20],
+      ["c", 20],
+      ["d", 12],
+      ["e", 8],
+      ["f", 3],
+    ] as const) {
+      state = resolveFirstPlayerRoll(state, playerId, value)
+    }
+    expect(state.eligiblePlayerIds).toEqual(["a", "b", "c"])
+
+    state = resolveFirstPlayerRoll(state, "a", 17)
+    state = resolveFirstPlayerRoll(state, "b", 17)
+    state = resolveFirstPlayerRoll(state, "c", 4)
+    expect(state.eligiblePlayerIds).toEqual(["a", "b"])
+
+    state = resolveFirstPlayerRoll(state, "a", 9)
+    state = resolveFirstPlayerRoll(state, "b", 13)
+    expect(state.winnerPlayerId).toBe("b")
+    expect(state.round).toBe(3)
+  })
+
+  it("slaat de winnaar op als actieve startspeler in ronde één", () => {
+    let game = makeGame()
+    game = applyFirstPlayerRoll(game, "player-1", 4)
+    game = applyFirstPlayerRoll(game, "player-2", 16)
+
+    expect(game.activePlayerId).toBe("player-2")
+    expect(game.turnNumber).toBe(1)
+    expect(game.firstPlayerRoll.startPlayerId).toBe("player-2")
   })
 })

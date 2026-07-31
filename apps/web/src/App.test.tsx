@@ -67,6 +67,30 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
   expect(
     await screen.findByText("Verdant Resolve vs. Tidal Memory"),
   ).toBeInTheDocument()
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const startGame = screen.queryByRole("button", {
+      name: "Start wedstrijd",
+    })
+    if (startGame) {
+      await user.click(startGame)
+      break
+    }
+    const roll = screen.getByRole("button", {
+      name: /Laat (iedereen|tied spelers) .*gooien/,
+    })
+    await user.click(roll)
+    await waitFor(
+      () => {
+        expect(
+          screen.queryByRole("button", { name: "Start wedstrijd" }) ??
+            screen.queryByRole("button", {
+              name: /Laat (iedereen|tied spelers) .*gooien/,
+            }),
+        ).toBeTruthy()
+      },
+      { timeout: 2_000 },
+    )
+  }
   expect(
     store.getState().game.present?.players["player-1"].zones.hand,
   ).toHaveLength(7)

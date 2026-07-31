@@ -1,12 +1,16 @@
 import { z } from "zod"
 import {
   addCardsToGroup,
+  applyFirstPlayerRoll,
+  advanceTurn,
   attachCard,
   changeCommanderDamage,
   changeCommanderTax,
   changePlayerLife,
   changePlayerPoison,
   changePlayerTracker,
+  completeFirstPlayerRoll,
+  createFirstPlayerRollState,
   createKnownToken,
   createCardGroup,
   createToken,
@@ -21,6 +25,7 @@ import {
   moveCardGroup,
   moveCardToLibraryPosition,
   mulliganOpeningHand,
+  openingHandBottomCount,
   removeCardsFromGroup,
   seededRandom,
   setDayNightStatus,
@@ -101,7 +106,7 @@ export type OnlineGameSeed = z.infer<typeof onlineGameSeedSchema>
 export type { OnlineDeckSubmission }
 
 export type AuthoritativeGameState = {
-  schemaVersion: 4
+  schemaVersion: 5
   mode: Extract<GameMode, "online">
   gameId: string
   version: number
@@ -113,6 +118,7 @@ export type AuthoritativeGameState = {
   turnNumber: number
   phase: GameState["phase"]
   matchStatus: GameState["matchStatus"]
+  firstPlayerRoll: GameState["firstPlayerRoll"]
   openingHands: GameState["openingHands"]
   libraryRevealCounts: Record<PlayerId, number>
   players: Record<PlayerId, PlayerState>
@@ -169,7 +175,7 @@ const definitionKey = (playerId: string, definitionId: string) =>
   `${playerId}:${definitionId}`
 
 const toCoreGame = (state: AuthoritativeGameState): GameState => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
   id: state.gameId,
   title: state.title,
   createdAt: state.createdAt,
@@ -178,6 +184,7 @@ const toCoreGame = (state: AuthoritativeGameState): GameState => ({
   turnNumber: state.turnNumber,
   phase: state.phase,
   matchStatus: state.matchStatus,
+  firstPlayerRoll: structuredClone(state.firstPlayerRoll),
   openingHands: structuredClone(state.openingHands),
   deckSnapshotIds: [
     state.players[state.turnOrder[0] ?? ""]?.deckSnapshotId ?? "online",
@@ -199,6 +206,7 @@ const fromCoreGame = (
   turnNumber: core.turnNumber,
   phase: core.phase,
   matchStatus: core.matchStatus,
+  firstPlayerRoll: core.firstPlayerRoll,
   openingHands: core.openingHands,
   players: core.players,
   cardDefinitionsById: core.cardDefinitionsById,
@@ -318,7 +326,7 @@ export const createAuthoritativeGame = (
   }
 
   let game: AuthoritativeGameState = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     mode: "online",
     gameId: seed.gameId,
     version: 0,
@@ -334,6 +342,7 @@ export const createAuthoritativeGame = (
       initiativePlayerId: null,
       dayNight: "none",
     },
+    firstPlayerRoll: createFirstPlayerRollState(turnOrder),
     openingHands: Object.fromEntries(
       turnOrder.map(playerId => [playerId, { mulliganCount: 0, kept: false }]),
     ),
@@ -359,30 +368,46 @@ export const migrateAuthoritativeGame = (
   state: AuthoritativeGameState,
 ): AuthoritativeGameState => {
   const legacy = state as AuthoritativeGameState & {
-    schemaVersion: 1 | 2 | 3 | 4
+    schemaVersion: 1 | 2 | 3 | 4 | 5
     openingHands?: GameState["openingHands"]
     phase?: GameState["phase"]
     matchStatus?: GameState["matchStatus"]
     libraryRevealCounts?: Record<PlayerId, number>
+    firstPlayerRoll?: GameState["firstPlayerRoll"]
   }
   if (
-    legacy.schemaVersion === 4 &&
+    legacy.schemaVersion === 5 &&
     legacy.openingHands &&
     legacy.phase &&
     legacy.matchStatus &&
-    legacy.libraryRevealCounts
+    legacy.libraryRevealCounts &&
+    legacy.firstPlayerRoll
   ) {
     return state
   }
   return {
     ...state,
-    schemaVersion: 4,
+    schemaVersion: 5,
     phase: legacy.phase ?? "beginning",
     matchStatus: legacy.matchStatus ?? {
       monarchPlayerId: null,
       initiativePlayerId: null,
       dayNight: "none",
     },
+    firstPlayerRoll:
+      legacy.firstPlayerRoll ??
+      ({
+        status: "completed",
+        round: 1,
+        participantIds: [...state.turnOrder],
+        eligiblePlayerIds: [],
+        rolls: {},
+        eliminatedPlayerIds: [],
+        tiedPlayerIds: [],
+        winnerPlayerId: state.activePlayerId,
+        startPlayerId: state.activePlayerId,
+        rollSequence: 0,
+      } satisfies GameState["firstPlayerRoll"]),
     openingHands:
       legacy.openingHands ??
       Object.fromEntries(
@@ -422,26 +447,10 @@ const applyPassTurn = (
       message: "Alleen de actieve speler kan de beurt doorgeven.",
     }
   }
-  const activeIndex = state.turnOrder.indexOf(playerId)
-  const nextPlayerId =
-    state.turnOrder[(activeIndex + 1) % state.turnOrder.length]
-  if (!nextPlayerId) {
-    return {
-      accepted: false,
-      code: "INVALID_COMMAND",
-      message: "De beurtvolgorde is ongeldig.",
-    }
+  return {
+    accepted: true,
+    state: fromCoreGame(state, advanceTurn(toCoreGame(state), now)),
   }
-  const advanced: AuthoritativeGameState = {
-    ...state,
-    activePlayerId: nextPlayerId,
-    turnNumber: state.turnNumber + 1,
-    phase: "beginning",
-    updatedAt: now,
-  }
-  const untapped = untapAllCards(toCoreGame(advanced), nextPlayerId, now)
-  const drawn = drawCards(untapped, nextPlayerId, 1, now)
-  return { accepted: true, state: fromCoreGame(advanced, drawn) }
 }
 
 export const applyAuthoritativeCommand = (
@@ -469,6 +478,51 @@ export const applyAuthoritativeCommand = (
   const core = toCoreGame(state)
   let nextCore: GameState
 
+  if (command.type === "ROLL_FOR_FIRST_PLAYER") {
+    if (
+      !core.firstPlayerRoll.eligiblePlayerIds.includes(playerId) ||
+      core.firstPlayerRoll.rolls[playerId] !== undefined ||
+      (core.firstPlayerRoll.status !== "rolling" &&
+        core.firstPlayerRoll.status !== "tie")
+    ) {
+      return {
+        accepted: false,
+        code: "INVALID_COMMAND",
+        message: "Je mag in deze worpronde niet opnieuw gooien.",
+      }
+    }
+    const value = Math.floor(options.random() * 20) + 1
+    nextCore = applyFirstPlayerRoll(core, playerId, value, now)
+    return { accepted: true, state: fromCoreGame(state, nextCore) }
+  }
+
+  if (command.type === "COMPLETE_FIRST_PLAYER_ROLL") {
+    if (!session.isHost) {
+      return {
+        accepted: false,
+        code: "INVALID_COMMAND",
+        message: "Alleen de host kan de wedstrijd starten.",
+      }
+    }
+    nextCore = completeFirstPlayerRoll(core, now)
+    if (nextCore === core) {
+      return {
+        accepted: false,
+        code: "NOT_READY",
+        message: "Er is nog geen unieke winnaar bepaald.",
+      }
+    }
+    return { accepted: true, state: fromCoreGame(state, nextCore) }
+  }
+
+  if (state.firstPlayerRoll.status !== "completed") {
+    return {
+      accepted: false,
+      code: "NOT_READY",
+      message: "Bepaal eerst welke speler mag beginnen.",
+    }
+  }
+
   if (command.type === "MULLIGAN_HAND") {
     if (state.openingHands[playerId]?.kept) {
       return {
@@ -482,14 +536,30 @@ export const applyAuthoritativeCommand = (
   }
 
   if (command.type === "KEEP_HAND") {
-    if (state.openingHands[playerId]?.kept) {
+    const openingHand = state.openingHands[playerId]
+    if (openingHand?.kept) {
       return {
         accepted: false,
         code: "INVALID_COMMAND",
         message: "Deze openingshand is al gehouden.",
       }
     }
-    nextCore = keepOpeningHand(core, playerId, now)
+    const bottomCardIds = command.payload.bottomCardIds
+    const hand = core.players[playerId].zones.hand
+    if (
+      !openingHand ||
+      bottomCardIds.length !==
+        openingHandBottomCount(openingHand.mulliganCount) ||
+      new Set(bottomCardIds).size !== bottomCardIds.length ||
+      bottomCardIds.some(instanceId => !hand.includes(instanceId))
+    ) {
+      return {
+        accepted: false,
+        code: "INVALID_COMMAND",
+        message: "Kies het juiste aantal kaarten uit je hand.",
+      }
+    }
+    nextCore = keepOpeningHand(core, playerId, bottomCardIds, now)
     return { accepted: true, state: fromCoreGame(state, nextCore) }
   }
 
@@ -1131,6 +1201,7 @@ export const serializePersonalSnapshot = (
     turnNumber: state.turnNumber,
     phase: state.phase,
     matchStatus: state.matchStatus,
+    firstPlayerRoll: state.firstPlayerRoll,
     turnOrder: state.turnOrder,
     openingHands: state.openingHands,
     players,

@@ -125,7 +125,7 @@ export const createGame = (
   })
 
   const game: GameState = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: options.createId("game"),
     title: `${decks[0].name} vs. ${decks[1].name}`,
     createdAt: options.now,
@@ -138,6 +138,7 @@ export const createGame = (
       initiativePlayerId: null,
       dayNight: "none",
     },
+    firstPlayerRoll: createFirstPlayerRollState(["player-1", "player-2"]),
     openingHands: {
       "player-1": { mulliganCount: 0, kept: false },
       "player-2": { mulliganCount: 0, kept: false },
@@ -150,6 +151,152 @@ export const createGame = (
   }
 
   return drawOpeningHands(game, 7, options.now)
+}
+
+export const createFirstPlayerRollState = (
+  participantIds: PlayerId[],
+): GameState["firstPlayerRoll"] => ({
+  status: "rolling",
+  round: 1,
+  participantIds: [...participantIds],
+  eligiblePlayerIds: [...participantIds],
+  rolls: {},
+  eliminatedPlayerIds: [],
+  tiedPlayerIds: [],
+  winnerPlayerId: null,
+  startPlayerId: null,
+  rollSequence: 0,
+})
+
+export const highestRollPlayerIds = (
+  playerIds: PlayerId[],
+  rolls: Partial<Record<PlayerId, number>>,
+): PlayerId[] => {
+  const completed = playerIds.filter(playerId => rolls[playerId] !== undefined)
+  if (completed.length === 0) return []
+  const highest = Math.max(...completed.map(playerId => rolls[playerId] ?? 0))
+  return completed.filter(playerId => rolls[playerId] === highest)
+}
+
+export const canPlayerRollForFirst = (
+  state: GameState["firstPlayerRoll"],
+  playerId: PlayerId,
+): boolean =>
+  (state.status === "rolling" || state.status === "tie") &&
+  state.eligiblePlayerIds.includes(playerId) &&
+  state.rolls[playerId] === undefined
+
+export const resolveFirstPlayerRoll = (
+  state: GameState["firstPlayerRoll"],
+  playerId: PlayerId,
+  value: number,
+): GameState["firstPlayerRoll"] => {
+  if (
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > 20 ||
+    !canPlayerRollForFirst(state, playerId)
+  ) {
+    return state
+  }
+  const rolls = { ...state.rolls, [playerId]: value }
+  const waiting = state.eligiblePlayerIds.some(
+    eligiblePlayerId => rolls[eligiblePlayerId] === undefined,
+  )
+  if (waiting) {
+    return {
+      ...state,
+      rolls,
+      rollSequence: state.rollSequence + 1,
+    }
+  }
+
+  const highestPlayerIds = highestRollPlayerIds(state.eligiblePlayerIds, rolls)
+  if (highestPlayerIds.length === 1) {
+    const winnerPlayerId = highestPlayerIds[0] ?? null
+    if (!winnerPlayerId) return state
+    return {
+      ...state,
+      status: "winner_determined",
+      rolls,
+      eligiblePlayerIds: [],
+      tiedPlayerIds: [],
+      eliminatedPlayerIds: state.participantIds.filter(
+        participantId => participantId !== winnerPlayerId,
+      ),
+      winnerPlayerId,
+      startPlayerId: winnerPlayerId,
+      rollSequence: state.rollSequence + 1,
+    }
+  }
+
+  const previousEligible = new Set(state.eligiblePlayerIds)
+  const nextRolls = Object.fromEntries(
+    Object.entries(rolls).filter(
+      ([rolledPlayerId]) => !highestPlayerIds.includes(rolledPlayerId),
+    ),
+  )
+  const newlyEliminated = state.participantIds.filter(
+    participantId =>
+      previousEligible.has(participantId) &&
+      !highestPlayerIds.includes(participantId),
+  )
+  return {
+    ...state,
+    status: "tie",
+    round: state.round + 1,
+    eligiblePlayerIds: highestPlayerIds,
+    rolls: nextRolls,
+    eliminatedPlayerIds: [
+      ...new Set([...state.eliminatedPlayerIds, ...newlyEliminated]),
+    ],
+    tiedPlayerIds: highestPlayerIds,
+    rollSequence: state.rollSequence + 1,
+  }
+}
+
+export const applyFirstPlayerRoll = (
+  game: GameState,
+  playerId: PlayerId,
+  value: number,
+  now = new Date().toISOString(),
+): GameState => {
+  const firstPlayerRoll = resolveFirstPlayerRoll(
+    game.firstPlayerRoll,
+    playerId,
+    value,
+  )
+  if (firstPlayerRoll === game.firstPlayerRoll) return game
+  return {
+    ...game,
+    updatedAt: now,
+    activePlayerId: firstPlayerRoll.winnerPlayerId ?? game.activePlayerId,
+    turnNumber: 1,
+    phase: "beginning",
+    firstPlayerRoll,
+  }
+}
+
+export const completeFirstPlayerRoll = (
+  game: GameState,
+  now = new Date().toISOString(),
+): GameState => {
+  const winnerPlayerId = game.firstPlayerRoll.winnerPlayerId
+  if (game.firstPlayerRoll.status !== "winner_determined" || !winnerPlayerId) {
+    return game
+  }
+  return {
+    ...game,
+    updatedAt: now,
+    activePlayerId: winnerPlayerId,
+    turnNumber: 1,
+    phase: "beginning",
+    firstPlayerRoll: {
+      ...game.firstPlayerRoll,
+      status: "completed",
+      startPlayerId: winnerPlayerId,
+    },
+  }
 }
 
 export const drawCards = (
@@ -212,8 +359,16 @@ const clonePlayersWithZones = (
     ]),
   )
 
-export const openingHandSizeAfterMulligan = (mulliganCount: number): number =>
-  Math.max(0, Math.min(7, 9 - mulliganCount))
+export const openingHandBottomCount = (mulliganCount: number): number =>
+  Math.max(0, Math.min(6, mulliganCount - 1))
+
+export const openingHandKeepCount = (mulliganCount: number): number =>
+  7 - openingHandBottomCount(mulliganCount)
+
+export const openingHandSizeAfterMulligan = (mulliganCount: number): number => {
+  void mulliganCount
+  return 7
+}
 
 export const mulliganOpeningHand = (
   game: GameState,
@@ -253,28 +408,49 @@ export const mulliganOpeningHand = (
     [...next.players[playerId].zones.library, ...returnedCards],
     random,
   )
-  return drawCards(
-    next,
-    playerId,
-    openingHandSizeAfterMulligan(openingHand.mulliganCount + 1),
-    now,
-  )
+  return drawCards(next, playerId, 7, now)
 }
 
 export const keepOpeningHand = (
   game: GameState,
   playerId: PlayerId,
+  bottomCardIds: string[] = [],
   now = new Date().toISOString(),
 ): GameState => {
   const openingHand = game.openingHands[playerId]
   if (openingHand.kept) return game
-  return {
+  const requiredBottomCount = openingHandBottomCount(openingHand.mulliganCount)
+  const uniqueBottomCardIds = [...new Set(bottomCardIds)]
+  const hand = game.players[playerId].zones.hand
+  if (
+    uniqueBottomCardIds.length !== requiredBottomCount ||
+    uniqueBottomCardIds.some(instanceId => !hand.includes(instanceId))
+  ) {
+    return game
+  }
+  const next: GameState = {
     ...game,
     updatedAt: now,
+    players: clonePlayersWithZones(game.players),
+    cardsById: { ...game.cardsById },
     openingHands: {
       ...game.openingHands,
       [playerId]: { ...openingHand, kept: true },
     },
+  }
+  next.players[playerId].zones.hand = hand.filter(
+    instanceId => !uniqueBottomCardIds.includes(instanceId),
+  )
+  next.players[playerId].zones.library = [
+    ...uniqueBottomCardIds,
+    ...next.players[playerId].zones.library,
+  ]
+  for (const instanceId of uniqueBottomCardIds) {
+    const card = next.cardsById[instanceId]
+    if (card) next.cardsById[instanceId] = { ...card, zone: "library" }
+  }
+  return {
+    ...next,
   }
 }
 
@@ -583,8 +759,17 @@ export const advanceTurn = (
   game: GameState,
   now = new Date().toISOString(),
 ): GameState => {
-  const activePlayerId: PlayerId =
-    game.activePlayerId === "player-1" ? "player-2" : "player-1"
+  const activePlayers = Object.keys(game.players).filter(
+    playerId => !game.players[playerId]?.disabled,
+  )
+  const activeIndex = activePlayers.indexOf(game.activePlayerId)
+  const activePlayerId =
+    activePlayers[(activeIndex + 1) % activePlayers.length] ??
+    game.activePlayerId
+  const startPlayerId =
+    game.firstPlayerRoll.startPlayerId ?? activePlayers[0] ?? activePlayerId
+  const nextRound =
+    activePlayerId === startPlayerId ? game.turnNumber + 1 : game.turnNumber
   const cardsById = { ...game.cardsById }
   for (const instanceId of game.players[activePlayerId].zones.battlefield) {
     const card = cardsById[instanceId]
@@ -597,7 +782,7 @@ export const advanceTurn = (
       ...game,
       updatedAt: now,
       activePlayerId,
-      turnNumber: game.turnNumber + 1,
+      turnNumber: nextRound,
       phase: "beginning",
       cardsById,
     },

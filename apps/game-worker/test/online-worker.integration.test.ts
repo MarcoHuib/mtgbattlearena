@@ -235,8 +235,40 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     }
   })
 
-  const keepAllOpeningHands = async (): Promise<number> => {
+  const completeFirstPlayerRoll = async (): Promise<number> => {
     let version = 0
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const snapshot = await runtime.snapshot(playerSession(0))
+      if (snapshot.firstPlayerRoll.status === "winner_determined") {
+        version += 1
+        expectAccepted(
+          await runtime.command(
+            playerSession(0),
+            command("COMPLETE_FIRST_PLAYER_ROLL", version - 1, {}),
+          ),
+          version,
+        )
+        return version
+      }
+      const playerId = snapshot.firstPlayerRoll.eligiblePlayerIds.find(
+        id => snapshot.firstPlayerRoll.rolls[id] === undefined,
+      )
+      if (!playerId) continue
+      const index = playerIds.findIndex(candidate => candidate === playerId)
+      version += 1
+      expectAccepted(
+        await runtime.command(
+          playerSession(index),
+          command("ROLL_FOR_FIRST_PLAYER", version - 1, {}),
+        ),
+        version,
+      )
+    }
+    throw new Error("De startspelerworp is niet binnen 100 worpen afgerond.")
+  }
+
+  const keepAllOpeningHands = async (): Promise<number> => {
+    let version = await completeFirstPlayerRoll()
     for (let index = 0; index < playerIds.length; index += 1) {
       version += 1
       expectAccepted(
@@ -292,6 +324,44 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     ).toBeNull()
   })
 
+  test("genereert worpen server-side en bewaart dezelfde openbare rollstate bij reconnect", async () => {
+    const manipulated = await runtime.command(
+      playerSession(0),
+      command("ROLL_FOR_FIRST_PLAYER", 0, { value: 20 }),
+    )
+    expect(manipulated).toMatchObject({
+      type: "ERROR",
+      error: { code: "INVALID_COMMAND" },
+    })
+
+    expectAccepted(
+      await runtime.command(
+        playerSession(0),
+        command("ROLL_FOR_FIRST_PLAYER", 0, {}),
+      ),
+      1,
+    )
+    const playerA = await runtime.snapshot(playerSession(0))
+    const playerB = await runtime.snapshot(playerSession(1))
+    const spectator = await runtime.snapshot(spectatorSession)
+    expect(playerA.firstPlayerRoll.rolls["seat-a"]).toBeGreaterThanOrEqual(1)
+    expect(playerA.firstPlayerRoll.rolls["seat-a"]).toBeLessThanOrEqual(20)
+    expect(playerB.firstPlayerRoll).toEqual(playerA.firstPlayerRoll)
+    expect(spectator.firstPlayerRoll).toEqual(playerA.firstPlayerRoll)
+
+    const duplicate = await runtime.command(
+      playerSession(0),
+      command("ROLL_FOR_FIRST_PLAYER", 1, {}),
+    )
+    expect(duplicate).toMatchObject({
+      type: "ERROR",
+      error: { code: "INVALID_COMMAND" },
+    })
+
+    const reconnected = await runtime.snapshot({ ...playerSession(0) })
+    expect(reconnected.firstPlayerRoll).toEqual(playerA.firstPlayerRoll)
+  })
+
   test("laat alleen de host de game voor alle sockets afbreken", async () => {
     await expect(
       runtime.durableObject.abortGame(playerSession(1)),
@@ -316,9 +386,10 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
 
   test("laat iedere speler de eigen openingshand mulliganen en houden", async () => {
     const session = playerSession(0)
+    const rollVersion = await completeFirstPlayerRoll()
     const blocked = await runtime.command(
       session,
-      command("DRAW_CARD", 0, { amount: 1 }),
+      command("DRAW_CARD", rollVersion, { amount: 1 }),
     )
     expect(blocked).toMatchObject({
       type: "ERROR",
@@ -326,8 +397,8 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     })
 
     expectAccepted(
-      await runtime.command(session, command("MULLIGAN_HAND", 0, {})),
-      1,
+      await runtime.command(session, command("MULLIGAN_HAND", rollVersion, {})),
+      rollVersion + 1,
     )
     let snapshot = await runtime.snapshot(session)
     expect(snapshot.openingHands["seat-a"]).toEqual({
@@ -337,12 +408,53 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     expect(snapshot.privateView?.hand).toHaveLength(7)
 
     expectAccepted(
-      await runtime.command(session, command("KEEP_HAND", 1, {})),
-      2,
+      await runtime.command(session, command("KEEP_HAND", rollVersion + 1, {})),
+      rollVersion + 2,
     )
     snapshot = await runtime.snapshot(session)
     expect(snapshot.openingHands["seat-a"]?.kept).toBe(true)
     expect(snapshot.openingHands["seat-b"]?.kept).toBe(false)
+  })
+
+  test("houdt online zeven kaarten zichtbaar en valideert de London-mulliganselectie", async () => {
+    const session = playerSession(0)
+    let version = await completeFirstPlayerRoll()
+    for (let count = 0; count < 3; count += 1) {
+      expectAccepted(
+        await runtime.command(session, command("MULLIGAN_HAND", version, {})),
+        version + 1,
+      )
+      version += 1
+      expect((await runtime.snapshot(session)).privateView?.hand).toHaveLength(
+        7,
+      )
+    }
+
+    const missingSelection = await runtime.command(
+      session,
+      command("KEEP_HAND", version, { bottomCardIds: [] }),
+    )
+    expect(missingSelection).toMatchObject({
+      type: "ERROR",
+      error: { code: "INVALID_COMMAND" },
+    })
+
+    const snapshot = await runtime.snapshot(session)
+    const selectedCardIds =
+      snapshot.privateView?.hand.slice(0, 2).map(card => card.instanceId) ?? []
+    expect(selectedCardIds).toHaveLength(2)
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("KEEP_HAND", version, {
+          bottomCardIds: selectedCardIds,
+        }),
+      ),
+      version + 1,
+    )
+    const kept = await runtime.snapshot(session)
+    expect(kept.privateView?.hand).toHaveLength(5)
+    expect(kept.players["seat-a"]?.libraryCount).toBe(25)
   })
 
   test("voert de zeven basiscommands authoritative en versioned uit", async () => {
@@ -353,7 +465,7 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
       command("DRAW_CARD", readyVersion, { amount: 1 }),
     )
     if (!socketAcknowledgement) throw new Error("Socketack ontbreekt.")
-    expectAccepted(socketAcknowledgement, 5)
+    expectAccepted(socketAcknowledgement, readyVersion + 1)
     let snapshot = await runtime.snapshot(session)
     expect(snapshot.privateView?.hand).toHaveLength(8)
 
@@ -362,69 +474,95 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     expectAccepted(
       await runtime.command(
         session,
-        command("MOVE_CARD", 5, {
+        command("MOVE_CARD", readyVersion + 1, {
           instanceId: handCard?.instanceId,
           zone: "battlefield",
           position: { x: 0.5, y: 0.5, z: 1 },
         }),
       ),
-      6,
-    )
-    expectAccepted(
-      await runtime.command(session, command("CHANGE_LIFE", 6, { delta: -3 })),
-      7,
-    )
-    expectAccepted(
-      await runtime.command(session, command("CHANGE_POISON", 7, { delta: 2 })),
-      8,
-    )
-    expectAccepted(
-      await runtime.command(session, command("MILL", 8, { amount: 2 })),
-      9,
-    )
-    expectAccepted(
-      await runtime.command(session, command("SHUFFLE_LIBRARY", 9, {})),
-      10,
-    )
-    expectAccepted(
-      await runtime.command(session, command("NEXT_PHASE", 10, {})),
-      11,
+      readyVersion + 2,
     )
     expectAccepted(
       await runtime.command(
         session,
-        command("SET_MONARCH", 11, { playerId: "seat-b" }),
+        command("CHANGE_LIFE", readyVersion + 2, { delta: -3 }),
       ),
-      12,
+      readyVersion + 3,
     )
     expectAccepted(
       await runtime.command(
         session,
-        command("SET_INITIATIVE", 12, { playerId: "seat-a" }),
+        command("CHANGE_POISON", readyVersion + 3, { delta: 2 }),
       ),
-      13,
+      readyVersion + 4,
     )
     expectAccepted(
       await runtime.command(
         session,
-        command("SET_DAY_NIGHT", 13, { status: "night" }),
+        command("MILL", readyVersion + 4, { amount: 2 }),
       ),
-      14,
+      readyVersion + 5,
     )
     expectAccepted(
-      await runtime.command(session, command("PASS_TURN", 14, {})),
-      15,
+      await runtime.command(
+        session,
+        command("SHUFFLE_LIBRARY", readyVersion + 5, {}),
+      ),
+      readyVersion + 6,
+    )
+    const activeBeforeTurn = (await runtime.snapshot(session)).activePlayerId
+    const activeIndex = playerIds.findIndex(
+      playerId => playerId === activeBeforeTurn,
+    )
+    const activeSession = playerSession(activeIndex)
+    const nextPlayerId = playerIds[(activeIndex + 1) % playerIds.length]!
+    expectAccepted(
+      await runtime.command(
+        activeSession,
+        command("NEXT_PHASE", readyVersion + 6, {}),
+      ),
+      readyVersion + 7,
+    )
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("SET_MONARCH", readyVersion + 7, { playerId: "seat-b" }),
+      ),
+      readyVersion + 8,
+    )
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("SET_INITIATIVE", readyVersion + 8, {
+          playerId: "seat-a",
+        }),
+      ),
+      readyVersion + 9,
+    )
+    expectAccepted(
+      await runtime.command(
+        session,
+        command("SET_DAY_NIGHT", readyVersion + 9, { status: "night" }),
+      ),
+      readyVersion + 10,
+    )
+    expectAccepted(
+      await runtime.command(
+        activeSession,
+        command("PASS_TURN", readyVersion + 10, {}),
+      ),
+      readyVersion + 11,
     )
 
     snapshot = await runtime.snapshot(session)
-    expect(snapshot.version).toBe(15)
+    expect(snapshot.version).toBe(readyVersion + 11)
     expect(snapshot.players["seat-a"]).toMatchObject({
       life: 37,
       poison: 2,
     })
     expect(snapshot.players["seat-a"]?.battlefield).toHaveLength(1)
     expect(snapshot.players["seat-a"]?.graveyard).toHaveLength(2)
-    expect(snapshot.activePlayerId).toBe("seat-b")
+    expect(snapshot.activePlayerId).toBe(nextPlayerId)
     expect(snapshot.phase).toBe("beginning")
     expect(snapshot.matchStatus).toEqual({
       monarchPlayerId: "seat-b",
@@ -432,8 +570,10 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
       dayNight: "night",
     })
 
-    const playerB = await runtime.snapshot(playerSession(1))
-    expect(playerB.privateView?.hand).toHaveLength(8)
+    const nextPlayer = await runtime.snapshot(
+      playerSession(playerIds.indexOf(nextPlayerId)),
+    )
+    expect(nextPlayer.privateView?.hand).toHaveLength(8)
   })
 
   test("synchroniseert commander- en spelertrackers authoritative", async () => {
@@ -684,7 +824,7 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
         playerSession(0),
         command("CHANGE_LIFE", readyVersion, { delta: -1 }),
       ),
-      5,
+      readyVersion + 1,
     )
     const conflict = await runtime.command(
       playerSession(0),
@@ -692,8 +832,11 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     )
     expect(conflict).toMatchObject({
       type: "ERROR",
-      error: { code: "VERSION_CONFLICT", currentVersion: 5 },
-      snapshot: { version: 5 },
+      error: {
+        code: "VERSION_CONFLICT",
+        currentVersion: readyVersion + 1,
+      },
+      snapshot: { version: readyVersion + 1 },
     })
     if (conflict.type !== "ERROR") throw new Error("Conflict verwacht.")
     expect(conflict.snapshot?.privateView?.playerId).toBe("seat-a")
@@ -728,7 +871,7 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
         playerSession(0),
         command("CHANGE_LIFE", readyVersion, { delta: -4 }),
       ),
-      5,
+      readyVersion + 1,
     )
     expect(runtime.sql.writeCount).toBe(writesAfterInitialize + 1)
 
@@ -740,7 +883,7 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
 
     const restarted = new LocalDurableObjectEnvironment(runtime.sql)
     const restored = await restarted.snapshot(playerSession(0))
-    expect(restored.version).toBe(5)
+    expect(restored.version).toBe(readyVersion + 1)
     expect(restored.players["seat-a"]?.life).toBe(36)
     expect(runtime.sql.writeCount).toBe(writesAfterInitialize + 1)
   })

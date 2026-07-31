@@ -15,6 +15,7 @@ import {
   detach,
   dissolveGroup,
   drawCard,
+  finishFirstPlayerRoll,
   keepHand,
   mill,
   moveCardInLibrary,
@@ -24,6 +25,7 @@ import {
   nextPhase,
   nextTurn,
   removeFromGroup,
+  rollForFirstPlayer,
   setCitysBlessing,
   setCounter,
   setDayNight,
@@ -47,6 +49,15 @@ const randomSeed = () => {
   return values[0] ?? Date.now()
 }
 
+const randomD20 = () => {
+  const maximum = Math.floor(4_294_967_296 / 20) * 20
+  const values = new Uint32Array(1)
+  do {
+    crypto.getRandomValues(values)
+  } while ((values[0] ?? 0) >= maximum)
+  return ((values[0] ?? 0) % 20) + 1
+}
+
 export const useOfflineBattleRuntime = (): BattleRuntime | null => {
   const dispatch = useAppDispatch()
   const game = useAppSelector(state => state.game.present)
@@ -66,7 +77,19 @@ export const useOfflineBattleRuntime = (): BattleRuntime | null => {
         else dispatch(setCardSelection(instanceIds))
       },
       pending: false,
+      firstPlayerRollFlow: "all",
+      canCompleteFirstPlayerRoll: true,
       actions: {
+        rollForFirstPlayer: playerId =>
+          dispatch(rollForFirstPlayer({ playerId, value: randomD20() })),
+        rollAllForFirstPlayer: () => {
+          game.firstPlayerRoll.eligiblePlayerIds.forEach(playerId => {
+            if (game.firstPlayerRoll.rolls[playerId] === undefined) {
+              dispatch(rollForFirstPlayer({ playerId, value: randomD20() }))
+            }
+          })
+        },
+        completeFirstPlayerRoll: () => dispatch(finishFirstPlayerRoll()),
         moveCards: moves => dispatch(moveGameCards({ moves })),
         moveCardInLibrary: (instanceId, playerId, position) =>
           dispatch(moveCardInLibrary({ instanceId, playerId, position })),
@@ -115,7 +138,8 @@ export const useOfflineBattleRuntime = (): BattleRuntime | null => {
         hideLibrary: () => undefined,
         mulligan: playerId =>
           dispatch(mulliganHand({ playerId, seed: randomSeed() })),
-        keepHand: playerId => dispatch(keepHand({ playerId })),
+        keepHand: (playerId, bottomCardIds) =>
+          dispatch(keepHand({ playerId, bottomCardIds })),
         untapAll: playerId => dispatch(untapAll({ playerId })),
         createToken: (playerId, definition, position) =>
           dispatch(

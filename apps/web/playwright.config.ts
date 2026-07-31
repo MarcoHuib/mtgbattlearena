@@ -20,6 +20,11 @@ export default defineConfig({
     command:
       "npm run build && npm run preview --workspace @mtg/web -- --host 127.0.0.1",
     cwd: path.resolve(import.meta.dirname, "../.."),
+    env: {
+      ...process.env,
+      VITE_ONLINE_API_URL: "",
+      VITE_ONLINE_SOCKET_URL: "",
+    },
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

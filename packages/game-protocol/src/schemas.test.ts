@@ -33,6 +33,22 @@ const player = (id: string) => ({
   command: [],
 })
 
+const completedFirstPlayerRoll = (
+  playerIds: string[],
+  winner = playerIds[0],
+) => ({
+  status: "completed",
+  round: 1,
+  participantIds: playerIds,
+  eligiblePlayerIds: [],
+  rolls: {},
+  eliminatedPlayerIds: [],
+  tiedPlayerIds: [],
+  winnerPlayerId: winner,
+  startPlayerId: winner,
+  rollSequence: 0,
+})
+
 test("valideert versioned commands zonder betrouwbare clientidentiteit", () => {
   const command = gameCommandSchema.parse({
     type: "DRAW_CARD",
@@ -86,6 +102,8 @@ test("valideert alle speelbare online basiscommands strikt", () => {
     expectedVersion: 12,
   }
   const commands = [
+    { ...base, type: "ROLL_FOR_FIRST_PLAYER", payload: {} },
+    { ...base, type: "COMPLETE_FIRST_PLAYER_ROLL", payload: {} },
     { ...base, type: "MULLIGAN_HAND", payload: {} },
     { ...base, type: "KEEP_HAND", payload: {} },
     { ...base, type: "DRAW_CARD", payload: { amount: 1 } },
@@ -215,6 +233,8 @@ test("valideert alle speelbare online basiscommands strikt", () => {
   expect(
     commands.map(command => gameCommandSchema.parse(command).type),
   ).toEqual([
+    "ROLL_FOR_FIRST_PLAYER",
+    "COMPLETE_FIRST_PLAYER_ROLL",
     "MULLIGAN_HAND",
     "KEEP_HAND",
     "DRAW_CARD",
@@ -280,6 +300,7 @@ test("persoonlijke snapshots ondersteunen 2–6 spelers en één private view", 
       initiativePlayerId: null,
       dayNight: "day",
     },
+    firstPlayerRoll: completedFirstPlayerRoll(turnOrder, "p2"),
     turnOrder,
     openingHands: Object.fromEntries(
       turnOrder.map(id => [id, { mulliganCount: 0, kept: true }]),
@@ -313,6 +334,7 @@ test("weigert verborgen tegenstanderdata en spectator-private-state", () => {
       initiativePlayerId: null,
       dayNight: "none",
     },
+    firstPlayerRoll: completedFirstPlayerRoll(["p1", "p2"]),
     turnOrder: ["p1", "p2"],
     openingHands: {
       p1: { mulliganCount: 0, kept: true },

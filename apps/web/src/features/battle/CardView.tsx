@@ -13,6 +13,8 @@ type CardViewProps = {
   definition: CardDefinition
   compact?: boolean
   displayOnly?: boolean
+  displaySelected?: boolean
+  onDisplayClick?: () => void
   disableDrag?: boolean
 }
 
@@ -64,6 +66,8 @@ export const CardView = ({
   definition,
   compact = false,
   displayOnly = false,
+  displaySelected = false,
+  onDisplayClick,
   disableDrag = false,
 }: CardViewProps) => {
   const runtime = useBattleRuntime()
@@ -490,17 +494,19 @@ export const CardView = ({
   return (
     <>
       <article
-        ref={ref}
+        ref={displayOnly ? undefined : ref}
         className={`card ${compact ? "card--compact" : ""} ${
           instance.tapped ? "card--tapped" : ""
         } ${isDragging ? "card--dragging" : ""} ${
           pointerHeld ? "card--pointer-held" : ""
-        } ${selected ? "card--selected" : ""}`}
+        } ${selected || displaySelected ? "card--selected" : ""}`}
         aria-label={cardLabel}
+        role={displayOnly && onDisplayClick ? "button" : undefined}
+        aria-disabled={displayOnly && onDisplayClick ? false : undefined}
         aria-expanded={displayOnly ? undefined : menuPoint !== null}
         aria-haspopup={displayOnly ? undefined : "dialog"}
         aria-keyshortcuts={displayOnly ? undefined : "Shift+F10"}
-        aria-pressed={displayOnly ? undefined : selected}
+        aria-pressed={displayOnly ? displaySelected : selected}
         data-card-name={definition.name}
         data-battle-card="true"
         data-battle-draggable={
@@ -542,12 +548,15 @@ export const CardView = ({
         onPointerUpCapture={cancelTouchHold}
         onPointerCancel={cancelTouchHold}
         onClick={event => {
+          if (displayOnly) {
+            onDisplayClick?.()
+            return
+          }
           if (
-            !displayOnly &&
-            (lastPointerWasTouch.current ||
-              event.ctrlKey ||
-              event.metaKey ||
-              event.shiftKey)
+            lastPointerWasTouch.current ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
           ) {
             event.preventDefault()
             setSelectedCardIds(

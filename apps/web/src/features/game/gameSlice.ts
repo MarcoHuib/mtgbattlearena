@@ -1,6 +1,7 @@
 import { createSlice, current, type PayloadAction } from "@reduxjs/toolkit"
 import {
   addCardsToGroup,
+  applyFirstPlayerRoll,
   advancePhase,
   advanceTurn,
   attachCard,
@@ -9,6 +10,7 @@ import {
   changePlayerLife,
   changePlayerPoison,
   changePlayerTracker,
+  completeFirstPlayerRoll,
   createCardGroup,
   createKnownToken,
   createToken,
@@ -85,6 +87,21 @@ export const gameSlice = createSlice({
     },
     closeBattle() {
       return initialState
+    },
+    rollForFirstPlayer(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; value: number }>,
+    ) {
+      applyGameChange(state, game =>
+        applyFirstPlayerRoll(
+          game,
+          action.payload.playerId,
+          action.payload.value,
+        ),
+      )
+    },
+    finishFirstPlayerRoll(state) {
+      applyGameChange(state, game => completeFirstPlayerRoll(game))
     },
     drawCard(
       state,
@@ -290,9 +307,16 @@ export const gameSlice = createSlice({
     nextTurn(state) {
       applyGameChange(state, game => advanceTurn(game))
     },
-    keepHand(state, action: PayloadAction<{ playerId: PlayerId }>) {
+    keepHand(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; bottomCardIds: string[] }>,
+    ) {
       applyGameChange(state, game =>
-        keepOpeningHand(game, action.payload.playerId),
+        keepOpeningHand(
+          game,
+          action.payload.playerId,
+          action.payload.bottomCardIds,
+        ),
       )
     },
     mulliganHand(
@@ -528,6 +552,8 @@ export const {
   setTrackerVisibility,
   shufflePlayerLibrary,
   startGame,
+  rollForFirstPlayer,
+  finishFirstPlayerRoll,
   switchFace,
   toggleTap,
   toggleSelectedTap,

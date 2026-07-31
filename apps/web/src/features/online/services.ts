@@ -588,7 +588,7 @@ export class CloudflareOnlineGameService implements OnlineGameService {
     const token = authenticated === false ? null : await this.auth.getIdToken()
     if (authenticated === true && !token) throw new Error("Log eerst in.")
     const headers = new Headers(init.headers)
-    if (!headers.has("Content-Type")) {
+    if (init.body !== undefined && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json")
     }
     if (token) headers.set("Authorization", `Bearer ${token}`)
@@ -619,14 +619,16 @@ export type ApplicationServices = {
 export const createApplicationServices = (): ApplicationServices => {
   const configuredApiUrl: unknown = import.meta.env.VITE_ONLINE_API_URL
   const configuredSocketUrl: unknown = import.meta.env.VITE_ONLINE_SOCKET_URL
-  const apiUrl =
+  const remoteApiUrl =
     typeof configuredApiUrl === "string" && configuredApiUrl.trim()
       ? configuredApiUrl
       : null
+  const apiUrl =
+    remoteApiUrl && import.meta.env.DEV ? window.location.origin : remoteApiUrl
   const socketUrl =
     typeof configuredSocketUrl === "string" && configuredSocketUrl.trim()
       ? configuredSocketUrl
-      : apiUrl
+      : remoteApiUrl
   if (apiUrl) {
     const firebaseConfig = readFirebaseConfig(import.meta.env)
     if (!firebaseConfig.configured) {

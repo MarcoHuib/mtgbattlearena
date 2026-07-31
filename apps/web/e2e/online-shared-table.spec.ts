@@ -13,13 +13,17 @@ test("online gebruikt de gedeelde tafel en drag-and-dropactie", async ({
     window.dispatchEvent(new PopStateEvent("popstate"))
   })
 
+  await expect(
+    page.getByRole("heading", { name: "Wie mag beginnen?" }),
+  ).toBeVisible()
+  await page.getByRole("button", { name: "Gooi dobbelsteen" }).click()
+  await page.getByRole("button", { name: "Start wedstrijd" }).click()
+
   const openingHand = page.getByRole("dialog", {
     name: "Openingshand van Jij",
   })
   await expect(openingHand).toBeVisible()
-  await openingHand
-    .getByRole("button", { name: "Deze hand houden" })
-    .click()
+  await openingHand.getByRole("button", { name: "Deze hand houden" }).click()
 
   const ownBoard = page.getByLabel("Speelveld van Jij")
   const opponentBoard = page.getByLabel("Speelveld van Tegenstander 1")
@@ -37,6 +41,7 @@ test("online gebruikt de gedeelde tafel en drag-and-dropactie", async ({
   await expect(page.locator(".online-player")).toHaveCount(0)
   await expect(page.locator(".online-card")).toHaveCount(0)
 
+  await card.scrollIntoViewIfNeeded()
   const cardBounds = await card.boundingBox()
   const battlefieldBounds = await battlefield
     .locator(".zone__cards")
@@ -49,6 +54,12 @@ test("online gebruikt de gedeelde tafel en drag-and-dropactie", async ({
     (cardBounds?.y ?? 0) + (cardBounds?.height ?? 0) / 2,
   )
   await page.mouse.down()
+  await page.mouse.move(
+    (cardBounds?.x ?? 0) + (cardBounds?.width ?? 0) / 2,
+    (cardBounds?.y ?? 0) + (cardBounds?.height ?? 0) / 2 - 12,
+    { steps: 4 },
+  )
+  await expect(card).toHaveAttribute("data-dnd-dragging", "true")
   await page.mouse.move(
     (battlefieldBounds?.x ?? 0) + (battlefieldBounds?.width ?? 0) / 2,
     (battlefieldBounds?.y ?? 0) + (battlefieldBounds?.height ?? 0) / 2,

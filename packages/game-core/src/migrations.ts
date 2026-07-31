@@ -68,7 +68,7 @@ const versionFiveGameSchema = z
     groupsById: z.record(z.string(), z.unknown()),
   })
   .loose()
-const currentGameSchema = z
+const versionSixGameSchema = z
   .object({
     schemaVersion: z.literal(6),
     activePlayerId: playerIdSchema,
@@ -85,6 +85,23 @@ const currentGameSchema = z
     }),
   })
   .loose()
+const currentGameSchema = versionSixGameSchema
+  .omit({ schemaVersion: true })
+  .safeExtend({
+    schemaVersion: z.literal(7),
+    firstPlayerRoll: z.object({
+      status: z.enum(["rolling", "tie", "winner_determined", "completed"]),
+      round: z.number().int().positive(),
+      participantIds: z.array(playerIdSchema).min(2),
+      eligiblePlayerIds: z.array(playerIdSchema),
+      rolls: z.record(playerIdSchema, z.number().int().min(1).max(20)),
+      eliminatedPlayerIds: z.array(playerIdSchema),
+      tiedPlayerIds: z.array(playerIdSchema),
+      winnerPlayerId: playerIdSchema.nullable(),
+      startPlayerId: playerIdSchema.nullable(),
+      rollSequence: z.number().int().nonnegative(),
+    }),
+  })
 
 const persistedGameSchema = <T extends z.ZodType>(version: number, game: T) =>
   z.object({
@@ -115,12 +132,31 @@ const versionFivePersistedGameSchema = persistedGameSchema(
   5,
   versionFiveGameSchema,
 )
-const currentPersistedGameSchema = persistedGameSchema(6, currentGameSchema)
+const versionSixPersistedGameSchema = persistedGameSchema(
+  6,
+  versionSixGameSchema,
+)
+const currentPersistedGameSchema = persistedGameSchema(7, currentGameSchema)
 
 const keptOpeningHands: GameState["openingHands"] = {
   "player-1": { mulliganCount: 0, kept: true },
   "player-2": { mulliganCount: 0, kept: true },
 }
+
+const completedFirstPlayerRoll = (
+  activePlayerId: PlayerId,
+): GameState["firstPlayerRoll"] => ({
+  status: "completed",
+  round: 1,
+  participantIds: ["player-1", "player-2"],
+  eligiblePlayerIds: [],
+  rolls: {},
+  eliminatedPlayerIds: [],
+  tiedPlayerIds: [],
+  winnerPlayerId: activePlayerId,
+  startPlayerId: activePlayerId,
+  rollSequence: 0,
+})
 
 type LegacyGame = Record<string, unknown> & {
   players?: Partial<
@@ -163,11 +199,14 @@ const migrateGame = (
 ): GameState =>
   ({
     ...addCommanderDefaults(game),
-    schemaVersion: 6,
+    schemaVersion: 7,
     activePlayerId: game.activePlayerId ?? "player-1",
     turnNumber: game.turnNumber ?? 1,
     phase: "beginning",
     openingHands,
+    firstPlayerRoll: completedFirstPlayerRoll(
+      (game.activePlayerId as PlayerId | undefined) ?? "player-1",
+    ),
     groupsById: {},
     matchStatus: {
       monarchPlayerId: null,
@@ -185,7 +224,7 @@ const migrateLegacyRecord = (
   },
   openingHandsFor: (game: LegacyGame) => GameState["openingHands"],
 ): PersistedGame => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
   game: migrateGame(record.game, openingHandsFor(record.game)),
   past: record.past.map(game => migrateGame(game, openingHandsFor(game))),
   future: record.future.map(game => migrateGame(game, openingHandsFor(game))),
@@ -253,13 +292,29 @@ const migrateVersionFiveGame = (game: LegacyGame): GameState => {
   }
   return {
     ...(game as unknown as Omit<GameState, "schemaVersion" | "matchStatus">),
-    schemaVersion: 6,
+    schemaVersion: 7,
     players: players as GameState["players"],
     matchStatus: {
       monarchPlayerId: null,
       initiativePlayerId: null,
       dayNight: "none",
     },
+    firstPlayerRoll: completedFirstPlayerRoll(
+      (game.activePlayerId as PlayerId | undefined) ?? "player-1",
+    ),
+  }
+}
+
+const migrateVersionSixGame = (game: LegacyGame): GameState => {
+  const activePlayerId =
+    (game.activePlayerId as PlayerId | undefined) ?? "player-1"
+  return {
+    ...(game as unknown as Omit<
+      GameState,
+      "schemaVersion" | "firstPlayerRoll"
+    >),
+    schemaVersion: 7,
+    firstPlayerRoll: completedFirstPlayerRoll(activePlayerId),
   }
 }
 
@@ -267,10 +322,21 @@ export const hydratePersistedGame = (value: unknown): PersistedGame => {
   const current = currentPersistedGameSchema.safeParse(value)
   if (current.success) return current.data as unknown as PersistedGame
 
+  const versionSix = versionSixPersistedGameSchema.safeParse(value)
+  if (versionSix.success) {
+    return {
+      schemaVersion: 7,
+      game: migrateVersionSixGame(versionSix.data.game),
+      past: versionSix.data.past.map(migrateVersionSixGame),
+      future: versionSix.data.future.map(migrateVersionSixGame),
+      savedAt: versionSix.data.savedAt,
+    }
+  }
+
   const versionFive = versionFivePersistedGameSchema.safeParse(value)
   if (versionFive.success) {
     return {
-      schemaVersion: 6,
+      schemaVersion: 7,
       game: migrateVersionFiveGame(versionFive.data.game),
       past: versionFive.data.past.map(migrateVersionFiveGame),
       future: versionFive.data.future.map(migrateVersionFiveGame),
@@ -281,7 +347,7 @@ export const hydratePersistedGame = (value: unknown): PersistedGame => {
   const versionFour = versionFourPersistedGameSchema.safeParse(value)
   if (versionFour.success) {
     return {
-      schemaVersion: 6,
+      schemaVersion: 7,
       game: migrateVersionFiveGame(
         migrateVersionFourGame(versionFour.data.game),
       ),

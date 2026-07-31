@@ -17,6 +17,9 @@ export type BattleMove = {
 }
 
 export type BattleRuntimeActions = {
+  rollForFirstPlayer: (playerId: PlayerId) => void
+  rollAllForFirstPlayer: () => void
+  completeFirstPlayerRoll: () => void
   moveCards: (moves: BattleMove[]) => void
   moveCardInLibrary: (
     instanceId: string,
@@ -46,7 +49,7 @@ export type BattleRuntimeActions = {
   revealLibrary: (playerId: PlayerId, amount: number) => void
   hideLibrary: (playerId: PlayerId) => void
   mulligan: (playerId: PlayerId) => void
-  keepHand: (playerId: PlayerId) => void
+  keepHand: (playerId: PlayerId, bottomCardIds: string[]) => void
   untapAll: (playerId: PlayerId) => void
   createToken: (
     playerId: PlayerId,
@@ -93,6 +96,8 @@ export type BattleRuntime = {
   selectedCardIds: string[]
   setSelectedCardIds: (instanceIds: string[]) => void
   pending: boolean
+  firstPlayerRollFlow: "individual" | "all"
+  canCompleteFirstPlayerRoll: boolean
   actions: BattleRuntimeActions
 }
 

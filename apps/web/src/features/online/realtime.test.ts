@@ -18,6 +18,18 @@ const snapshot = (gameId: string, version: number): PersonalGameSnapshot => ({
     initiativePlayerId: null,
     dayNight: "none",
   },
+  firstPlayerRoll: {
+    status: "completed",
+    round: 1,
+    participantIds: ["p1", "p2"],
+    eligiblePlayerIds: [],
+    rolls: {},
+    eliminatedPlayerIds: [],
+    tiedPlayerIds: [],
+    winnerPlayerId: "p1",
+    startPlayerId: "p1",
+    rollSequence: 0,
+  },
   turnOrder: ["p1", "p2"],
   openingHands: {
     p1: { mulliganCount: 0, kept: true },

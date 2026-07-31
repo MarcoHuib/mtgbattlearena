@@ -6,7 +6,7 @@ import { redo, undo } from "../game/gameSlice"
 import { OfflinePanel } from "../offline/OfflinePanel"
 import { setOfflinePanel } from "../offline/offlineSlice"
 import { BattleRuntimeProvider } from "./BattleRuntime"
-import { BattleTable } from "./BattleTable"
+import { BattleExperience } from "./BattleExperience"
 import { useOfflineBattleRuntime } from "./useOfflineBattleRuntime"
 
 type BattleScreenProps = {
@@ -79,7 +79,7 @@ export const BattleScreen = ({ onNewBattle }: BattleScreenProps) => {
             </button>
           </nav>
         </header>
-        <BattleTable />
+        <BattleExperience />
         <OfflinePanel />
       </main>
     </BattleRuntimeProvider>

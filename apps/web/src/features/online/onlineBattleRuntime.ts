@@ -175,7 +175,7 @@ export const onlineSnapshotToGameState = (
   }
 
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: snapshot.gameId,
     title: snapshot.turnOrder
       .map(playerId => snapshot.players[playerId]?.displayName)
@@ -187,6 +187,7 @@ export const onlineSnapshotToGameState = (
     turnNumber: snapshot.turnNumber,
     phase: snapshot.phase,
     matchStatus: snapshot.matchStatus,
+    firstPlayerRoll: snapshot.firstPlayerRoll,
     openingHands: snapshot.openingHands,
     deckSnapshotIds: ["", ""],
     players,
@@ -210,6 +211,13 @@ export const useOnlineBattleRuntime = (
     const viewerPlayerId = snapshot.privateView?.playerId ?? null
     const own = (playerId: PlayerId) => playerId === viewerPlayerId
     const actions: BattleRuntimeActions = {
+      rollForFirstPlayer: playerId => {
+        if (own(playerId)) sendCommand("ROLL_FOR_FIRST_PLAYER", {})
+      },
+      rollAllForFirstPlayer: () => undefined,
+      completeFirstPlayerRoll: () => {
+        sendCommand("COMPLETE_FIRST_PLAYER_ROLL", {})
+      },
       moveCards: moves => {
         const ownMoves = moves
           .filter(move => own(move.playerId))
@@ -289,8 +297,8 @@ export const useOnlineBattleRuntime = (
       mulligan: playerId => {
         if (own(playerId)) sendCommand("MULLIGAN_HAND", {})
       },
-      keepHand: playerId => {
-        if (own(playerId)) sendCommand("KEEP_HAND", {})
+      keepHand: (playerId, bottomCardIds) => {
+        if (own(playerId)) sendCommand("KEEP_HAND", { bottomCardIds })
       },
       untapAll: playerId => {
         if (own(playerId)) sendCommand("UNTAP_ALL", {})
@@ -377,6 +385,8 @@ export const useOnlineBattleRuntime = (
       selectedCardIds,
       setSelectedCardIds,
       pending,
+      firstPlayerRollFlow: "individual",
+      canCompleteFirstPlayerRoll: snapshot.isHost,
       actions,
     }
   }, [fallbackTokens, pending, selectedCardIds, sendCommand, snapshot])

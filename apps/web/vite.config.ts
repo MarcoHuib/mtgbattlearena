@@ -74,6 +74,10 @@ export default defineConfig({
   server: {
     open: true,
     proxy: {
+      "/api/online": {
+        target: "https://api.mtgbattlearena.nl",
+        changeOrigin: true,
+      },
       "/api/import/archidekt/image": {
         target: "https://card-images.archidekt.com",
         changeOrigin: true,

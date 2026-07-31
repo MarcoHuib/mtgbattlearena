@@ -1,5 +1,10 @@
-import { openingHandSizeAfterMulligan } from "@mtg/game-core/game"
+import {
+  openingHandBottomCount,
+  openingHandKeepCount,
+  openingHandSizeAfterMulligan,
+} from "@mtg/game-core/game"
 import type { PlayerId } from "@mtg/game-core/types"
+import { useEffect, useState } from "react"
 import {
   battlePlayerIds,
   canControlPlayer,
@@ -18,6 +23,9 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
   const state = game.openingHands[playerId]
   const nextMulliganCount = state.mulliganCount + 1
   const nextHandSize = openingHandSizeAfterMulligan(nextMulliganCount)
+  const requiredBottomCount = openingHandBottomCount(state.mulliganCount)
+  const requiredKeepCount = openingHandKeepCount(state.mulliganCount)
+  const [keptCardIds, setKeptCardIds] = useState<string[]>([])
   const cards = player.zones.hand.flatMap(instanceId => {
     const instance = game.cardsById[instanceId]
     const definition = instance
@@ -28,6 +36,12 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
   const playerIds = battlePlayerIds(game)
   const playerNumber = playerIds.indexOf(playerId) + 1
   const enabled = canControlPlayer(runtime, playerId)
+  const selectionComplete =
+    requiredBottomCount === 0 || keptCardIds.length === requiredKeepCount
+
+  useEffect(() => {
+    setKeptCardIds([])
+  }, [state.mulliganCount])
 
   return (
     <div className="opening-hand-layer">
@@ -53,9 +67,17 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
         </header>
 
         <p className="opening-hand-dialog__rule">
-          De eerste twee mulligans blijven op zeven kaarten. Vanaf de derde
-          mulligan krijg je telkens één kaart minder.
+          Je ziet na iedere mulligan opnieuw zeven kaarten. Na je eerste
+          mulligan houd je er zeven; daarna houd je er telkens één minder.
         </p>
+
+        {requiredBottomCount > 0 ? (
+          <p className="opening-hand-dialog__selection" aria-live="polite">
+            Kies {requiredKeepCount} kaart
+            {requiredKeepCount === 1 ? "" : "en"} om te houden ·{" "}
+            {keptCardIds.length}/{requiredKeepCount} geselecteerd
+          </p>
+        ) : null}
 
         <div
           className="opening-hand-dialog__cards"
@@ -67,6 +89,17 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
               instance={instance}
               definition={definition}
               displayOnly
+              displaySelected={keptCardIds.includes(instance.instanceId)}
+              onDisplayClick={() => {
+                if (!enabled) return
+                setKeptCardIds(current =>
+                  current.includes(instance.instanceId)
+                    ? current.filter(id => id !== instance.instanceId)
+                    : current.length < requiredKeepCount
+                      ? [...current, instance.instanceId]
+                      : current,
+                )
+              }}
             />
           ))}
           {cards.length === 0 ? (
@@ -87,17 +120,30 @@ export const OpeningHandDialog = ({ playerId }: OpeningHandDialogProps) => {
             >
               Mulligan ({state.mulliganCount})
             </button>
-            <span>Nieuwe hand: {nextHandSize} kaarten</span>
+            <span>
+              Nog een mulligan: {nextHandSize} nieuwe kaarten, daarna{" "}
+              {openingHandKeepCount(nextMulliganCount)} houden
+            </span>
           </div>
           <button
             className="button button--primary button--large"
             type="button"
-            disabled={!enabled}
+            disabled={!enabled || !selectionComplete}
             onClick={() => {
-              actions.keepHand(playerId)
+              const bottomCardIds =
+                requiredBottomCount === 0
+                  ? []
+                  : cards
+                      .map(({ instance }) => instance.instanceId)
+                      .filter(instanceId => !keptCardIds.includes(instanceId))
+              actions.keepHand(playerId, bottomCardIds)
             }}
           >
-            Deze hand houden
+            {requiredBottomCount > 0
+              ? `${requiredKeepCount} gekozen ${
+                  requiredKeepCount === 1 ? "kaart" : "kaarten"
+                } houden`
+              : "Deze hand houden"}
           </button>
         </footer>
       </section>

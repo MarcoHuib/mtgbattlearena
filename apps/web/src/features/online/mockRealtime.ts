@@ -6,6 +6,10 @@ import {
   type ServerEvent,
   type VisibleOnlineCard,
 } from "@mtg/game-protocol"
+import {
+  createFirstPlayerRollState,
+  resolveFirstPlayerRoll,
+} from "@mtg/game-core/game"
 import type { OnlineConnectionUpdate, OnlineGameConnection } from "./types"
 
 const card = (name: string, index: number): VisibleOnlineCard => ({
@@ -64,6 +68,7 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
       initiativePlayerId: null,
       dayNight: "none",
     },
+    firstPlayerRoll: createFirstPlayerRollState(turnOrder),
     turnOrder,
     openingHands: Object.fromEntries(
       turnOrder.map((playerId, index) => [
@@ -198,25 +203,66 @@ export class MockRealtimeConnection implements OnlineGameConnection {
     }
 
     switch (command.type) {
+      case "ROLL_FOR_FIRST_PLAYER": {
+        let rollState = resolveFirstPlayerRoll(next.firstPlayerRoll, ownId, 20)
+        while (rollState.status === "rolling" || rollState.status === "tie") {
+          const simulatedPlayerId = rollState.eligiblePlayerIds.find(
+            playerId =>
+              playerId !== ownId && rollState.rolls[playerId] === undefined,
+          )
+          if (!simulatedPlayerId) break
+          rollState = resolveFirstPlayerRoll(
+            rollState,
+            simulatedPlayerId,
+            Math.max(1, 19 - rollState.rollSequence),
+          )
+        }
+        next.firstPlayerRoll = rollState as typeof next.firstPlayerRoll
+        if (rollState.winnerPlayerId) {
+          next.activePlayerId = rollState.winnerPlayerId
+        }
+        break
+      }
+      case "COMPLETE_FIRST_PLAYER_ROLL":
+        if (next.firstPlayerRoll.status !== "winner_determined") return
+        next.firstPlayerRoll.status = "completed"
+        break
       case "MULLIGAN_HAND": {
         const openingHand = next.openingHands[ownId]
         if (!openingHand || openingHand.kept) return
         openingHand.mulliganCount += 1
-        const handSize = Math.max(0, Math.min(7, 9 - openingHand.mulliganCount))
-        next.privateView.hand = Array.from({ length: handSize }, (_, index) =>
+        next.privateView.hand = Array.from({ length: 7 }, (_, index) =>
           card(
             `Nieuwe demo ${this.nextCardIndex + index}`,
             this.nextCardIndex + index,
           ),
         )
-        this.nextCardIndex += handSize
-        own.handCount = handSize
-        own.libraryCount = Math.max(0, 99 - handSize)
+        this.nextCardIndex += 7
+        own.handCount = 7
+        own.libraryCount = 92
         break
       }
       case "KEEP_HAND": {
         const openingHand = next.openingHands[ownId]
         if (!openingHand || openingHand.kept) return
+        const selected = new Set(command.payload.bottomCardIds)
+        if (
+          selected.size !==
+            Math.max(0, Math.min(6, openingHand.mulliganCount - 1)) ||
+          command.payload.bottomCardIds.some(
+            instanceId =>
+              !next.privateView?.hand.some(
+                item => item.instanceId === instanceId,
+              ),
+          )
+        ) {
+          return
+        }
+        next.privateView.hand = next.privateView.hand.filter(
+          item => !selected.has(item.instanceId),
+        )
+        own.handCount = next.privateView.hand.length
+        own.libraryCount += selected.size
         openingHand.kept = true
         break
       }

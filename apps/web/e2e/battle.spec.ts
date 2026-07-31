@@ -72,6 +72,26 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(page.getByText("Tidal Memory")).toBeVisible()
 
   await page.getByRole("button", { name: "Battle starten" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Wie mag beginnen?" }),
+  ).toBeVisible()
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const startGame = page.getByRole("button", { name: "Start wedstrijd" })
+    if (await startGame.isVisible().catch(() => false)) {
+      await startGame.click()
+      break
+    }
+    await page
+      .getByRole("button", {
+        name: /Laat (iedereen|tied spelers) .*gooien/,
+      })
+      .click()
+    await expect(
+      page.getByRole("button", {
+        name: /Start wedstrijd|Laat (iedereen|tied spelers) .*gooien/,
+      }),
+    ).toBeVisible()
+  }
   const playerOneOpeningHand = page.getByRole("dialog", {
     name: "Openingshand van Verdant Resolve",
   })
@@ -96,9 +116,12 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await playerTwoOpeningHand
     .getByRole("button", { name: "Mulligan (2)" })
     .click()
-  await expect(playerTwoOpeningCards).toHaveCount(6)
+  await expect(playerTwoOpeningCards).toHaveCount(7)
+  for (let index = 0; index < 5; index += 1) {
+    await playerTwoOpeningCards.nth(index).click()
+  }
   await playerTwoOpeningHand
-    .getByRole("button", { name: "Deze hand houden" })
+    .getByRole("button", { name: "5 gekozen kaarten houden" })
     .click()
   await expect(playerTwoOpeningHand).not.toBeVisible()
 
@@ -617,14 +640,25 @@ test("herstelt een gedownloade battle volledig offline", async ({
   const nextTurnButton = matchStatus.getByRole("button", {
     name: "Volgende beurt →",
   })
+  const initialActivePlayer = await matchStatus
+    .locator(".match-status__turn strong")
+    .textContent()
+  const nextActivePlayer =
+    initialActivePlayer === "Verdant Resolve"
+      ? "Tidal Memory"
+      : "Verdant Resolve"
   await nextTurnButton.click()
   await expect(matchStatus.locator(".match-status__turn strong")).toHaveText(
-    "Tidal Memory",
+    nextActivePlayer,
   )
-  await expect(battlefieldCard).toHaveClass(/card--tapped/)
+  if (nextActivePlayer === "Verdant Resolve") {
+    await expect(battlefieldCard).not.toHaveClass(/card--tapped/)
+  } else {
+    await expect(battlefieldCard).toHaveClass(/card--tapped/)
+  }
   await nextTurnButton.click()
   await expect(matchStatus.locator(".match-status__turn strong")).toHaveText(
-    "Verdant Resolve",
+    initialActivePlayer ?? "",
   )
   await expect(battlefieldCard).not.toHaveClass(/card--tapped/)
   await expect

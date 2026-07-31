@@ -123,7 +123,7 @@ autosaveListener.startListening({
     if (!state.game.present) return
     const savedAt = new Date().toISOString()
     const record: PersistedGame = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       game: state.game.present,
       past: state.game.past,
       future: state.game.future,

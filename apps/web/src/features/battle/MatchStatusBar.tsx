@@ -29,7 +29,7 @@ export const MatchStatusBar = () => {
         <span className="eyebrow">Aan de beurt</span>
         <strong>{activePlayer.name}</strong>
         <small>
-          Beurt {game.turnNumber} · {phaseLabels[game.phase]}
+          Ronde {game.turnNumber} · {phaseLabels[game.phase]}
         </small>
       </div>
 
