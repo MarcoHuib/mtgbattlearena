@@ -21,6 +21,26 @@ dezelfde openbare rollstate in iedere persoonlijke snapshot. De Worker blijft
 de enige bron van waarheid. Hand- en libraryinformatie blijft buiten deze
 publieke state.
 
+## Offline spelersconfiguratie
+
+De offline setup bewaart een geordende `playerOrder` en een map met stabiele
+player-ID's. De gebruiker begint met twee seats en kan via `Speler toevoegen`
+tot maximaal zes seats configureren. Iedere seat gebruikt dezelfde
+deckimportcomponent en bevat een eigen naam en decksnapshot. Verwijderen is
+alleen mogelijk zolang minimaal twee spelers overblijven.
+
+`createGameForPlayers` bouwt uit deze configuratie de generieke
+`Record<PlayerId, PlayerState>`, openingshandstatus, deckkoppelingen en
+deelnemerslijst. `createGame` blijft als compatibele tweespelerwrapper bestaan
+voor bestaande callers en tests. De gedeelde dobbelsteenflow,
+openingshanddialogen en `BattleTable` itereren daarna uitsluitend over de
+spelers uit de game-state; er worden geen visuele of tijdelijke mockspelers
+toegevoegd.
+
+`deckSnapshotIds` is daarom een collectie van twee tot zes IDs. Bestaande
+tweespeler-savegames met schema 7 blijven geldig, terwijl de actuele
+hydrateschema's ook dynamische player-ID's en multiplayergames accepteren.
+
 ## Domeinmodel en tie-regel
 
 `GameState.firstPlayerRoll` bewaart deelnemers, huidige kandidaten, worpen,

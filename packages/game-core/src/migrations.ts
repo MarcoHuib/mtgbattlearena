@@ -85,23 +85,38 @@ const versionSixGameSchema = z
     }),
   })
   .loose()
-const currentGameSchema = versionSixGameSchema
-  .omit({ schemaVersion: true })
-  .safeExtend({
+const currentPlayerIdSchema = z.string().min(1)
+const currentGameSchema = z
+  .object({
     schemaVersion: z.literal(7),
+    activePlayerId: currentPlayerIdSchema,
+    turnNumber: z.number().int().positive(),
+    groupsById: z.record(z.string(), z.unknown()),
+    openingHands: z.record(currentPlayerIdSchema, openingHandStateSchema),
+    deckSnapshotIds: z.array(z.string()).min(2).max(6),
+    players: z.record(currentPlayerIdSchema, playerStatusSchema),
+    matchStatus: z.object({
+      monarchPlayerId: currentPlayerIdSchema.nullable(),
+      initiativePlayerId: currentPlayerIdSchema.nullable(),
+      dayNight: z.enum(["none", "day", "night"]),
+    }),
     firstPlayerRoll: z.object({
       status: z.enum(["rolling", "tie", "winner_determined", "completed"]),
       round: z.number().int().positive(),
-      participantIds: z.array(playerIdSchema).min(2),
-      eligiblePlayerIds: z.array(playerIdSchema),
-      rolls: z.record(playerIdSchema, z.number().int().min(1).max(20)),
-      eliminatedPlayerIds: z.array(playerIdSchema),
-      tiedPlayerIds: z.array(playerIdSchema),
-      winnerPlayerId: playerIdSchema.nullable(),
-      startPlayerId: playerIdSchema.nullable(),
+      participantIds: z.array(currentPlayerIdSchema).min(2).max(6),
+      eligiblePlayerIds: z.array(currentPlayerIdSchema),
+      rolls: z.record(
+        currentPlayerIdSchema,
+        z.number().int().min(1).max(20),
+      ),
+      eliminatedPlayerIds: z.array(currentPlayerIdSchema),
+      tiedPlayerIds: z.array(currentPlayerIdSchema),
+      winnerPlayerId: currentPlayerIdSchema.nullable(),
+      startPlayerId: currentPlayerIdSchema.nullable(),
       rollSequence: z.number().int().nonnegative(),
     }),
   })
+  .loose()
 
 const persistedGameSchema = <T extends z.ZodType>(version: number, game: T) =>
   z.object({

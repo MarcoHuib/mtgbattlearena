@@ -52,9 +52,13 @@ export const shuffle = <T>(items: readonly T[], random: RandomSource): T[] => {
   return result
 }
 
-const makePlayer = (playerId: PlayerId, deck: DeckSnapshot): PlayerState => ({
+const makePlayer = (
+  playerId: PlayerId,
+  name: string,
+  deck: DeckSnapshot,
+): PlayerState => ({
   id: playerId,
-  name: deck.name,
+  name,
   deckSnapshotId: deck.id,
   life: 40,
   poison: 0,
@@ -70,23 +74,37 @@ const makePlayer = (playerId: PlayerId, deck: DeckSnapshot): PlayerState => ({
 const definitionKey = (playerId: PlayerId, definitionId: string) =>
   `${playerId}:${definitionId}`
 
-export const createGame = (
-  decks: [DeckSnapshot, DeckSnapshot],
+export type GamePlayerSetup = {
+  id: PlayerId
+  name: string
+  deck: DeckSnapshot
+}
+
+export const createGameForPlayers = (
+  playerSetups: readonly GamePlayerSetup[],
   options: {
     random: RandomSource
     createId: IdFactory
     now: string
   },
 ): GameState => {
-  const players: GameState["players"] = {
-    "player-1": makePlayer("player-1", decks[0]),
-    "player-2": makePlayer("player-2", decks[1]),
+  if (playerSetups.length < 2 || playerSetups.length > 6) {
+    throw new Error("Een battle vereist 2 tot en met 6 spelers.")
   }
+  const playerIds = playerSetups.map(player => player.id)
+  if (new Set(playerIds).size !== playerIds.length) {
+    throw new Error("Iedere speler moet een unieke player-ID hebben.")
+  }
+  const players: GameState["players"] = Object.fromEntries(
+    playerSetups.map(player => [
+      player.id,
+      makePlayer(player.id, player.name.trim() || player.deck.name, player.deck),
+    ]),
+  )
   const cardsById: GameState["cardsById"] = {}
   const cardDefinitionsById: GameState["cardDefinitionsById"] = {}
 
-  ;(["player-1", "player-2"] as const).forEach((playerId, deckIndex) => {
-    const deck = decks[deckIndex]
+  playerSetups.forEach(({ id: playerId, deck }) => {
     for (const definition of deck.definitions) {
       cardDefinitionsById[definitionKey(playerId, definition.id)] = {
         ...definition,
@@ -124,13 +142,14 @@ export const createGame = (
     )
   })
 
+  const firstPlayerId = playerIds[0]
   const game: GameState = {
     schemaVersion: 7,
     id: options.createId("game"),
-    title: `${decks[0].name} vs. ${decks[1].name}`,
+    title: playerSetups.map(player => player.deck.name).join(" vs. "),
     createdAt: options.now,
     updatedAt: options.now,
-    activePlayerId: "player-1",
+    activePlayerId: firstPlayerId,
     turnNumber: 1,
     phase: "beginning",
     matchStatus: {
@@ -138,12 +157,14 @@ export const createGame = (
       initiativePlayerId: null,
       dayNight: "none",
     },
-    firstPlayerRoll: createFirstPlayerRollState(["player-1", "player-2"]),
-    openingHands: {
-      "player-1": { mulliganCount: 0, kept: false },
-      "player-2": { mulliganCount: 0, kept: false },
-    },
-    deckSnapshotIds: [decks[0].id, decks[1].id],
+    firstPlayerRoll: createFirstPlayerRollState(playerIds),
+    openingHands: Object.fromEntries(
+      playerIds.map(playerId => [
+        playerId,
+        { mulliganCount: 0, kept: false },
+      ]),
+    ),
+    deckSnapshotIds: playerSetups.map(player => player.deck.id),
     players,
     cardDefinitionsById,
     cardsById,
@@ -152,6 +173,22 @@ export const createGame = (
 
   return drawOpeningHands(game, 7, options.now)
 }
+
+export const createGame = (
+  decks: [DeckSnapshot, DeckSnapshot],
+  options: {
+    random: RandomSource
+    createId: IdFactory
+    now: string
+  },
+): GameState =>
+  createGameForPlayers(
+    [
+      { id: "player-1", name: decks[0].name, deck: decks[0] },
+      { id: "player-2", name: decks[1].name, deck: decks[1] },
+    ],
+    options,
+  )
 
 export const createFirstPlayerRollState = (
   participantIds: PlayerId[],
@@ -328,8 +365,10 @@ export const drawOpeningHands = (
   amount: number,
   now = new Date().toISOString(),
 ): GameState => {
-  const first = drawCards(game, "player-1", amount, now)
-  return drawCards(first, "player-2", amount, now)
+  return Object.keys(game.players).reduce(
+    (current, playerId) => drawCards(current, playerId, amount, now),
+    game,
+  )
 }
 
 const removeCardFromZones = (game: GameState, instanceId: string) => {

@@ -4,6 +4,7 @@ import { startBattleFromSetup } from "../../app/thunks"
 import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
 import { DeckSlot } from "./DeckSlot"
+import { addPlayer } from "./setupSlice"
 
 type SetupScreenProps = {
   onBattleStarted?: () => void
@@ -11,10 +12,11 @@ type SetupScreenProps = {
 
 export const SetupScreen = ({ onBattleStarted }: SetupScreenProps) => {
   const dispatch = useAppDispatch()
-  const firstReady =
-    useAppSelector(state => state.setup["player-1"].status) === "ready"
-  const secondReady =
-    useAppSelector(state => state.setup["player-2"].status) === "ready"
+  const setup = useAppSelector(state => state.setup)
+  const canStart = setup.playerOrder.every(playerId => {
+    const player = setup.players[playerId]
+    return player?.status === "ready" && Boolean(player.name.trim())
+  })
 
   return (
     <main className="setup-screen">
@@ -26,11 +28,11 @@ export const SetupScreen = ({ onBattleStarted }: SetupScreenProps) => {
       </header>
       <section className="setup-hero">
         <div className="setup-hero__copy">
-          <span className="eyebrow">Twee decks · één lokale tafel</span>
+          <span className="eyebrow">2–6 spelers · één lokale tafel</span>
           <h1>Leg je battle klaar.</h1>
           <p>
-            Importeer twee openbare Archidekt-decks. Daarna blijft de battle
-            lokaal beschikbaar en bestuur jij beide kanten van het veld.
+            Stel twee tot zes spelers in en importeer voor iedereen een
+            openbaar Archidekt-deck. Daarna blijft de battle lokaal beschikbaar.
           </p>
         </div>
         <div className="setup-hero__seal" aria-hidden="true">
@@ -38,21 +40,32 @@ export const SetupScreen = ({ onBattleStarted }: SetupScreenProps) => {
         </div>
       </section>
       <section className="deck-grid" aria-label="Decks instellen">
-        <DeckSlot playerId="player-1" number={1} />
-        <div className="versus-line" aria-hidden="true">
-          <span>versus</span>
-        </div>
-        <DeckSlot playerId="player-2" number={2} />
+        {setup.playerOrder.map((playerId, index) => (
+          <DeckSlot
+            key={playerId}
+            playerId={playerId}
+            number={index + 1}
+            canRemove={setup.playerOrder.length > 2}
+          />
+        ))}
       </section>
       <footer className="setup-actions">
         <p>
-          Commanders gaan naar de command zone; beide spelers trekken
+          Commanders gaan naar de command zone; iedere speler trekt
           automatisch zeven kaarten.
         </p>
         <button
+          className="button button--secondary button--large"
+          type="button"
+          disabled={setup.playerOrder.length >= 6}
+          onClick={() => dispatch(addPlayer())}
+        >
+          Speler toevoegen
+        </button>
+        <button
           className="button button--primary button--large"
           type="button"
-          disabled={!firstReady || !secondReady}
+          disabled={!canStart}
           onClick={() => {
             dispatch(startBattleFromSetup())
             onBattleStarted?.()

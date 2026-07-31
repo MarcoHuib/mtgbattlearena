@@ -11,6 +11,7 @@ import {
   changePlayerPoison,
   changePlayerTracker,
   createGame,
+  createGameForPlayers,
   createFirstPlayerRollState,
   createCardGroup,
   createKnownToken,
@@ -113,6 +114,40 @@ const makeGame = () => {
 }
 
 describe("game-core", () => {
+  it("maakt een complete offline game met zes dynamische spelers", () => {
+    const deck = createDeckSnapshot(importedDeck, "shared-deck")
+    let id = 0
+    const game = createGameForPlayers(
+      Array.from({ length: 6 }, (_, index) => ({
+        id: `seat-${index + 1}`,
+        name: `Speler ${index + 1}`,
+        deck: { ...deck, id: `deck-${index + 1}` },
+      })),
+      {
+        random: () => 0.5,
+        createId: prefix => `${prefix}-${(id += 1)}`,
+        now: "2026-07-31T08:00:00.000Z",
+      },
+    )
+
+    expect(Object.keys(game.players)).toEqual([
+      "seat-1",
+      "seat-2",
+      "seat-3",
+      "seat-4",
+      "seat-5",
+      "seat-6",
+    ])
+    expect(game.firstPlayerRoll.participantIds).toHaveLength(6)
+    expect(Object.keys(game.openingHands)).toHaveLength(6)
+    expect(
+      Object.values(game.players).every(
+        player => player.zones.hand.length === 7,
+      ),
+    ).toBe(true)
+    expect(game.deckSnapshotIds).toHaveLength(6)
+  })
+
   it("schudt deterministisch met een injecteerbare randombron", () => {
     expect(shuffle([1, 2, 3, 4], () => 0)).toEqual([2, 3, 4, 1])
   })

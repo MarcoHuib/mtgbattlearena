@@ -1,5 +1,5 @@
 import type { AppThunk } from "./store"
-import { createGame } from "@mtg/game-core/game"
+import { createGameForPlayers } from "@mtg/game-core/game"
 import { hydratePersistedGame } from "@mtg/game-core/migrations"
 import { repositories } from "../persistence/database"
 import { hydrateBattle, startGame } from "../features/game/gameSlice"
@@ -38,10 +38,15 @@ export const hydrateApplication =
   }
 
 export const startBattleFromSetup = (): AppThunk => (dispatch, getState) => {
-  const first = getState().setup["player-1"].deck
-  const second = getState().setup["player-2"].deck
-  if (!first || !second) return
-  const game = createGame([first, second], {
+  const setup = getState().setup
+  const players = setup.playerOrder.flatMap(playerId => {
+    const slot = setup.players[playerId]
+    return slot?.deck && slot.name.trim()
+      ? [{ id: playerId, name: slot.name.trim(), deck: slot.deck }]
+      : []
+  })
+  if (players.length !== setup.playerOrder.length) return
+  const game = createGameForPlayers(players, {
     random: Math.random,
     createId: prefix => `${prefix}-${crypto.randomUUID()}`,
     now: new Date().toISOString(),

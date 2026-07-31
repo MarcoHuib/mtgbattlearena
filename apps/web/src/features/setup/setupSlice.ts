@@ -10,15 +10,23 @@ import { createImportedDeckSnapshot } from "../decks/deckSnapshots"
 import { repositories } from "../../persistence/database"
 
 export type DeckSlotState = {
+  playerId: PlayerId
+  name: string
   url: string
   status: "idle" | "loading" | "ready" | "error"
   deck: DeckSnapshot | null
   error: string | null
 }
 
-export type SetupState = Record<PlayerId, DeckSlotState>
+export type SetupState = {
+  playerOrder: PlayerId[]
+  players: Record<PlayerId, DeckSlotState>
+  nextPlayerNumber: number
+}
 
-const initialSlot = (): DeckSlotState => ({
+const initialSlot = (playerId: PlayerId): DeckSlotState => ({
+  playerId,
+  name: "",
   url: "",
   status: "idle",
   deck: null,
@@ -26,8 +34,12 @@ const initialSlot = (): DeckSlotState => ({
 })
 
 const initialState: SetupState = {
-  "player-1": initialSlot(),
-  "player-2": initialSlot(),
+  playerOrder: ["player-1", "player-2"],
+  players: {
+    "player-1": initialSlot("player-1"),
+    "player-2": initialSlot("player-2"),
+  },
+  nextPlayerNumber: 3,
 }
 
 export const importDeckForPlayer = createAsyncThunk<
@@ -62,7 +74,8 @@ export const setupSlice = createSlice({
       state,
       action: PayloadAction<{ playerId: PlayerId; url: string }>,
     ) {
-      const slot = state[action.payload.playerId]
+      const slot = state.players[action.payload.playerId]
+      if (!slot) return
       slot.url = action.payload.url
       slot.error = null
       if (slot.deck) {
@@ -70,30 +83,74 @@ export const setupSlice = createSlice({
         slot.deck = null
       }
     },
+    setPlayerName(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; name: string }>,
+    ) {
+      const slot = state.players[action.payload.playerId]
+      if (slot) slot.name = action.payload.name
+    },
+    addPlayer(state) {
+      if (state.playerOrder.length >= 6) return
+      const number = state.nextPlayerNumber
+      const playerId = `player-${number}`
+      state.nextPlayerNumber += 1
+      state.playerOrder.push(playerId)
+      state.players[playerId] = initialSlot(playerId)
+    },
+    removePlayer(state, action: PayloadAction<PlayerId>) {
+      if (state.playerOrder.length <= 2) return
+      if (!state.players[action.payload]) return
+      state.playerOrder = state.playerOrder.filter(
+        playerId => playerId !== action.payload,
+      )
+      state.players = Object.fromEntries(
+        Object.entries(state.players).filter(
+          ([playerId]) => playerId !== action.payload,
+        ),
+      )
+    },
     clearSetup() {
-      return initialState
+      return {
+        playerOrder: ["player-1", "player-2"],
+        players: {
+          "player-1": initialSlot("player-1"),
+          "player-2": initialSlot("player-2"),
+        },
+        nextPlayerNumber: 3,
+      }
     },
   },
   extraReducers: builder => {
     builder
       .addCase(importDeckForPlayer.pending, (state, action) => {
-        const slot = state[action.meta.arg.playerId]
+        const slot = state.players[action.meta.arg.playerId]
+        if (!slot) return
         slot.status = "loading"
         slot.error = null
       })
       .addCase(importDeckForPlayer.fulfilled, (state, action) => {
-        const slot = state[action.payload.playerId]
+        const slot = state.players[action.payload.playerId]
+        if (!slot) return
         slot.status = "ready"
         slot.deck = action.payload.deck
+        if (!slot.name.trim()) slot.name = action.payload.deck.name
         slot.error = null
       })
       .addCase(importDeckForPlayer.rejected, (state, action) => {
         const playerId = action.payload?.playerId ?? action.meta.arg.playerId
-        const slot = state[playerId]
+        const slot = state.players[playerId]
+        if (!slot) return
         slot.status = "error"
         slot.error = action.payload?.message ?? "De import werd afgebroken."
       })
   },
 })
 
-export const { clearSetup, setDeckUrl } = setupSlice.actions
+export const {
+  addPlayer,
+  clearSetup,
+  removePlayer,
+  setDeckUrl,
+  setPlayerName,
+} = setupSlice.actions

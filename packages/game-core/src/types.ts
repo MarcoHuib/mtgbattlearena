@@ -160,7 +160,7 @@ export type GameState = {
   matchStatus: MatchStatus
   firstPlayerRoll: FirstPlayerRollState
   openingHands: Record<PlayerId, OpeningHandState>
-  deckSnapshotIds: [string, string]
+  deckSnapshotIds: string[]
   players: Record<PlayerId, PlayerState>
   cardDefinitionsById: Record<string, CardDefinition>
   cardsById: Record<string, CardInstance>
@@ -189,7 +189,7 @@ export type OfflineBattlePackage = {
   schemaVersion: 1
   version: number
   title: string
-  deckSnapshotIds: [string, string]
+  deckSnapshotIds: string[]
   currentGameId: string
   assetIds: string[]
   assets: Record<string, OfflineAssetRecord>

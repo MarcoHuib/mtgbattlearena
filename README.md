@@ -81,7 +81,7 @@ De belangrijkste uitgangspunten:
 
 | Onderdeel                         | Status                       |
 | --------------------------------- | ---------------------------- |
-| Offline battle voor twee spelers  | ✅ Speelbaar                 |
+| Offline battle voor 2–6 spelers   | ✅ Speelbaar                 |
 | Archidekt-import                  | ✅ Openbare decks            |
 | Autosave, hervatten en undo/redo  | ✅ Beschikbaar               |
 | Offlinepakket en PWA              | ✅ Beschikbaar               |

@@ -2,16 +2,23 @@ import type { SyntheticEvent } from "react"
 import { commanderDefinitions, deckCardCount } from "@mtg/game-core/decks"
 import type { PlayerId } from "@mtg/game-core/types"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
-import { importDeckForPlayer, setDeckUrl } from "./setupSlice"
+import {
+  importDeckForPlayer,
+  removePlayer,
+  setDeckUrl,
+  setPlayerName,
+} from "./setupSlice"
 
 type DeckSlotProps = {
   playerId: PlayerId
   number: number
+  canRemove: boolean
 }
 
-export const DeckSlot = ({ playerId, number }: DeckSlotProps) => {
+export const DeckSlot = ({ playerId, number, canRemove }: DeckSlotProps) => {
   const dispatch = useAppDispatch()
-  const slot = useAppSelector(state => state.setup[playerId])
+  const slot = useAppSelector(state => state.setup.players[playerId])
+  if (!slot) return null
   const commanders = slot.deck ? commanderDefinitions(slot.deck) : []
 
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
@@ -20,9 +27,19 @@ export const DeckSlot = ({ playerId, number }: DeckSlotProps) => {
   }
 
   return (
-    <section className={`deck-slot deck-slot--${number}`}>
+    <section className="deck-slot" data-player-id={playerId}>
       <div className="deck-slot__heading">
         <span>Speler {number}</span>
+        {canRemove ? (
+          <button
+            className="button button--ghost deck-slot__remove"
+            type="button"
+            onClick={() => dispatch(removePlayer(playerId))}
+            aria-label={`Speler ${number} verwijderen`}
+          >
+            Verwijderen
+          </button>
+        ) : null}
         <span className={`import-state import-state--${slot.status}`}>
           {slot.status === "loading"
             ? "Importeren…"
@@ -33,6 +50,17 @@ export const DeckSlot = ({ playerId, number }: DeckSlotProps) => {
                 : "Nog leeg"}
         </span>
       </div>
+      <label htmlFor={`player-name-${number}`}>Spelersnaam</label>
+      <input
+        id={`player-name-${number}`}
+        className="deck-slot__name"
+        value={slot.name}
+        placeholder={`Speler ${number}`}
+        maxLength={60}
+        onChange={event =>
+          dispatch(setPlayerName({ playerId, name: event.target.value }))
+        }
+      />
       <form onSubmit={submit}>
         <label htmlFor={`deck-url-${number}`}>Openbare Archidekt-URL</label>
         <div className="deck-input-row">
