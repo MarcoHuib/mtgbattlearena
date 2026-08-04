@@ -1,4 +1,4 @@
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
+import { createSlice, type Draft, type PayloadAction } from "@reduxjs/toolkit"
 import type {
   PersonalGameSnapshot,
   ProtocolError,
@@ -20,6 +20,18 @@ const initialState: OnlineState = {
   view: null,
   pendingCommandIds: [],
   lastError: null,
+}
+
+const applyAuthoritativeSnapshot = (
+  state: Draft<OnlineState>,
+  snapshot: PersonalGameSnapshot,
+) => {
+  if (state.gameId && snapshot.gameId !== state.gameId) return false
+  if (state.view && snapshot.version < state.view.version) return false
+  state.view = snapshot
+  state.connectionStatus = "connected"
+  state.lastError = null
+  return true
 }
 
 export const onlineSlice = createSlice({
@@ -47,10 +59,9 @@ export const onlineSlice = createSlice({
     },
     receiveOnlineEvent(state, action: PayloadAction<ServerEvent>) {
       const event = action.payload
+      if (event.gameId && state.gameId && event.gameId !== state.gameId) return
       if (event.type === "PERSONAL_SNAPSHOT") {
-        state.view = event
-        state.connectionStatus = "connected"
-        state.lastError = null
+        applyAuthoritativeSnapshot(state, event)
         return
       }
       if (event.type === "COMMAND_ACCEPTED") {
@@ -71,8 +82,7 @@ export const onlineSlice = createSlice({
         )
       }
       if (event.snapshot) {
-        state.view = event.snapshot
-        state.connectionStatus = "connected"
+        applyAuthoritativeSnapshot(state, event.snapshot)
       }
     },
     setOnlineConnectionError(state, action: PayloadAction<ProtocolError>) {

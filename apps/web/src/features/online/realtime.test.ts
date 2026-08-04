@@ -134,11 +134,11 @@ describe("Cloudflare WebSocket-adapter", () => {
         return socket as unknown as WebSocket
       },
     )
+    expect(ticketNumber).toBe(0)
     connection.subscribe(update => {
       updates.push(update)
     })
 
-    connection.start()
     await vi.advanceTimersByTimeAsync(0)
     expect(ticketNumber).toBe(1)
     sockets[0]?.open()

@@ -36,6 +36,12 @@ type UpgradeResponseConstructor = new (
   init?: ResponseInit & { webSocket?: WorkerWebSocket },
 ) => Response
 
+type GameSocketAttachment = GameSession & {
+  connectionId: string
+  connectedAt: string
+  lastSentVersion: number
+}
+
 const errorEvent = (
   gameId: string | undefined,
   code:
@@ -84,7 +90,7 @@ export class GameDurableObject extends DurableObject<Env> {
 
   constructor(
     private readonly state: DurableObjectState,
-    env: Env,
+    private readonly env: Env,
     snapshotStore?: GameSnapshotStore,
   ) {
     super(state, env)
@@ -149,7 +155,7 @@ export class GameDurableObject extends DurableObject<Env> {
     try {
       const game = createAuthoritativeGame(seed)
       this.persist({ game, processedCommands: {} })
-      this.broadcastSnapshots()
+      this.broadcastPersonalViews("INITIALIZE_GAME", -1)
       return {
         ok: true,
         value: serializePersonalSnapshot(game, session),
@@ -177,8 +183,11 @@ export class GameDurableObject extends DurableObject<Env> {
   ): Promise<CommandResult> {
     await this.ready
     const serialized = JSON.stringify(command)
+    const previousVersion = this.record?.game.version ?? -1
     const result = this.handleCommand(session, serialized)
-    if (result.accepted) this.broadcastSnapshots()
+    if (result.accepted) {
+      this.broadcastPersonalViews(command.type, previousVersion)
+    }
     return result
   }
 
@@ -220,7 +229,8 @@ export class GameDurableObject extends DurableObject<Env> {
     message: string | ArrayBuffer,
   ) {
     await this.ready
-    const session = socket.deserializeAttachment() as GameSession | undefined
+    const attachment = this.readSocketAttachment(socket)
+    const session = attachment
     if (!session) {
       socket.close(1008, "Session missing")
       return
@@ -229,9 +239,17 @@ export class GameDurableObject extends DurableObject<Env> {
       typeof message === "string"
         ? message
         : new TextDecoder().decode(new Uint8Array(message))
+    const previousVersion = this.record?.game.version ?? -1
     const result = this.handleCommand(session, text)
-    socket.send(JSON.stringify(result.event))
-    if (result.accepted) this.broadcastSnapshots()
+    try {
+      socket.send(JSON.stringify(result.event))
+    } catch {
+      this.closeSocket(socket, 1011, "Acknowledgement failed")
+    }
+    if (result.accepted) {
+      const commandType = this.readCommandType(text)
+      this.broadcastPersonalViews(commandType, previousVersion)
+    }
   }
 
   private personalSnapshotResult(session: GameSession): GameSnapshotResult {
@@ -284,7 +302,13 @@ export class GameDurableObject extends DurableObject<Env> {
     const pair = new WebSocketPair()
     const client = pair[0]
     const server = pair[1]
-    server.serializeAttachment(session)
+    const attachment: GameSocketAttachment = {
+      ...session,
+      connectionId: crypto.randomUUID(),
+      connectedAt: new Date().toISOString(),
+      lastSentVersion: this.record?.game.version ?? -1,
+    }
+    server.serializeAttachment(attachment)
     this.state.acceptWebSocket(server)
     server.send(
       JSON.stringify(
@@ -424,18 +448,96 @@ export class GameDurableObject extends DurableObject<Env> {
     this.snapshotStore.save(record)
   }
 
-  private broadcastSnapshots() {
+  private broadcastPersonalViews(
+    commandType: GameCommand["type"] | "INITIALIZE_GAME" | "UNKNOWN",
+    previousVersion: number,
+  ) {
     if (!this.record) return
+    let sentSocketCount = 0
+    const recipients: {
+      connectionId: string
+      playerId: string | null
+      role: GameSession["role"]
+      userId: string
+    }[] = []
     for (const socket of this.state.getWebSockets()) {
-      const session = socket.deserializeAttachment() as GameSession | undefined
-      if (!session) continue
+      const attachment = this.readSocketAttachment(socket)
+      if (!attachment) {
+        this.closeSocket(socket, 1008, "Session missing")
+        continue
+      }
       try {
         socket.send(
-          JSON.stringify(serializePersonalSnapshot(this.record.game, session)),
+          JSON.stringify(
+            serializePersonalSnapshot(this.record.game, attachment),
+          ),
         )
+        sentSocketCount += 1
+        recipients.push({
+          connectionId: attachment.connectionId,
+          playerId: attachment.playerId,
+          role: attachment.role,
+          userId: attachment.uid,
+        })
+        socket.serializeAttachment({
+          ...attachment,
+          lastSentVersion: this.record.game.version,
+        } satisfies GameSocketAttachment)
       } catch {
-        socket.close(1008, "Forbidden session")
+        this.closeSocket(socket, 1008, "Snapshot delivery failed")
       }
+    }
+    if (this.env.REALTIME_DEBUG === "true") {
+      console.info("Authoritative game state broadcast.", {
+        gameId: this.record.game.gameId,
+        commandType,
+        previousVersion,
+        newVersion: this.record.game.version,
+        socketCount: sentSocketCount,
+        recipients,
+      })
+    }
+  }
+
+  private readSocketAttachment(
+    socket: WorkerWebSocket,
+  ): GameSocketAttachment | null {
+    const value = socket.deserializeAttachment() as
+      Partial<GameSocketAttachment> | undefined
+    if (
+      !value?.gameId ||
+      !value.uid ||
+      (value.role !== "player" && value.role !== "spectator")
+    ) {
+      return null
+    }
+    return {
+      gameId: value.gameId,
+      uid: value.uid,
+      playerId: value.playerId ?? null,
+      role: value.role,
+      isHost: value.isHost === true,
+      connectionId: value.connectionId ?? "legacy-connection",
+      connectedAt: value.connectedAt ?? new Date(0).toISOString(),
+      lastSentVersion: value.lastSentVersion ?? -1,
+    }
+  }
+
+  private readCommandType(
+    serializedCommand: string,
+  ): GameCommand["type"] | "UNKNOWN" {
+    try {
+      return parseGameCommand(JSON.parse(serializedCommand)).type
+    } catch {
+      return "UNKNOWN"
+    }
+  }
+
+  private closeSocket(socket: WorkerWebSocket, code: number, reason: string) {
+    try {
+      socket.close(code, reason)
+    } catch {
+      // A disconnected hibernated socket can already be gone.
     }
   }
 

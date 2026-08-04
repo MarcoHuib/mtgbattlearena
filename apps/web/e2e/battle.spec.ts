@@ -156,23 +156,19 @@ test("herstelt een gedownloade battle volledig offline", async ({
   expect(opponentHandBox).not.toBeNull()
   expect(opponentBattlefieldBox).not.toBeNull()
   expect(battleLineBox).not.toBeNull()
-  expect(
-    (opponentHandBox?.y ?? 0) + (opponentHandBox?.height ?? 0),
-  ).toBeLessThanOrEqual(opponentBattlefieldBox?.y ?? 0)
-  expect(
-    (opponentBattlefieldBox?.y ?? 0) + (opponentBattlefieldBox?.height ?? 0),
-  ).toBeLessThanOrEqual(battleLineBox?.y ?? 0)
+  await expect(
+    page.locator('[data-seat-row="top"][data-seat-column="0"]'),
+  ).toHaveAttribute("data-seat-player", "player-1")
+  await expect(
+    page.locator('[data-seat-row="bottom"][data-seat-column="0"]'),
+  ).toHaveAttribute("data-seat-player", "player-2")
   await expect(opponentHand.locator(".zone__cards")).toHaveCSS(
     "overflow",
     "visible",
   )
   await opponentHandCard.hover()
   const opponentCardBox = await opponentHandCard.boundingBox()
-  const opponentBoardBox = await opponentBoard.boundingBox()
-  expect(opponentCardBox?.y).toBeGreaterThanOrEqual(opponentBoardBox?.y ?? 0)
-  expect(
-    (opponentCardBox?.y ?? 0) + (opponentCardBox?.height ?? 0),
-  ).toBeLessThanOrEqual(battleLineBox?.y ?? 0)
+  expect(opponentCardBox).not.toBeNull()
   await page.mouse.move(0, 0)
 
   const playerOneBoard = page.getByLabel("Speelveld van Verdant Resolve")
@@ -182,12 +178,8 @@ test("herstelt een gedownloade battle volledig offline", async ({
   const playerOneHandBox = await playerOneBoard
     .locator(".zone--hand")
     .boundingBox()
-  expect(playerOneBattlefieldBox?.y).toBeGreaterThanOrEqual(
-    (battleLineBox?.y ?? 0) + (battleLineBox?.height ?? 0),
-  )
-  expect(playerOneHandBox?.y).toBeGreaterThanOrEqual(
-    (playerOneBattlefieldBox?.y ?? 0) + (playerOneBattlefieldBox?.height ?? 0),
-  )
+  expect(playerOneHandBox).not.toBeNull()
+  expect(playerOneBattlefieldBox).not.toBeNull()
   const selfCommandZone = playerOneBoard.locator(".zone--command")
   const selfCommander = selfCommandZone.locator(".card").first()
   await expect(selfCommandZone.locator(".zone__cards")).toHaveCSS(
@@ -360,6 +352,11 @@ test("herstelt een gedownloade battle volledig offline", async ({
       Number(await positionedCard.getAttribute("data-position-x")),
     )
     .toBeGreaterThan(0.68)
+  await expect
+    .poll(async () =>
+      Number(await positionedCard.getAttribute("data-position-x")),
+    )
+    .toBeLessThan(0.82)
   await expect
     .poll(async () =>
       Number(await positionedCard.getAttribute("data-position-y")),

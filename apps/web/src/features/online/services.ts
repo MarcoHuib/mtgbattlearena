@@ -572,12 +572,12 @@ export class CloudflareOnlineGameService implements OnlineGameService {
   }
 
   connectGame(gameId: string) {
-    const connection = new CloudflareWebSocketConnection(
-      new URL("/api/online/socket", this.socketBaseUrl).toString(),
-      () => this.createSocketTicket(gameId),
+    return Promise.resolve(
+      new CloudflareWebSocketConnection(
+        new URL("/api/online/socket", this.socketBaseUrl).toString(),
+        () => this.createSocketTicket(gameId),
+      ),
     )
-    connection.start()
-    return Promise.resolve(connection)
   }
 
   private async request(

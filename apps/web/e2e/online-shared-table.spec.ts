@@ -40,6 +40,138 @@ test("online gebruikt de gedeelde tafel en drag-and-dropactie", async ({
   )
   await expect(page.locator(".online-player")).toHaveCount(0)
   await expect(page.locator(".online-card")).toHaveCount(0)
+  await expect(page.locator(".table-layout")).toHaveCount(1)
+  await expect(
+    page.locator('[data-seat-row="top"][data-seat-column="0"]'),
+  ).toHaveAttribute("data-seat-player", "mock-player-1")
+  await expect(
+    page.locator('[data-seat-row="bottom"][data-seat-column="0"]'),
+  ).toHaveAttribute("data-seat-player", "mock-player-2")
+
+  const camera = page.getByTestId("table-camera")
+  const centerBar = page.getByTestId("table-center-bar")
+  const centerControls = page.getByTestId("table-center-controls")
+  await expect(centerBar).toHaveCount(1)
+  await page.locator(".table-layout__surface").evaluate(element => {
+    element.style.minWidth = "200vw"
+  })
+  const localElements = page.locator(
+    ".table-layout__seat, .player-board, .player-board .zone, .player-board .zone__cards",
+  )
+  const horizontalTargets = [
+    ownBoard.locator(".zone--battlefield"),
+    opponentBoard.locator(".zone--battlefield"),
+    ownBoard.locator(".zone--battlefield .zone__empty"),
+    hand,
+    centerControls,
+  ]
+  for (const target of horizontalTargets) {
+    await camera.evaluate(element => {
+      element.scrollLeft = 0
+    })
+    await localElements.evaluateAll(elements => {
+      elements.forEach(element => {
+        element.scrollLeft = 0
+      })
+    })
+    await target.hover()
+    await page.mouse.wheel(280, 20)
+    await expect
+      .poll(() => camera.evaluate(element => element.scrollLeft))
+      .toBeGreaterThan(200)
+    expect(
+      await localElements.evaluateAll(elements =>
+        elements.map(element => element.scrollLeft),
+      ),
+    ).toEqual(Array(await localElements.count()).fill(0))
+  }
+  const verticalTargets = [
+    ownBoard.locator(".zone--battlefield"),
+    opponentBoard.locator(".zone--battlefield"),
+    hand,
+    ownBoard.locator(".zone--battlefield .zone__empty"),
+    ownBoard.locator(".pile-rail .zone").first(),
+    centerControls,
+  ]
+  for (const target of verticalTargets) {
+    await camera.evaluate(element => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) / 2
+      element.scrollLeft = 0
+    })
+    await localElements.evaluateAll(elements => {
+      elements.forEach(element => {
+        element.scrollTop = 0
+        element.scrollLeft = 0
+      })
+    })
+    await target.hover()
+    const before = await camera.evaluate(element => ({
+      left: element.scrollLeft,
+      maxTop: element.scrollHeight - element.clientHeight,
+      top: element.scrollTop,
+    }))
+    const centerPositionBefore = await centerBar.boundingBox()
+    const topLaneBefore = await page
+      .locator(".table-layout__lane--top")
+      .boundingBox()
+    const bottomLaneBefore = await page
+      .locator(".table-layout__lane--bottom")
+      .boundingBox()
+    const deltaY = before.top < before.maxTop - 200 ? 180 : -180
+    await page.mouse.wheel(0, deltaY)
+    await expect
+      .poll(async () =>
+        Math.abs(
+          (await camera.evaluate(element => element.scrollTop)) - before.top,
+        ),
+      )
+      .toBeGreaterThan(100)
+    const cameraTopAfter = await camera.evaluate(element => element.scrollTop)
+    expect(await camera.evaluate(element => element.scrollLeft)).toBe(
+      before.left,
+    )
+    expect(
+      await localElements.evaluateAll(elements =>
+        elements.map(element => ({
+          left: element.scrollLeft,
+          top: element.scrollTop,
+        })),
+      ),
+    ).toEqual(Array(await localElements.count()).fill({ left: 0, top: 0 }))
+    const centerPositionAfter = await centerBar.boundingBox()
+    const topLaneAfter = await page
+      .locator(".table-layout__lane--top")
+      .boundingBox()
+    const bottomLaneAfter = await page
+      .locator(".table-layout__lane--bottom")
+      .boundingBox()
+    expect(centerPositionAfter?.x).toBe(centerPositionBefore?.x)
+    expect(centerPositionAfter?.y).toBeCloseTo(
+      (centerPositionBefore?.y ?? 0) - (cameraTopAfter - before.top),
+      0,
+    )
+    expect(
+      (centerPositionAfter?.y ?? 0) -
+        ((topLaneAfter?.y ?? 0) + (topLaneAfter?.height ?? 0)),
+    ).toBeCloseTo(
+      (centerPositionBefore?.y ?? 0) -
+        ((topLaneBefore?.y ?? 0) + (topLaneBefore?.height ?? 0)),
+      0,
+    )
+    expect(
+      (bottomLaneAfter?.y ?? 0) -
+        ((centerPositionAfter?.y ?? 0) + (centerPositionAfter?.height ?? 0)),
+    ).toBeCloseTo(
+      (bottomLaneBefore?.y ?? 0) -
+        ((centerPositionBefore?.y ?? 0) +
+          (centerPositionBefore?.height ?? 0)),
+      0,
+    )
+  }
+  await camera.evaluate(element => {
+    element.scrollLeft = 0
+    element.scrollTop = (element.scrollHeight - element.clientHeight) / 2
+  })
 
   await card.scrollIntoViewIfNeeded()
   const cardBounds = await card.boundingBox()

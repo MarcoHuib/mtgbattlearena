@@ -195,4 +195,5 @@ export type Env = {
   IMPORT: WorkerService
   FIREBASE_PROJECT_ID: string
   ALLOWED_ORIGIN?: string
+  REALTIME_DEBUG?: string
 }

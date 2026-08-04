@@ -15,6 +15,7 @@ import type {
 class LocalSocket implements WorkerWebSocket {
   readonly messages: string[] = []
   closed: { code?: number; reason?: string } | null = null
+  throwOnSend = false
   private attachment: unknown
 
   constructor(session: GameSession) {
@@ -22,6 +23,7 @@ class LocalSocket implements WorkerWebSocket {
   }
 
   send(message: string) {
+    if (this.throwOnSend) throw new Error("Socket is niet meer schrijfbaar.")
     this.messages.push(message)
   }
 
@@ -39,6 +41,10 @@ class LocalSocket implements WorkerWebSocket {
 
   events(): ServerEvent[] {
     return this.messages.map(message => parseServerEvent(JSON.parse(message)))
+  }
+
+  clearMessages() {
+    this.messages.splice(0)
   }
 }
 
@@ -94,6 +100,18 @@ class LocalDurableObjectEnvironment {
   connect(session: GameSession) {
     const socket = new LocalSocket(session)
     this.sockets.push(socket)
+    return socket
+  }
+
+  disconnect(socket: LocalSocket) {
+    const index = this.sockets.indexOf(socket)
+    if (index >= 0) this.sockets.splice(index, 1)
+    socket.close(1000, "Test disconnect")
+  }
+
+  async reconnect(session: GameSession) {
+    const socket = this.connect(session)
+    socket.send(JSON.stringify(await this.snapshot(session)))
     return socket
   }
 
@@ -574,6 +592,155 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
       playerSession(playerIds.indexOf(nextPlayerId)),
     )
     expect(nextPlayer.privateView?.hand).toHaveLength(8)
+  })
+
+  test("broadcast iedere mutation realtime, bidirectioneel en per ontvanger", async () => {
+    let version = await keepAllOpeningHands()
+    for (const socket of [...playerSockets, spectatorSocket]) {
+      socket.clearMessages()
+    }
+
+    const playerAView = await runtime.snapshot(playerSession(0))
+    const handCard = playerAView.privateView?.hand[0]
+    expect(handCard).toBeDefined()
+    await runtime.socketCommand(
+      playerSockets[0]!,
+      command("MOVE_CARD", version, {
+        instanceId: handCard?.instanceId,
+        zone: "battlefield",
+        position: { x: 0.4, y: 0.5, z: 1 },
+      }),
+    )
+    version += 1
+
+    for (const socket of [...playerSockets, spectatorSocket]) {
+      const latest = socket
+        .events()
+        .filter(event => event.type === "PERSONAL_SNAPSHOT")
+        .at(-1)
+      expect(latest).toMatchObject({
+        type: "PERSONAL_SNAPSHOT",
+        version,
+        players: {
+          "seat-a": {
+            battlefield: [
+              expect.objectContaining({ instanceId: handCard?.instanceId }),
+            ],
+          },
+        },
+      })
+    }
+    const playerBSnapshot = playerSockets[1]!
+      .events()
+      .filter(event => event.type === "PERSONAL_SNAPSHOT")
+      .at(-1)
+    expect(
+      playerBSnapshot?.type === "PERSONAL_SNAPSHOT"
+        ? playerBSnapshot.privateView?.playerId
+        : null,
+    ).toBe("seat-b")
+    expect(JSON.stringify(playerBSnapshot)).not.toContain("Geheim van seat-c")
+
+    await runtime.socketCommand(
+      playerSockets[1]!,
+      command("CHANGE_LIFE", version, { delta: -2 }),
+    )
+    version += 1
+    const receivedByA = playerSockets[0]!
+      .events()
+      .filter(event => event.type === "PERSONAL_SNAPSHOT")
+      .at(-1)
+    expect(receivedByA).toMatchObject({
+      type: "PERSONAL_SNAPSHOT",
+      version,
+      players: { "seat-b": { life: 38 } },
+    })
+
+    const activeId = (await runtime.snapshot(playerSession(0))).activePlayerId
+    const activeIndex = playerIds.findIndex(playerId => playerId === activeId)
+    await runtime.socketCommand(
+      playerSockets[activeIndex]!,
+      command("PASS_TURN", version, {}),
+    )
+    version += 1
+    const activeAfter = (await runtime.snapshot(playerSession(0)))
+      .activePlayerId
+    for (const socket of [...playerSockets, spectatorSocket]) {
+      expect(
+        socket
+          .events()
+          .filter(event => event.type === "PERSONAL_SNAPSHOT")
+          .at(-1),
+      ).toMatchObject({
+        type: "PERSONAL_SNAPSHOT",
+        version,
+        activePlayerId: activeAfter,
+      })
+    }
+  })
+
+  test("een stale socket blokkeert andere realtime ontvangers niet", async () => {
+    const version = await keepAllOpeningHands()
+    const staleSocket = runtime.connect(playerSession(0))
+    staleSocket.throwOnSend = true
+    const healthyReconnect = runtime.connect(playerSession(1))
+
+    expectAccepted(
+      await runtime.command(
+        playerSession(0),
+        command("CHANGE_LIFE", version, { delta: -1 }),
+      ),
+      version + 1,
+    )
+
+    expect(staleSocket.closed).toEqual({
+      code: 1008,
+      reason: "Snapshot delivery failed",
+    })
+    expect(
+      healthyReconnect
+        .events()
+        .filter(event => event.type === "PERSONAL_SNAPSHOT")
+        .at(-1),
+    ).toMatchObject({
+      type: "PERSONAL_SNAPSHOT",
+      version: version + 1,
+      players: { "seat-a": { life: 39 } },
+    })
+  })
+
+  test("reconnect synchroniseert eerst en blijft daarna live ontvangen", async () => {
+    let version = await keepAllOpeningHands()
+    runtime.disconnect(playerSockets[1]!)
+
+    expectAccepted(
+      await runtime.command(
+        playerSession(0),
+        command("CHANGE_LIFE", version, { delta: -1 }),
+      ),
+      version + 1,
+    )
+    version += 1
+
+    const reconnected = await runtime.reconnect(playerSession(1))
+    expect(reconnected.events().at(-1)).toMatchObject({
+      type: "PERSONAL_SNAPSHOT",
+      version,
+      players: { "seat-a": { life: 39 } },
+    })
+
+    expectAccepted(
+      await runtime.command(
+        playerSession(0),
+        command("CHANGE_LIFE", version, { delta: -1 }),
+      ),
+      version + 1,
+    )
+    expect(reconnected.events().at(-1)).toMatchObject({
+      type: "PERSONAL_SNAPSHOT",
+      version: version + 1,
+      players: { "seat-a": { life: 38 } },
+    })
   })
 
   test("synchroniseert commander- en spelertrackers authoritative", async () => {

@@ -19,6 +19,7 @@ De offline tafel is de functionele en visuele bron van waarheid. Beide modi
 renderen voortaan dezelfde presentatieboom:
 
 - `BattleTable` voor de tafelcompositie en één dnd-kit-provider;
+- `TableLayout` en `createTableSeats` voor de gedeelde 2–6-spelerindeling;
 - `PlayerBoard`, `PlayerControls` en `MatchStatusBar`;
 - `ZoneArea`, `CardView`, `CardGroupOverlay` en `CommanderTaxControl`;
 - `ZoneActionMenu`, `ZoneBrowser`, `ZoneBrowseMenu` en kaartactiemenu's;
@@ -52,6 +53,50 @@ libraryacties, tokens, spelertrackers en beurt-/matchstatus.
 De twee routes houden alleen hun echte infrastructuurverschillen: de offline
 shell toont undo/redo en offlinepakketbeheer; de online shell beheert
 WebSocket/reconnect, serverversie en de hostactie om een game af te breken.
+
+### Horizontale multiplayer-tafel
+
+De herkenbare tweespeleropzet blijft de bouwsteen. `createTableSeats` groepeert
+spelers uitsluitend op hun positie in de aangeleverde seatvolgorde:
+
+- even index: bovenste rij;
+- oneven index: onderste rij;
+- `floor(index / 2)`: horizontale kolom;
+- twee opeenvolgende spelers zijn elkaars tegenoverliggende speler.
+
+Een oneven laatste speler krijgt een lege onderste seat in dezelfde kolom.
+Deze visuele plaatsing leest geen actieve speler, startspeler of beurtstatus en
+verandert de beurtvolgorde dus niet.
+
+`TableLayout` rendert beide spelerlanes en de `MatchStatusBar` in één
+tweedimensionale camera. De HUD staat in de normale middelste gridrij tussen de
+boven- en onderrij en beweegt daarom verticaal met de tafellewereld mee. Alleen
+de horizontale `left`-positie is sticky, zodat dezelfde ene HUD bij een brede
+multiplayertafel in het viewport gecentreerd blijft. Er is geen lege
+HUD-placeholder of verticaal gefixeerde overlay. Seats en spelerborden hebben
+zelf geen overflow; spelers worden nooit als onafhankelijke scrollvakken of als
+een verticale paginalijst toegevoegd.
+
+Wheel-, Magic-Mouse- en trackpadinput wordt op de gedeelde `TableLayout`
+afgevangen. `deltaX` en `deltaY` worden altijd naar respectievelijk
+`scrollLeft` en `scrollTop` van de ene `table-layout__camera` doorgestuurd,
+ongeacht of het event boven een kaart, battlefield, spelerrail, lege zone of
+HUD begon. Shift-wheel blijft horizontale navigatie ondersteunen. Browserzoom
+en wheelinput tijdens een actieve kaartdrag worden bewust niet onderschept.
+
+`table-layout__camera` is de enige scroll-owner voor beide assen. Seats en
+kaartzones gebruiken geen lokale `overflow: auto` meer. Daardoor kunnen een
+seat, hand, library of andere zone geen eigen `scrollLeft` of `scrollTop`
+opbouwen en blijven boven- en onderrij exact gekoppeld.
+De tafeltrack vult altijd minstens de viewport en de browser begrenst de
+camera-scrollpositie, zodat pannen geen onbedekte zwarte ruimte kan tonen.
+Voor touch wordt tweedimensionale pointerbeweging op lege tafelruimte eveneens
+naar de camera vertaald. Interactieve controls en draggable kaarten zijn
+hiervan uitgesloten, zodat klikken, selecteren en kaartdrag hun bestaande
+gedrag houden.
+
+Offline en online leveren via hun bestaande runtime-adapter data en acties aan
+dezelfde `BattleTable`, `TableLayout` en `PlayerBoard`-componenten.
 
 ### Gedeelde domeintransities
 

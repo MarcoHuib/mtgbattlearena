@@ -47,12 +47,34 @@ export const UpdatePrompt = () => {
     if (!registeredServiceWorker) return
 
     const { registration } = registeredServiceWorker
+    const showWaitingUpdate = () => {
+      if (registration.waiting) {
+        setNeedRefresh(true)
+      }
+    }
+    const trackInstallingWorker = () => {
+      const installingWorker = registration.installing
+      if (!installingWorker) return
+
+      const showWhenInstalled = () => {
+        if (
+          installingWorker.state === "installed" &&
+          navigator.serviceWorker.controller
+        ) {
+          setNeedRefresh(true)
+        }
+      }
+      installingWorker.addEventListener("statechange", showWhenInstalled)
+    }
     const checkForUpdate = () => {
       if (document.visibilityState === "hidden") return
 
-      void checkForServiceWorkerUpdate(registeredServiceWorker).catch(() => {
-        // Een mislukte updatecontrole mag offline gebruik niet verstoren.
-      })
+      showWaitingUpdate()
+      void checkForServiceWorkerUpdate(registeredServiceWorker)
+        .then(showWaitingUpdate)
+        .catch(() => {
+          // Een mislukte updatecontrole mag offline gebruik niet verstoren.
+        })
     }
     const checkWhenVisible = () => {
       if (document.visibilityState === "visible") {
@@ -60,9 +82,7 @@ export const UpdatePrompt = () => {
       }
     }
 
-    if (registration.waiting) {
-      setNeedRefresh(true)
-    }
+    showWaitingUpdate()
 
     checkForUpdate()
     const intervalId = window.setInterval(
@@ -72,12 +92,14 @@ export const UpdatePrompt = () => {
     window.addEventListener("focus", checkForUpdate)
     window.addEventListener("online", checkForUpdate)
     document.addEventListener("visibilitychange", checkWhenVisible)
+    registration.addEventListener("updatefound", trackInstallingWorker)
 
     return () => {
       window.clearInterval(intervalId)
       window.removeEventListener("focus", checkForUpdate)
       window.removeEventListener("online", checkForUpdate)
       document.removeEventListener("visibilitychange", checkWhenVisible)
+      registration.removeEventListener("updatefound", trackInstallingWorker)
     }
   }, [registeredServiceWorker, setNeedRefresh])
 

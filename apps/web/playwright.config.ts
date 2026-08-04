@@ -15,6 +15,14 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "webkit",
+      testIgnore: /battle\.spec\.ts/,
+      use: {
+        ...devices["Desktop Safari"],
+        serviceWorkers: "block",
+      },
+    },
   ],
   webServer: {
     command:

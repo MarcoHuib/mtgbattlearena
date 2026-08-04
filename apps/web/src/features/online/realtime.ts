@@ -13,6 +13,7 @@ export class CloudflareWebSocketConnection implements OnlineGameConnection {
   private reconnectAttempt = 0
   private explicitlyClosed = false
   private generation = 0
+  private started = false
 
   constructor(
     private readonly socketEndpoint: string,
@@ -20,13 +21,17 @@ export class CloudflareWebSocketConnection implements OnlineGameConnection {
     private readonly socketFactory: SocketFactory = url => new WebSocket(url),
   ) {}
 
-  start() {
+  private start() {
+    if (this.started) return
+    this.started = true
+    this.explicitlyClosed = false
     this.emit({ type: "status", status: "connecting" })
     void this.open()
   }
 
   subscribe(listener: (update: OnlineConnectionUpdate) => void) {
     this.listeners.add(listener)
+    this.start()
     return () => {
       this.listeners.delete(listener)
     }
@@ -52,6 +57,7 @@ export class CloudflareWebSocketConnection implements OnlineGameConnection {
 
   close() {
     this.explicitlyClosed = true
+    this.started = false
     this.generation += 1
     this.clearReconnectTimer()
     const previous = this.socket

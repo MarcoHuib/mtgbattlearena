@@ -3,7 +3,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/react"
-import { Fragment, useRef } from "react"
+import { useRef } from "react"
 import type { Zone } from "@mtg/game-core/types"
 import {
   cardBoundsAtPointer,
@@ -15,10 +15,10 @@ import {
   type DragAnchor,
 } from "./battlefieldPosition"
 import { battlePlayerIds, useBattleRuntime } from "./BattleRuntime"
-import { MatchStatusBar } from "./MatchStatusBar"
 import { OpeningHandDialog } from "./OpeningHandDialog"
 import { PlayerBoard } from "./PlayerBoard"
 import { SelectionToolbar } from "./SelectionToolbar"
+import { TableLayout } from "./TableLayout"
 
 const pointerFromEvent = (event: Event | null | undefined) =>
   event instanceof MouseEvent ? { x: event.clientX, y: event.clientY } : null
@@ -207,40 +207,21 @@ export const BattleTable = () => {
     }
   }
 
-  const orderedPlayers = [
-    ...playerIds.filter(playerId => playerId !== runtime.viewerPlayerId),
-    ...(runtime.viewerPlayerId && playerIds.includes(runtime.viewerPlayerId)
-      ? [runtime.viewerPlayerId]
-      : []),
-  ]
-
   return (
     <>
       <SelectionToolbar />
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="battle-table">
-          {orderedPlayers.map((playerId, index) => (
-            <Fragment key={playerId}>
-              {index === orderedPlayers.length - 1 &&
-              orderedPlayers.length > 1 ? (
-                <div className="table-divider">
-                  <MatchStatusBar />
-                </div>
-              ) : null}
-              <PlayerBoard
-                playerId={playerId}
-                orientation={
-                  playerId === runtime.viewerPlayerId ? "self" : "opponent"
-                }
-              />
-            </Fragment>
-          ))}
-          {orderedPlayers.length === 1 ? (
-            <div className="table-divider">
-              <MatchStatusBar />
-            </div>
-          ) : null}
-        </div>
+        <TableLayout
+          playerIds={playerIds}
+          renderSeat={seat => (
+            <PlayerBoard
+              playerId={seat.playerId}
+              orientation={
+                seat.playerId === runtime.viewerPlayerId ? "self" : "opponent"
+              }
+            />
+          )}
+        />
         {openingPlayerId ? (
           <OpeningHandDialog key={openingPlayerId} playerId={openingPlayerId} />
         ) : null}

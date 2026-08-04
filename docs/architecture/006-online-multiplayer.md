@@ -175,6 +175,22 @@ De eerste infrastructuurslice volgt dit besluit als volgt:
 - de online React-route bewaart alleen deze gevalideerde persoonlijke view in
   de online Redux-slice. De WebSocket-adapter vraagt voor iedere reconnect een
   nieuw eenmalig ticket en vervangt de clientview met de eerste verse snapshot;
+- de WebSocket wordt pas gestart nadat de route haar eventlistener heeft
+  geregistreerd. Daardoor kunnen het initiële snapshot en vroege broadcasts
+  niet tussen `connectGame` en `subscribe` verloren gaan;
+- iedere geaccepteerde mutation loopt na persist via één
+  `broadcastPersonalViews`-pad. Iedere hibernated socket heeft een attachment
+  met game, geverifieerde gebruiker/seat, rol, connection-ID en laatst
+  verzonden versie. Een fout op een stale socket wordt per socket afgehandeld
+  en onderbreekt de overige ontvangers niet;
+- de online Redux-slice accepteert volledige snapshots met een hogere versie
+  en idempotente snapshots met dezelfde versie, maar negeert oudere versies en
+  snapshots voor een andere game. Pending eigen commands blokkeren een extern
+  veroorzaakt authoritative snapshot niet;
+- reconnect registreert een nieuwe socket, ontvangt direct de nieuwste
+  persoonlijke snapshot en blijft daarna op hetzelfde broadcastpad. Met de
+  optionele Worker-variabele `REALTIME_DEBUG=true` logt dit pad uitsluitend
+  game-ID, commandtype, oude/nieuwe versie en het aantal bereikte sockets;
 - offline en online renderen exact dezelfde `BattleTable`, spelerpanelen,
   zones, kaarten, contextmenu's, browsers, openingshand en dnd-kit-interactie.
   De offline adapter dispatcht lokale transitions; de online adapter verstuurt

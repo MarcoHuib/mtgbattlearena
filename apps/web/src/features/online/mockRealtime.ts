@@ -104,9 +104,44 @@ export class MockRealtimeConnection implements OnlineGameConnection {
   private closed = false
   private started = false
   private nextCardIndex = 8
+  private readonly sourceId = crypto.randomUUID()
+  private readonly channel: BroadcastChannel | null
 
   constructor(gameId: string) {
     this.snapshot = initialSnapshot(gameId)
+    this.channel =
+      typeof BroadcastChannel === "undefined"
+        ? null
+        : new BroadcastChannel(`mtg-online-mock-${gameId}`)
+    if (this.channel) {
+      this.channel.onmessage = event => {
+        const message = event.data as {
+          sourceId?: string
+          snapshot?: unknown
+        }
+        if (message.sourceId === this.sourceId || !message.snapshot) return
+        try {
+          const incoming = parsePersonalSnapshot(message.snapshot)
+          if (
+            incoming.gameId !== this.snapshot.gameId ||
+            incoming.version <= this.snapshot.version
+          ) {
+            return
+          }
+          this.snapshot = incoming
+          this.emit({
+            type: "event",
+            event: structuredClone(this.snapshot),
+          })
+        } catch {
+          this.emit({
+            type: "status",
+            status: "error",
+            message: "De mockserver stuurde een ongeldig realtimebericht.",
+          })
+        }
+      }
+    }
   }
 
   subscribe(listener: (update: OnlineConnectionUpdate) => void) {
@@ -142,6 +177,7 @@ export class MockRealtimeConnection implements OnlineGameConnection {
 
   close() {
     this.closed = true
+    this.channel?.close()
     this.emit({ type: "status", status: "disconnected" })
   }
 
@@ -594,6 +630,10 @@ export class MockRealtimeConnection implements OnlineGameConnection {
     }
     this.emit({ type: "event", event: acknowledgement })
     this.emit({ type: "event", event: structuredClone(this.snapshot) })
+    this.channel?.postMessage({
+      sourceId: this.sourceId,
+      snapshot: this.snapshot,
+    })
   }
 
   private emit(update: OnlineConnectionUpdate) {
