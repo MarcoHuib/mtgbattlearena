@@ -12,18 +12,41 @@ import {
 } from "@mtg/game-core/game"
 import type { OnlineConnectionUpdate, OnlineGameConnection } from "./types"
 
-const card = (name: string, index: number): VisibleOnlineCard => ({
-  instanceId: `mock-own-card-${index}`,
-  definitionId: `mock-own-definition-${index}`,
-  name,
-  typeLine: "Creature — Demo",
-  tapped: false,
-  activeFaceIndex: 0,
-  counters: {},
-  isCommander: false,
-})
+const card = (
+  name: string,
+  index: number,
+  playerId = "mock-player-1",
+): VisibleOnlineCard => {
+  const frontImage = `https://cards.example/${playerId}-${index}-front.jpg`
+  const backImage = `https://cards.example/${playerId}-${index}-back.jpg`
+  return {
+    instanceId: `${playerId}-card-${index}`,
+    definitionId: `${playerId}-definition-${index}`,
+    name,
+    imageUrl: frontImage,
+    typeLine: "Creature — Demo",
+    tapped: false,
+    activeFaceIndex: 0,
+    counters: {},
+    faces:
+      index === 1
+        ? [
+            { name, typeLine: "Creature — Demo", imageUrl: frontImage },
+            {
+              name: `${name} achterkant`,
+              typeLine: "Artifact — Demo",
+              imageUrl: backImage,
+            },
+          ]
+        : undefined,
+    isCommander: false,
+  }
+}
 
-const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
+const initialSnapshot = (
+  gameId: string,
+  viewerPlayerId = "mock-player-1",
+): PersonalGameSnapshot => {
   const turnOrder = [
     "mock-player-1",
     "mock-player-2",
@@ -59,7 +82,7 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
     gameId,
     version: 0,
     role: "player",
-    isHost: true,
+    isHost: viewerPlayerId === turnOrder[0],
     activePlayerId: turnOrder[0],
     turnNumber: 1,
     phase: "beginning",
@@ -78,10 +101,10 @@ const initialSnapshot = (gameId: string): PersonalGameSnapshot => {
     ),
     players,
     privateView: {
-      playerId: turnOrder[0],
-      deckSnapshotId: "mock-deck",
+      playerId: viewerPlayerId,
+      deckSnapshotId: `mock-deck-${viewerPlayerId}`,
       hand: Array.from({ length: 7 }, (_, index) =>
-        card(`Demo kaart ${index + 1}`, index + 1),
+        card(`Demo kaart ${index + 1}`, index + 1, viewerPlayerId),
       ),
       revealedLibraryCards: [],
       availableTokens: [
@@ -107,8 +130,8 @@ export class MockRealtimeConnection implements OnlineGameConnection {
   private readonly sourceId = crypto.randomUUID()
   private readonly channel: BroadcastChannel | null
 
-  constructor(gameId: string) {
-    this.snapshot = initialSnapshot(gameId)
+  constructor(gameId: string, viewerPlayerId = "mock-player-1") {
+    this.snapshot = initialSnapshot(gameId, viewerPlayerId)
     this.channel =
       typeof BroadcastChannel === "undefined"
         ? null
@@ -128,7 +151,12 @@ export class MockRealtimeConnection implements OnlineGameConnection {
           ) {
             return
           }
-          this.snapshot = incoming
+          this.snapshot = parsePersonalSnapshot({
+            ...incoming,
+            role: this.snapshot.role,
+            isHost: this.snapshot.isHost,
+            privateView: this.snapshot.privateView,
+          })
           this.emit({
             type: "event",
             event: structuredClone(this.snapshot),
@@ -271,6 +299,7 @@ export class MockRealtimeConnection implements OnlineGameConnection {
           card(
             `Nieuwe demo ${this.nextCardIndex + index}`,
             this.nextCardIndex + index,
+            ownId,
           ),
         )
         this.nextCardIndex += 7
@@ -306,7 +335,11 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         const amount = Math.min(command.payload.amount, own.libraryCount)
         for (let count = 0; count < amount; count += 1) {
           next.privateView.hand.push(
-            card(`Getrokken demo ${this.nextCardIndex}`, this.nextCardIndex),
+            card(
+              `Getrokken demo ${this.nextCardIndex}`,
+              this.nextCardIndex,
+              ownId,
+            ),
           )
           this.nextCardIndex += 1
         }
@@ -356,7 +389,11 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         own.libraryCount -= amount
         for (let count = 0; count < amount; count += 1) {
           own.graveyard.push(
-            card(`Gemilde demo ${this.nextCardIndex}`, this.nextCardIndex),
+            card(
+              `Gemilde demo ${this.nextCardIndex}`,
+              this.nextCardIndex,
+              ownId,
+            ),
           )
           this.nextCardIndex += 1
         }
@@ -373,6 +410,7 @@ export class MockRealtimeConnection implements OnlineGameConnection {
             card(
               `Library demo ${this.nextCardIndex + index}`,
               this.nextCardIndex + index,
+              ownId,
             ),
         )
         break
@@ -496,11 +534,18 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         break
       }
       case "SWITCH_FACE": {
-        const visibleCard = findVisibleCard(command.payload.instanceId)
-        if (!visibleCard) return
+        const visibleCard = own.battlefield.find(
+          item => item.instanceId === command.payload.instanceId,
+        )
+        if (!visibleCard || visibleCard.faces?.length !== 2) return
         visibleCard.activeFaceIndex =
-          (visibleCard.activeFaceIndex + 1) %
-          Math.max(1, visibleCard.faces?.length ?? 1)
+          (visibleCard.activeFaceIndex + 1) % visibleCard.faces.length
+        const activeFace = visibleCard.faces[visibleCard.activeFaceIndex]
+        if (activeFace) {
+          visibleCard.name = activeFace.name
+          visibleCard.typeLine = activeFace.typeLine
+          visibleCard.imageUrl = activeFace.imageUrl
+        }
         break
       }
       case "SET_STACK_ORDER": {

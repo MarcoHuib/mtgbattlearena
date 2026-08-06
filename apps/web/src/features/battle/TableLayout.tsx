@@ -1,19 +1,24 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react"
 import type { PlayerId } from "@mtg/game-core/types"
 import { MatchStatusBar } from "./MatchStatusBar"
-import { createTableSeats, type TableSeat } from "./tableSeats"
+import { createPerspectiveTableSeats, type TableSeat } from "./tableSeats"
 import { tableCameraPanDelta } from "./tablePan"
 
 type TableLayoutProps = {
   playerIds: readonly PlayerId[]
+  perspectivePlayerId: PlayerId | null
   renderSeat: (seat: TableSeat) => ReactNode
 }
 
-export const TableLayout = ({ playerIds, renderSeat }: TableLayoutProps) => {
+export const TableLayout = ({
+  playerIds,
+  perspectivePlayerId,
+  renderSeat,
+}: TableLayoutProps) => {
   const layoutRef = useRef<HTMLElement>(null)
   const cameraRef = useRef<HTMLDivElement>(null)
   const centerControlsRef = useRef<HTMLDivElement>(null)
-  const seats = createTableSeats(playerIds)
+  const seats = createPerspectiveTableSeats(playerIds, perspectivePlayerId)
   const columnCount = Math.ceil(playerIds.length / 2)
   const byPosition = new Map(
     seats.map(seat => [`${seat.row}-${seat.columnIndex}`, seat]),
@@ -167,6 +172,7 @@ export const TableLayout = ({ playerIds, renderSeat }: TableLayoutProps) => {
       ref={layoutRef}
       className="table-layout"
       aria-label={`Commandertafel met ${playerIds.length} spelers`}
+      data-perspective-player={perspectivePlayerId ?? ""}
     >
       <div
         ref={cameraRef}

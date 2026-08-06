@@ -15,6 +15,7 @@ import {
   setMonarch,
   setTrackerVisibility,
   startGame,
+  switchFace,
   undo,
 } from "./gameSlice"
 
@@ -35,6 +36,47 @@ test("kan de laatste relevante gameactie ongedaan maken", () => {
   expect(state.present?.players["player-1"].life).toBe(39)
   state = gameSlice.reducer(state, undo())
   expect(state.present?.players["player-1"].life).toBe(40)
+})
+
+test("undo en redo herstellen de actieve kaartzijde", () => {
+  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const deck = createDeckSnapshot(imported, "deck")
+  let id = 0
+  const created = createGame([deck, deck], {
+    random: () => 0.3,
+    createId: prefix => `${prefix}-${(id += 1)}`,
+    now: "2026-01-01T00:00:00.000Z",
+  })
+  const cardId = created.players["player-1"].zones.hand[0]!
+  const definitionId = created.cardsById[cardId]!.definitionId
+  const game = {
+    ...created,
+    cardDefinitionsById: {
+      ...created.cardDefinitionsById,
+      [definitionId]: {
+        ...created.cardDefinitionsById[definitionId]!,
+        faces: [
+          ...created.cardDefinitionsById[definitionId]!.faces,
+          { name: "Achterzijde" },
+        ],
+      },
+    },
+  }
+  let state = gameSlice.reducer(undefined, startGame(game))
+  state = gameSlice.reducer(
+    state,
+    moveGameCards({
+      moves: [
+        { instanceId: cardId, playerId: "player-1", zone: "battlefield" },
+      ],
+    }),
+  )
+  state = gameSlice.reducer(state, switchFace({ instanceId: cardId }))
+  expect(state.present?.cardsById[cardId]?.activeFaceIndex).toBe(1)
+  state = gameSlice.reducer(state, undo())
+  expect(state.present?.cardsById[cardId]?.activeFaceIndex).toBe(0)
+  state = gameSlice.reducer(state, redo())
+  expect(state.present?.cardsById[cardId]?.activeFaceIndex).toBe(1)
 })
 
 test("undo en redo behandelen multiselect als één relevante spelactie", () => {

@@ -91,4 +91,7 @@ test("bouwt dezelfde veilige tafelstate zonder verborgen tegenstanderkaarten", (
   expect(game.cardsById["private-hand-card"]).toBeDefined()
   expect(Object.values(game.cardsById)).toHaveLength(3)
   expect(game.cardDefinitionsById["private-definition"]?.faces).toHaveLength(2)
+  expect(
+    game.cardDefinitionsById["private-definition"]?.imageRefs,
+  ).toHaveLength(2)
 })

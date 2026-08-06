@@ -19,7 +19,8 @@ De offline tafel is de functionele en visuele bron van waarheid. Beide modi
 renderen voortaan dezelfde presentatieboom:
 
 - `BattleTable` voor de tafelcompositie en één dnd-kit-provider;
-- `TableLayout` en `createTableSeats` voor de gedeelde 2–6-spelerindeling;
+- `TableLayout`, `createTableSeats` en `createPerspectiveTableSeats` voor de
+  gedeelde 2–6-spelerindeling;
 - `PlayerBoard`, `PlayerControls` en `MatchStatusBar`;
 - `ZoneArea`, `CardView`, `CardGroupOverlay` en `CommanderTaxControl`;
 - `ZoneActionMenu`, `ZoneBrowser`, `ZoneBrowseMenu` en kaartactiemenu's;
@@ -67,6 +68,24 @@ spelers uitsluitend op hun positie in de aangeleverde seatvolgorde:
 Een oneven laatste speler krijgt een lege onderste seat in dezelfde kolom.
 Deze visuele plaatsing leest geen actieve speler, startspeler of beurtstatus en
 verandert de beurtvolgorde dus niet.
+
+Voor een persoonlijke online view (en de lokaal bestuurde offline view) past
+`createPerspectiveTableSeats` uitsluitend de rendervolgorde aan. De
+`viewerPlayerId` uit de gevalideerde persoonlijke serversnapshot komt altijd
+onderaan in kolom nul; de vorige speler in de absolute seatvolgorde komt daar
+tegenover te liggen. De overige spelers volgen cyclisch rond de tafel. De
+authoritative `turnOrder`, player-ID's en state worden hierbij niet gewijzigd.
+Wanneer er geen lokale speler is, zoals bij een spectator, blijft de absolute
+seatvolgorde gelden. Daardoor kan iedere online deelnemer dezelfde wedstrijd
+vanuit het eigen perspectief bekijken zonder browserafhankelijk gedrag of
+duplicatie van de tafelcomponenten.
+
+`PlayerBoard` gebruikt dezelfde `viewerPlayerId` voor de interne oriëntatie:
+het eigen battlefield ligt richting de HUD en de eigen hand aan de buitenste,
+onderste rand. Een bovenste tegenstander gebruikt de gespiegelde publieke
+weergave. Identiteit en perspectief blijven daarmee twee expliciete stappen:
+de online adapter bepaalt de lokale speler uit `privateView.playerId`, waarna
+de gedeelde layout alleen de visuele plaatsing berekent.
 
 `TableLayout` rendert beide spelerlanes en de `MatchStatusBar` in één
 tweedimensionale camera. De HUD staat in de normale middelste gridrij tussen de
@@ -117,6 +136,39 @@ clientstate. `onlineSnapshotToGameState` kan alleen kaarten materialiseren die
 de persoonlijke snapshot daadwerkelijk bevat. Handen en libraryvolgorde van
 tegenstanders ontbreken uit Redux, DOM en protocolpayloads. Publieke
 battlefieldgroepen en zichtbare kaartzijden mogen wel worden gedeeld.
+
+### Dubbelzijdige kaarten en preview
+
+Een kaartdefinitie bewaart de bekende zijden in `faces` en de bijbehorende
+assets per `faceIndex` in `imageRefs`. Iedere fysieke `CardInstance` bewaart
+zelfstandig `activeFaceIndex`; meerdere exemplaren van dezelfde definitie
+kunnen daardoor onafhankelijk transformeren. De Archidekt-adapter gebruikt
+één `resolveCardFaces`-grens: expliciete face-metadata heeft voorrang,
+Scryfall-facegegevens zijn de tweede bron en alleen voor bekende dubbelzijdige
+layouts mag een back-URL uit een herkenbare HTTPS-URL van
+`card-images.archidekt.com` worden afgeleid. Normale kaarten, meld-layouts en
+oude snapshots met alleen een voorkant blijven enkelzijdig.
+
+De gedeelde `CardView` toont één kaartactiedialoog in beide modi. De actie
+`Kaart omdraaien` roept `BattleRuntimeActions.switchFace` aan. Offline loopt
+dit via de Redux-history en de normale autosavelistener; online wordt alleen
+het versioned `SWITCH_FACE`-command met een instance-ID verzonden. Game-core en
+de Game Durable Object accepteren dit alleen voor een kaart met exact twee
+zijden op het battlefield; online moet de geverifieerde speler bovendien de
+controller zijn. De bestaande centrale persoonlijke broadcast maakt de nieuwe
+publieke zijde daarna voor alle deelnemers zichtbaar.
+
+`CardFacePreview` vormt bewust geen onderdeel van `BattleRuntime`. De
+previewzijde is componentlokale React-state, start bij iedere dialoogopening op
+`activeFaceIndex` en verdwijnt bij sluiten. De knop `Andere zijde bekijken`
+dispatcht daarom geen Redux-action, start geen autosave en verstuurt geen
+servercommand. Een niet gecachte of ontbrekende afbeelding geeft een lokale
+foutstatus; de game-state en de zichtbare battlefieldzijde blijven intact.
+
+Offlinepakketten blijven `collectGameAssets` gebruiken. Omdat deze alle
+`imageRefs` van iedere gebruikte definitie verzamelt, worden voor een
+dubbelzijdige kaart automatisch zowel de front- als backasset gededupliceerd
+en gedownload.
 
 ## Gevolgen
 

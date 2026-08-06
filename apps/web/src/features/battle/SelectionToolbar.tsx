@@ -84,14 +84,15 @@ export const SelectionToolbar = () => {
       >
         Tap/untap
       </button>
-      {singleCard && singleDefinition && singleDefinition.faces.length > 1 ? (
+      {singleCard?.zone === "battlefield" &&
+      singleDefinition?.faces.length === 2 ? (
         <button
           type="button"
           onClick={() => {
             actions.switchFace(singleCard.instanceId)
           }}
         >
-          Kaartzijde
+          Kaart omdraaien
         </button>
       ) : null}
       {singleCard?.zone === "battlefield" ? (

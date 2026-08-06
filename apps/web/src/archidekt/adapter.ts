@@ -12,6 +12,7 @@ import {
   archidektTokenSearchSchema,
   type ArchidektDeckResponse,
 } from "./schema"
+import { resolveCardFaces } from "./cardFaces"
 
 const valueId = (value: string | number | undefined) =>
   value === undefined ? undefined : String(value)
@@ -32,11 +33,6 @@ const typeLineFromParts = (value: {
   const subTypes = value.subTypes?.join(" ")
   if (!mainTypes) return undefined
   return subTypes ? `${mainTypes} — ${subTypes}` : mainTypes
-}
-
-const scryfallImageUrl = (scryfallId: string, faceIndex?: number): string => {
-  const face = faceIndex === undefined || faceIndex === 0 ? "front" : "back"
-  return `https://cards.scryfall.io/normal/${face}/${scryfallId[0]}/${scryfallId[1]}/${encodeURIComponent(scryfallId)}.jpg`
 }
 
 const archidektImageUrl = (
@@ -129,33 +125,23 @@ const toDefinition = (
     raw.scryfallImageHash !== undefined
       ? archidektImageUrl(imageId, raw.scryfallImageHash)
       : undefined
-  const faces: CardFaceDefinition[] =
-    rawFaces && rawFaces.length > 0
-      ? rawFaces.map((face, faceIndex) => ({
-          name: face.name ?? face.displayName ?? name,
-          typeLine:
-            face.typeLine ??
-            face.type_line ??
-            typeLineFromParts(face) ??
-            typeLineFromParts(oracle ?? {}),
-          oracleText: face.oracleText ?? face.oracle_text ?? face.text,
-          imageUrl:
-            face.imageUri ??
-            face.image_uris?.normal ??
-            (imageId ? scryfallImageUrl(imageId, faceIndex) : undefined),
-        }))
-      : [
-          {
-            name,
-            typeLine: typeLineFromParts(oracle ?? {}),
-            oracleText: oracle?.text,
-            imageUrl:
-              raw.imageUri ??
-              raw.image_uris?.normal ??
-              archidektFrontImage ??
-              (imageId ? scryfallImageUrl(imageId) : undefined),
-          },
-        ]
+  const faces: CardFaceDefinition[] = resolveCardFaces({
+    name,
+    layout: oracle?.layout,
+    explicitFaces: rawFaces?.map(face => ({
+      ...face,
+      typeLine:
+        face.typeLine ??
+        face.type_line ??
+        typeLineFromParts(face) ??
+        typeLineFromParts(oracle ?? {}),
+    })),
+    fallbackTypeLine: typeLineFromParts(oracle ?? {}),
+    fallbackOracleText: oracle?.text,
+    frontImageUrl:
+      raw.imageUri ?? raw.image_uris?.normal ?? archidektFrontImage,
+    scryfallId: imageId,
+  })
   const imageRefs: CardImageRef[] = faces.flatMap((face, faceIndex) =>
     face.imageUrl
       ? [

@@ -1,7 +1,16 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test"
 
-const openOnlineGame = async (page: Page, email: string) => {
+const openOnlineGame = async (
+  page: Page,
+  email: string,
+  mockPlayerId?: string,
+) => {
   await page.goto("/online")
+  if (mockPlayerId) {
+    await page.evaluate(playerId => {
+      localStorage.setItem("mtg-mock-player-id", playerId)
+    }, mockPlayerId)
+  }
   await page.getByLabel("E-mailadres").fill(email)
   await page.getByLabel("Wachtwoord").fill("test-password")
   await page.getByRole("button", { name: "Inloggen" }).click()
@@ -80,9 +89,7 @@ const installCrossContextChannel = async (
 
 test("twee browsercontexts ontvangen mutations zonder refresh", async ({
   browser,
-  browserName,
 }) => {
-  test.skip(browserName !== "chromium", "De transporttest draait eenmaal.")
   const contextA = await browser.newContext()
   const contextB = await browser.newContext()
   const pages: Page[] = []
@@ -97,49 +104,119 @@ test("twee browsercontexts ontvangen mutations zonder refresh", async ({
   try {
     await Promise.all([
       openOnlineGame(pageA, "realtime-a@example.test"),
-      openOnlineGame(pageB, "realtime-b@example.test"),
+      openOnlineGame(pageB, "realtime-b@example.test", "mock-player-2"),
     ])
 
     await pageA.getByRole("button", { name: "Gooi dobbelsteen" }).click()
     await expect(
-      pageB.getByRole("button", { name: "Start wedstrijd" }),
+      pageB.getByText("Wachten tot de host de wedstrijd start…"),
     ).toBeVisible()
     await pageA.getByRole("button", { name: "Start wedstrijd" }).click()
-    await expect(
-      pageB.getByRole("dialog", { name: "Openingshand van Jij" }),
-    ).toBeVisible()
+    await expect(pageB.getByRole("dialog")).toHaveCount(0)
     await pageA
       .getByRole("dialog", { name: "Openingshand van Jij" })
       .getByRole("button", { name: "Deze hand houden" })
       .click()
 
     const boardA = pageA.getByLabel("Speelveld van Jij")
-    const boardB = pageB.getByLabel("Speelveld van Jij")
+    const boardB = pageB.getByLabel("Speelveld van Tegenstander 1")
+    const opponentBoardB = pageB.getByLabel("Speelveld van Jij")
     const handA = boardA.locator(".zone--hand")
     const battlefieldA = boardA.locator(".zone--battlefield")
     const cardA = handA.locator('[data-battle-draggable="true"]').first()
     await expect(cardA).toBeVisible()
     await expect(boardB.locator(".zone--battlefield .card")).toHaveCount(0)
+    await expect(
+      pageA.locator(
+        '[data-seat-row="bottom"][data-seat-player="mock-player-1"]',
+      ),
+    ).toBeVisible()
+    await expect(
+      pageB.locator(
+        '[data-seat-row="bottom"][data-seat-player="mock-player-2"]',
+      ),
+    ).toBeVisible()
+    const [ownHandA, ownFieldA, ownHandB, ownFieldB] = await Promise.all([
+      boardA.locator(".zone--hand").boundingBox(),
+      boardA.locator(".zone--battlefield").boundingBox(),
+      boardB.locator(".zone--hand").boundingBox(),
+      boardB.locator(".zone--battlefield").boundingBox(),
+    ])
+    expect(ownHandA?.y).toBeGreaterThan(ownFieldA?.y ?? Number.MAX_VALUE)
+    expect(ownHandB?.y).toBeGreaterThan(ownFieldB?.y ?? Number.MAX_VALUE)
 
-    const cardBounds = await cardA.boundingBox()
-    const battlefieldBounds = await battlefieldA
-      .locator(".zone__cards")
-      .boundingBox()
-    expect(cardBounds).not.toBeNull()
-    expect(battlefieldBounds).not.toBeNull()
-    await pageA.mouse.move(
-      (cardBounds?.x ?? 0) + (cardBounds?.width ?? 0) / 2,
-      (cardBounds?.y ?? 0) + (cardBounds?.height ?? 0) / 2,
-    )
-    await pageA.mouse.down()
-    await pageA.mouse.move(
-      (battlefieldBounds?.x ?? 0) + (battlefieldBounds?.width ?? 0) / 2,
-      (battlefieldBounds?.y ?? 0) + (battlefieldBounds?.height ?? 0) / 2,
-      { steps: 12 },
-    )
-    await pageA.mouse.up()
+    await cardA.click({ button: "right" })
+    await pageA
+      .getByRole("dialog", { name: /Kaartacties voor/ })
+      .getByLabel(/Verplaats/)
+      .selectOption("battlefield")
 
-    await expect(boardB.locator(".zone--battlefield .card")).toHaveCount(1)
+    await expect(battlefieldA.locator(".card")).toHaveCount(1)
+    await expect(
+      opponentBoardB.locator(".zone--battlefield .card"),
+    ).toHaveCount(1)
+    await expect.poll(() => readVersion(pageB)).toBe(await readVersion(pageA))
+
+    const battlefieldCardA = battlefieldA.locator(".card").first()
+    const battlefieldCardB = opponentBoardB
+      .locator(".zone--battlefield .card")
+      .first()
+    const versionBeforePreview = await readVersion(pageA)
+    await battlefieldCardA.click({ button: "right" })
+    const faceDialog = pageA.getByRole("dialog", {
+      name: "Kaartacties voor Demo kaart 1",
+    })
+    await expect(
+      faceDialog.getByText("Actieve previewzijde: Demo kaart 1"),
+    ).toBeVisible()
+    await faceDialog
+      .getByRole("button", {
+        name: "Toon Demo kaart 1 achterkant in preview",
+      })
+      .click()
+    await expect(
+      faceDialog.getByText("Actieve previewzijde: Demo kaart 1 achterkant"),
+    ).toBeVisible()
+    await expect(battlefieldCardA).toHaveAttribute(
+      "data-active-face-index",
+      "0",
+    )
+    await expect(battlefieldCardB).toHaveAttribute(
+      "data-active-face-index",
+      "0",
+    )
+    expect(await readVersion(pageA)).toBe(versionBeforePreview)
+    expect(await readVersion(pageB)).toBe(versionBeforePreview)
+
+    await faceDialog
+      .getByRole("button", { name: "Kaartacties sluiten" })
+      .click()
+    await battlefieldCardA.click({ button: "right" })
+    await expect(
+      pageA
+        .getByRole("dialog", { name: "Kaartacties voor Demo kaart 1" })
+        .getByText("Actieve previewzijde: Demo kaart 1"),
+    ).toBeVisible()
+    await pageA
+      .getByRole("dialog", { name: "Kaartacties voor Demo kaart 1" })
+      .getByRole("button", {
+        name: "Draai Demo kaart 1 om op het battlefield",
+      })
+      .click()
+    await expect(battlefieldCardA).toHaveAttribute(
+      "data-active-face-index",
+      "1",
+    )
+    await expect(battlefieldCardB).toHaveAttribute(
+      "data-active-face-index",
+      "1",
+    )
+    await expect(battlefieldCardA).toHaveAccessibleName(
+      /Demo kaart 1 achterkant, Battlefield/,
+    )
+    await expect(battlefieldCardB).toHaveAccessibleName(
+      /Demo kaart 1 achterkant, Battlefield/,
+    )
     await expect.poll(() => readVersion(pageB)).toBe(await readVersion(pageA))
 
     await pageA.getByRole("button", { name: "Volgende beurt →" }).click()
@@ -148,16 +225,24 @@ test("twee browsercontexts ontvangen mutations zonder refresh", async ({
     )
     await expect.poll(() => readVersion(pageB)).toBe(await readVersion(pageA))
 
-    await pageB.getByRole("button", { name: "Verlaag leven van Jij" }).click()
+    await pageB
+      .getByRole("button", { name: "Verlaag leven van Tegenstander 1" })
+      .click()
     await expect(
-      pageA.getByLabel("Levenspunten Jij").getByText("39"),
+      pageA.getByLabel("Levenspunten Tegenstander 1").getByText("39"),
     ).toBeVisible()
 
     await pageB.getByRole("button", { name: "Opnieuw verbinden" }).click()
     await expect.poll(() => readVersion(pageB)).toBe(await readVersion(pageA))
+    await expect(
+      pageB
+        .getByLabel("Speelveld van Jij")
+        .locator(".zone--battlefield .card")
+        .first(),
+    ).toHaveAttribute("data-active-face-index", "1")
     await pageA.getByRole("button", { name: "Verlaag leven van Jij" }).click()
     await expect(
-      pageB.getByLabel("Levenspunten Jij").getByText("38"),
+      pageB.getByLabel("Levenspunten Jij").getByText("39"),
     ).toBeVisible()
     await expect.poll(() => readVersion(pageB)).toBe(await readVersion(pageA))
   } finally {

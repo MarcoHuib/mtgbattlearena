@@ -322,6 +322,7 @@ describe("game-core", () => {
   it("wisselt kaartzijde en kan battlefieldkaarten naar voren en achteren zetten", () => {
     const initial = makeGame()
     const cardId = initial.players["player-1"].zones.hand[0]!
+    const attachmentTargetId = initial.players["player-1"].zones.hand[1]!
     const card = initial.cardsById[cardId]!
     const definition = initial.cardDefinitionsById[card.definitionId]!
     const withBackFace = {
@@ -341,13 +342,46 @@ describe("game-core", () => {
       "battlefield",
       { x: 0.4, y: 0.4, z: 4 },
     )
-    const backFace = switchCardFace(onBattlefield, cardId)
+    const preservedCard = {
+      ...onBattlefield.cardsById[cardId]!,
+      tapped: true,
+      counters: { bloodline: 2 },
+      attachedTo: attachmentTargetId,
+    }
+    const prepared = {
+      ...onBattlefield,
+      cardsById: {
+        ...onBattlefield.cardsById,
+        [cardId]: preservedCard,
+      },
+    }
+    const backFace = switchCardFace(prepared, cardId)
+    const frontFace = switchCardFace(backFace, cardId)
     const behind = setCardStackOrder(backFace, cardId, "back")
     const inFront = setCardStackOrder(behind, cardId, "front")
 
     expect(backFace.cardsById[cardId]?.activeFaceIndex).toBe(1)
+    expect(backFace.cardsById[cardId]).toMatchObject({
+      instanceId: cardId,
+      ownerId: preservedCard.ownerId,
+      controllerId: preservedCard.controllerId,
+      tapped: true,
+      counters: { bloodline: 2 },
+      attachedTo: attachmentTargetId,
+      position: preservedCard.position,
+    })
+    expect(frontFace.cardsById[cardId]?.activeFaceIndex).toBe(0)
     expect(behind.cardsById[cardId]?.position?.z).toBe(0)
     expect(inFront.cardsById[cardId]?.position?.z).toBeGreaterThan(0)
+  })
+
+  it("draait geen kaart buiten het battlefield of enkelzijdige kaart om", () => {
+    const initial = makeGame()
+    const cardId = initial.players["player-1"].zones.hand[0]!
+    expect(switchCardFace(initial, cardId)).toBe(initial)
+
+    const onBattlefield = moveCard(initial, cardId, "player-1", "battlefield")
+    expect(switchCardFace(onBattlefield, cardId)).toBe(onBattlefield)
   })
 
   it("millt, schudt testbaar, untapt alles en doorloopt fases", () => {

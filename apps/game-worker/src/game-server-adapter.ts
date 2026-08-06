@@ -704,11 +704,19 @@ export const applyAuthoritativeCommand = (
     }
     case "SWITCH_FACE": {
       const card = state.cardsById[command.payload.instanceId]
-      if (card?.controllerId !== playerId) {
+      const definition = card
+        ? state.cardDefinitionsById[card.definitionId]
+        : undefined
+      if (
+        card?.controllerId !== playerId ||
+        card.zone !== "battlefield" ||
+        definition?.faces.length !== 2
+      ) {
         return {
           accepted: false,
           code: "INVALID_COMMAND",
-          message: "Alleen een eigen kaart kan van zijde wisselen.",
+          message:
+            "Alleen een eigen dubbelzijdig permanent kan worden omgedraaid.",
         }
       }
       nextCore = switchCardFace(core, card.instanceId, now)

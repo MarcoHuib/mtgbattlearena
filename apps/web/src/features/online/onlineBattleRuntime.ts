@@ -73,16 +73,18 @@ const visibleDefinition = (card: VisibleOnlineCard): CardDefinition => {
     name: card.name,
     typeLine: card.typeLine,
     faces,
-    imageRefs: card.imageUrl
-      ? [
-          {
-            assetKey: `online:${card.definitionId}:${card.activeFaceIndex}`,
-            faceIndex: card.activeFaceIndex,
-            variant: "normal",
-            url: card.imageUrl,
-          },
-        ]
-      : [],
+    imageRefs: faces.flatMap((face, faceIndex) =>
+      face.imageUrl
+        ? [
+            {
+              assetKey: `online:${card.definitionId}:${faceIndex}`,
+              faceIndex,
+              variant: "normal" as const,
+              url: face.imageUrl,
+            },
+          ]
+        : [],
+    ),
   }
 }
 

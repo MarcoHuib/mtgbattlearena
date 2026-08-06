@@ -213,6 +213,7 @@ export const BattleTable = () => {
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <TableLayout
           playerIds={playerIds}
+          perspectivePlayerId={runtime.viewerPlayerId}
           renderSeat={seat => (
             <PlayerBoard
               playerId={seat.playerId}

@@ -158,10 +158,10 @@ test("herstelt een gedownloade battle volledig offline", async ({
   expect(battleLineBox).not.toBeNull()
   await expect(
     page.locator('[data-seat-row="top"][data-seat-column="0"]'),
-  ).toHaveAttribute("data-seat-player", "player-1")
+  ).toHaveAttribute("data-seat-player", "player-2")
   await expect(
     page.locator('[data-seat-row="bottom"][data-seat-column="0"]'),
-  ).toHaveAttribute("data-seat-player", "player-2")
+  ).toHaveAttribute("data-seat-player", "player-1")
   await expect(opponentHand.locator(".zone__cards")).toHaveCSS(
     "overflow",
     "visible",

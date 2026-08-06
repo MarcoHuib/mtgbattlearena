@@ -43,10 +43,10 @@ test("online gebruikt de gedeelde tafel en drag-and-dropactie", async ({
   await expect(page.locator(".table-layout")).toHaveCount(1)
   await expect(
     page.locator('[data-seat-row="top"][data-seat-column="0"]'),
-  ).toHaveAttribute("data-seat-player", "mock-player-1")
+  ).toHaveAttribute("data-seat-player", "mock-player-4")
   await expect(
     page.locator('[data-seat-row="bottom"][data-seat-column="0"]'),
-  ).toHaveAttribute("data-seat-player", "mock-player-2")
+  ).toHaveAttribute("data-seat-player", "mock-player-1")
 
   const camera = page.getByTestId("table-camera")
   const centerBar = page.getByTestId("table-center-bar")
@@ -163,8 +163,7 @@ test("online gebruikt de gedeelde tafel en drag-and-dropactie", async ({
         ((centerPositionAfter?.y ?? 0) + (centerPositionAfter?.height ?? 0)),
     ).toBeCloseTo(
       (bottomLaneBefore?.y ?? 0) -
-        ((centerPositionBefore?.y ?? 0) +
-          (centerPositionBefore?.height ?? 0)),
+        ((centerPositionBefore?.y ?? 0) + (centerPositionBefore?.height ?? 0)),
       0,
     )
   }

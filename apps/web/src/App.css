@@ -1737,6 +1737,129 @@ html.card-pointer-active .card.card--tapped {
   animation: card-action-in 110ms ease-out;
 }
 
+.card-action-menu__content {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(270px, 330px) minmax(280px, 1fr);
+  gap: 18px;
+}
+
+.card-action-menu__actions {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.card-face-preview {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.card-face-preview__status {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.card-face-preview__frame {
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border: 1px solid rgb(215 182 111 / 22%);
+  border-radius: 12px;
+  background: rgb(3 10 7 / 48%);
+}
+
+.card-face-preview__frame img,
+.card-face-preview__skeleton,
+.card-face-preview__error {
+  width: auto;
+  max-width: 100%;
+  height: min(58vh, 580px);
+  aspect-ratio: 0.714;
+  border-radius: 4.5% / 3.2%;
+}
+
+.card-face-preview__frame img {
+  display: block;
+  object-fit: contain;
+  box-shadow: 0 18px 36px rgb(0 0 0 / 48%);
+}
+
+.card-face-preview__skeleton {
+  background: linear-gradient(
+    100deg,
+    rgb(255 255 255 / 4%) 20%,
+    rgb(255 255 255 / 10%) 42%,
+    rgb(255 255 255 / 4%) 64%
+  );
+  background-size: 200% 100%;
+  animation: card-preview-loading 1.2s linear infinite;
+}
+
+.card-face-preview__error {
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 4%);
+  text-align: center;
+}
+
+.card-face-preview__flip {
+  min-height: 40px;
+  display: flex;
+  position: absolute;
+  left: 22px;
+  top: 22px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 248 223 / 72%);
+  border-radius: 8px;
+  color: #fff8df;
+  background: rgb(5 12 9 / 78%);
+  box-shadow: 0 5px 18px rgb(0 0 0 / 42%);
+  font-weight: 800;
+}
+
+.card-face-preview__flip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@keyframes card-preview-loading {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .card-action-menu__content {
+    grid-template-columns: 1fr;
+  }
+
+  .card-face-preview {
+    grid-row: 1;
+  }
+
+  .card-face-preview__frame img,
+  .card-face-preview__skeleton,
+  .card-face-preview__error {
+    height: min(44vh, 420px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-face-preview__skeleton {
+    animation: none;
+  }
+}
+
 .card-action-menu header {
   display: flex;
   align-items: start;

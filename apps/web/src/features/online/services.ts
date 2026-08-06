@@ -434,7 +434,19 @@ export class MockOnlineGameService implements OnlineGameService {
   }
 
   connectGame(gameId: string) {
-    return Promise.resolve(new MockRealtimeConnection(gameId))
+    const requestedPlayerId =
+      typeof localStorage === "undefined"
+        ? null
+        : localStorage.getItem("mtg-mock-player-id")
+    const viewerPlayerId = [
+      "mock-player-1",
+      "mock-player-2",
+      "mock-player-3",
+      "mock-player-4",
+    ].includes(requestedPlayerId ?? "")
+      ? (requestedPlayerId ?? undefined)
+      : undefined
+    return Promise.resolve(new MockRealtimeConnection(gameId, viewerPlayerId))
   }
 }
 

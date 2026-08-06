@@ -956,6 +956,17 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
       error: { code: "INVALID_COMMAND" },
     })
 
+    const ownHandCard = (await runtime.snapshot(playerSession(0))).privateView
+      ?.hand[0]?.instanceId
+    const hiddenZoneFlip = await runtime.command(
+      playerSession(0),
+      command("SWITCH_FACE", readyVersion, { instanceId: ownHandCard }),
+    )
+    expect(hiddenZoneFlip).toMatchObject({
+      type: "ERROR",
+      error: { code: "INVALID_COMMAND" },
+    })
+
     const wrongGame = await runtime.command(
       { ...playerSession(0), gameId: "other-game" },
       command("DRAW_CARD", readyVersion, { amount: 1 }),

@@ -95,6 +95,13 @@ for (const playerCount of [2, 3, 4, 5, 6]) {
     await expect(page.getByLabel(/^Speelveld van Deck /)).toHaveCount(
       playerCount,
     )
+    const perspectiveOrder = [
+      `player-${playerCount}`,
+      ...Array.from(
+        { length: playerCount - 1 },
+        (_, index) => `player-${index + 1}`,
+      ),
+    ]
     for (let index = 0; index < playerCount; index += 1) {
       const row = index % 2 === 0 ? "top" : "bottom"
       const column = Math.floor(index / 2)
@@ -103,7 +110,7 @@ for (const playerCount of [2, 3, 4, 5, 6]) {
       )
       await expect(seat).toHaveAttribute(
         "data-seat-player",
-        `player-${index + 1}`,
+        perspectiveOrder[index] ?? "",
       )
     }
     if (playerCount % 2 === 1) {
@@ -156,9 +163,11 @@ for (const playerCount of [2, 3, 4, 5, 6]) {
           ),
         ).toEqual(Array(await localElements.count()).fill(0))
         expect(
-          await page.locator(".player-board").evaluateAll(elements =>
-            elements.map(element => getComputedStyle(element).transform),
-          ),
+          await page
+            .locator(".player-board")
+            .evaluateAll(elements =>
+              elements.map(element => getComputedStyle(element).transform),
+            ),
         ).toEqual(boardTransformsBefore)
       }
 
@@ -222,9 +231,7 @@ for (const playerCount of [2, 3, 4, 5, 6]) {
               top: element.scrollTop,
             })),
           ),
-        ).toEqual(
-          Array(await localElements.count()).fill({ left: 0, top: 0 }),
-        )
+        ).toEqual(Array(await localElements.count()).fill({ left: 0, top: 0 }))
         const centerPositionAfter = await centerBar.boundingBox()
         const topLaneAfter = await page
           .locator(".table-layout__lane--top")
@@ -256,9 +263,11 @@ for (const playerCount of [2, 3, 4, 5, 6]) {
           0,
         )
         expect(
-          await page.locator(".player-board").evaluateAll(elements =>
-            elements.map(element => getComputedStyle(element).transform),
-          ),
+          await page
+            .locator(".player-board")
+            .evaluateAll(elements =>
+              elements.map(element => getComputedStyle(element).transform),
+            ),
         ).toEqual(boardTransformsBefore)
       }
     }
@@ -272,6 +281,9 @@ for (const playerCount of [2, 3, 4, 5, 6]) {
         900,
       )
     })
+    await expect
+      .poll(async () => (await centerControls.boundingBox())?.x)
+      .toBe(centerBefore?.x)
     const centerAfter = await centerControls.boundingBox()
     const surfaceAfter = await page
       .locator(".table-layout__surface")

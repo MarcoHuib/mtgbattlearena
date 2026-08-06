@@ -98,7 +98,11 @@ export const createGameForPlayers = (
   const players: GameState["players"] = Object.fromEntries(
     playerSetups.map(player => [
       player.id,
-      makePlayer(player.id, player.name.trim() || player.deck.name, player.deck),
+      makePlayer(
+        player.id,
+        player.name.trim() || player.deck.name,
+        player.deck,
+      ),
     ]),
   )
   const cardsById: GameState["cardsById"] = {}
@@ -159,10 +163,7 @@ export const createGameForPlayers = (
     },
     firstPlayerRoll: createFirstPlayerRollState(playerIds),
     openingHands: Object.fromEntries(
-      playerIds.map(playerId => [
-        playerId,
-        { mulliganCount: 0, kept: false },
-      ]),
+      playerIds.map(playerId => [playerId, { mulliganCount: 0, kept: false }]),
     ),
     deckSnapshotIds: playerSetups.map(player => player.deck.id),
     players,
@@ -657,7 +658,9 @@ export const switchCardFace = (
   const definition = card
     ? game.cardDefinitionsById[card.definitionId]
     : undefined
-  if (!card || !definition || definition.faces.length < 2) return game
+  if (card?.zone !== "battlefield" || definition?.faces.length !== 2) {
+    return game
+  }
   return {
     ...game,
     updatedAt: now,
