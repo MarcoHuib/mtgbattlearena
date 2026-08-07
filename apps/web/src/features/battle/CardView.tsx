@@ -283,227 +283,257 @@ export const CardView = ({
               </header>
               <div className="card-action-menu__content">
                 <div className="card-action-menu__actions">
-                  {selected && selectedCardIds.length > 1 ? (
-                    <p className="card-action-menu__selection">
-                      Actie geldt voor {selectedCardIds.length} geselecteerde
-                      kaarten wanneer mogelijk.
+                  {!controllable ? (
+                    <p className="card-action-menu__readonly">
+                      Je bekijkt een kaart van een andere speler. Alleen de
+                      preview kan lokaal van zijde wisselen.
                     </p>
-                  ) : null}
-                  {instance.zone === "battlefield" ? (
-                    <button
-                      className="card-action-menu__primary"
-                      type="button"
-                      onClick={() => {
-                        actions.toggleTap(instance.instanceId)
-                        setMenuPoint(null)
-                      }}
-                    >
-                      <span>↻</span>
-                      {instance.tapped ? "Untappen" : "Tappen"}
-                    </button>
-                  ) : null}
-                  {instance.zone === "battlefield" &&
-                  definition.faces.length === 2 ? (
-                    <button
-                      className="card-action-menu__primary"
-                      type="button"
-                      aria-label={`Draai ${cardName} om op het battlefield`}
-                      onClick={() => {
-                        actions.switchFace(instance.instanceId)
-                        setMenuPoint(null)
-                      }}
-                    >
-                      <span>◫</span>
-                      Kaart omdraaien
-                    </button>
-                  ) : null}
-                  {instance.zone === "battlefield" ? (
-                    <div className="card-action-menu__row">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          actions.changeStackOrder(instance.instanceId, "front")
-                        }}
-                      >
-                        Naar voren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          actions.changeStackOrder(instance.instanceId, "back")
-                        }}
-                      >
-                        Naar achteren
-                      </button>
-                    </div>
-                  ) : null}
-                  {instance.zone === "battlefield" ? (
-                    <div className="card-action-menu__attachment">
-                      <label>
-                        <span>Attachment koppelen</span>
-                        <select
-                          value={attachmentTarget}
-                          onChange={event => {
-                            setAttachmentTarget(event.target.value)
-                          }}
-                        >
-                          <option value="">Kies een permanent…</option>
-                          {game.players[instance.controllerId].zones.battlefield
-                            .filter(
-                              instanceId => instanceId !== instance.instanceId,
-                            )
-                            .map(instanceId => {
-                              const card = gameCards[instanceId]
-                              const targetDefinition = card
-                                ? game.cardDefinitionsById[card.definitionId]
-                                : undefined
-                              return (
-                                <option key={instanceId} value={instanceId}>
-                                  {targetDefinition?.name ?? instanceId}
-                                </option>
-                              )
-                            })}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        disabled={!attachmentTarget}
-                        onClick={() => {
-                          actions.attach(instance.instanceId, attachmentTarget)
-                          setAttachmentTarget("")
-                        }}
-                      >
-                        Koppelen
-                      </button>
-                      {instance.attachedTo ? (
+                  ) : (
+                    <>
+                      {selected && selectedCardIds.length > 1 ? (
+                        <p className="card-action-menu__selection">
+                          Actie geldt voor {selectedCardIds.length}{" "}
+                          geselecteerde kaarten wanneer mogelijk.
+                        </p>
+                      ) : null}
+                      {instance.zone === "battlefield" ? (
                         <button
+                          className="card-action-menu__primary"
                           type="button"
                           onClick={() => {
-                            actions.detach(instance.instanceId)
+                            actions.toggleTap(instance.instanceId)
+                            setMenuPoint(null)
                           }}
                         >
-                          Losmaken van {attachedTargetName ?? "permanent"}
+                          <span>↻</span>
+                          {instance.tapped ? "Untappen" : "Tappen"}
                         </button>
                       ) : null}
-                    </div>
-                  ) : null}
-                  {definition.token ? (
-                    <button
-                      className="card-action-menu__primary"
-                      type="button"
-                      onClick={() => {
-                        actions.duplicateToken(instance.instanceId)
-                      }}
-                    >
-                      <span>⧉</span>
-                      Token dupliceren
-                    </button>
-                  ) : null}
-                  <label className="card-action-menu__move">
-                    <span>Verplaats kaart</span>
-                    <select
-                      aria-label={`Verplaats ${definition.name}`}
-                      defaultValue=""
-                      onChange={event => {
-                        performAction(event.target.value)
-                      }}
-                    >
-                      <option value="" disabled>
-                        Kies een zone…
-                      </option>
-                      {options.map(zone => (
-                        <option key={zone} value={zone}>
-                          Naar {zoneLabels[zone].toLowerCase()}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {instance.zone === "battlefield" ? (
-                    <div
-                      className="counter-controls"
-                      aria-label={`Counters op ${definition.name}`}
-                    >
-                      <span className="counter-controls__title">Counters</span>
-                      {counterTypes.map(counter => {
-                        const value = instance.counters[counter.key] ?? 0
-                        return (
-                          <div className="counter-control" key={counter.key}>
-                            <span>{counter.label}</span>
-                            <button
-                              type="button"
-                              aria-label={`Verwijder ${counter.label}-counter van ${definition.name}`}
-                              disabled={value === 0}
-                              onClick={() => {
-                                changeCounter(counter.key, -1)
-                              }}
-                            >
-                              −
-                            </button>
-                            <strong>{value}</strong>
-                            <button
-                              type="button"
-                              aria-label={`Voeg ${counter.label}-counter toe aan ${definition.name}`}
-                              onClick={() => {
-                                changeCounter(counter.key, 1)
-                              }}
-                            >
-                              +
-                            </button>
-                          </div>
-                        )
-                      })}
-                      {counters
-                        .filter(
-                          ([counter]) =>
-                            !counterTypes.some(type => type.key === counter),
-                        )
-                        .map(([counter, value]) => (
-                          <div className="counter-control" key={counter}>
-                            <span>{counter}</span>
-                            <button
-                              type="button"
-                              aria-label={`Verwijder ${counter}-counter van ${definition.name}`}
-                              onClick={() => {
-                                changeCounter(counter, -1)
-                              }}
-                            >
-                              −
-                            </button>
-                            <strong>{value}</strong>
-                            <button
-                              type="button"
-                              aria-label={`Voeg ${counter}-counter toe aan ${definition.name}`}
-                              onClick={() => {
-                                changeCounter(counter, 1)
-                              }}
-                            >
-                              +
-                            </button>
-                          </div>
-                        ))}
-                      <form
-                        className="custom-counter"
-                        onSubmit={event => {
-                          event.preventDefault()
-                          if (!customCounter.trim()) return
-                          changeCounter(customCounter, 1)
-                          setCustomCounter("")
-                        }}
-                      >
-                        <label>
-                          <span>Benoemde counter</span>
-                          <input
-                            value={customCounter}
-                            placeholder="bijv. shield"
-                            onChange={event => {
-                              setCustomCounter(event.target.value)
+                      {instance.zone === "battlefield" &&
+                      definition.faces.length === 2 ? (
+                        <button
+                          className="card-action-menu__primary"
+                          type="button"
+                          aria-label={`Draai ${cardName} om op het battlefield`}
+                          onClick={() => {
+                            actions.switchFace(instance.instanceId)
+                            setMenuPoint(null)
+                          }}
+                        >
+                          <span>◫</span>
+                          Kaart omdraaien
+                        </button>
+                      ) : null}
+                      {instance.zone === "battlefield" ? (
+                        <div className="card-action-menu__row">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              actions.changeStackOrder(
+                                instance.instanceId,
+                                "front",
+                              )
                             }}
-                          />
-                        </label>
-                        <button type="submit">Toevoegen</button>
-                      </form>
-                    </div>
-                  ) : null}
+                          >
+                            Naar voren
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              actions.changeStackOrder(
+                                instance.instanceId,
+                                "back",
+                              )
+                            }}
+                          >
+                            Naar achteren
+                          </button>
+                        </div>
+                      ) : null}
+                      {instance.zone === "battlefield" ? (
+                        <div className="card-action-menu__attachment">
+                          <label>
+                            <span>Attachment koppelen</span>
+                            <select
+                              value={attachmentTarget}
+                              onChange={event => {
+                                setAttachmentTarget(event.target.value)
+                              }}
+                            >
+                              <option value="">Kies een permanent…</option>
+                              {game.players[
+                                instance.controllerId
+                              ].zones.battlefield
+                                .filter(
+                                  instanceId =>
+                                    instanceId !== instance.instanceId,
+                                )
+                                .map(instanceId => {
+                                  const card = gameCards[instanceId]
+                                  const targetDefinition = card
+                                    ? game.cardDefinitionsById[
+                                        card.definitionId
+                                      ]
+                                    : undefined
+                                  return (
+                                    <option key={instanceId} value={instanceId}>
+                                      {targetDefinition?.name ?? instanceId}
+                                    </option>
+                                  )
+                                })}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={!attachmentTarget}
+                            onClick={() => {
+                              actions.attach(
+                                instance.instanceId,
+                                attachmentTarget,
+                              )
+                              setAttachmentTarget("")
+                            }}
+                          >
+                            Koppelen
+                          </button>
+                          {instance.attachedTo ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                actions.detach(instance.instanceId)
+                              }}
+                            >
+                              Losmaken van {attachedTargetName ?? "permanent"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {definition.token ? (
+                        <button
+                          className="card-action-menu__primary"
+                          type="button"
+                          onClick={() => {
+                            actions.duplicateToken(instance.instanceId)
+                          }}
+                        >
+                          <span>⧉</span>
+                          Token dupliceren
+                        </button>
+                      ) : null}
+                      <label className="card-action-menu__move">
+                        <span>Verplaats kaart</span>
+                        <select
+                          aria-label={`Verplaats ${definition.name}`}
+                          defaultValue=""
+                          onChange={event => {
+                            performAction(event.target.value)
+                          }}
+                        >
+                          <option value="" disabled>
+                            Kies een zone…
+                          </option>
+                          {options.map(zone => (
+                            <option key={zone} value={zone}>
+                              Naar {zoneLabels[zone].toLowerCase()}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {instance.zone === "battlefield" ? (
+                        <div
+                          className="counter-controls"
+                          aria-label={`Counters op ${definition.name}`}
+                        >
+                          <span className="counter-controls__title">
+                            Counters
+                          </span>
+                          {counterTypes.map(counter => {
+                            const value = instance.counters[counter.key] ?? 0
+                            return (
+                              <div
+                                className="counter-control"
+                                key={counter.key}
+                              >
+                                <span>{counter.label}</span>
+                                <button
+                                  type="button"
+                                  aria-label={`Verwijder ${counter.label}-counter van ${definition.name}`}
+                                  disabled={value === 0}
+                                  onClick={() => {
+                                    changeCounter(counter.key, -1)
+                                  }}
+                                >
+                                  −
+                                </button>
+                                <strong>{value}</strong>
+                                <button
+                                  type="button"
+                                  aria-label={`Voeg ${counter.label}-counter toe aan ${definition.name}`}
+                                  onClick={() => {
+                                    changeCounter(counter.key, 1)
+                                  }}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )
+                          })}
+                          {counters
+                            .filter(
+                              ([counter]) =>
+                                !counterTypes.some(
+                                  type => type.key === counter,
+                                ),
+                            )
+                            .map(([counter, value]) => (
+                              <div className="counter-control" key={counter}>
+                                <span>{counter}</span>
+                                <button
+                                  type="button"
+                                  aria-label={`Verwijder ${counter}-counter van ${definition.name}`}
+                                  onClick={() => {
+                                    changeCounter(counter, -1)
+                                  }}
+                                >
+                                  −
+                                </button>
+                                <strong>{value}</strong>
+                                <button
+                                  type="button"
+                                  aria-label={`Voeg ${counter}-counter toe aan ${definition.name}`}
+                                  onClick={() => {
+                                    changeCounter(counter, 1)
+                                  }}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            ))}
+                          <form
+                            className="custom-counter"
+                            onSubmit={event => {
+                              event.preventDefault()
+                              if (!customCounter.trim()) return
+                              changeCounter(customCounter, 1)
+                              setCustomCounter("")
+                            }}
+                          >
+                            <label>
+                              <span>Benoemde counter</span>
+                              <input
+                                value={customCounter}
+                                placeholder="bijv. shield"
+                                onChange={event => {
+                                  setCustomCounter(event.target.value)
+                                }}
+                              />
+                            </label>
+                            <button type="submit">Toevoegen</button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
                 <CardFacePreview
                   definition={definition}
@@ -605,14 +635,13 @@ export const CardView = ({
           }
         }}
         onContextMenu={event => {
-          if (displayOnly || !controllable) return
+          if (displayOnly) return
           event.preventDefault()
           setMenuPoint({ x: event.clientX, y: event.clientY })
         }}
         onKeyDown={event => {
           if (
             displayOnly ||
-            !controllable ||
             (event.key !== "ContextMenu" &&
               !(event.shiftKey && event.key === "F10"))
           ) {

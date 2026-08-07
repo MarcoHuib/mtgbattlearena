@@ -1920,6 +1920,17 @@ html.card-pointer-active .card.card--tapped {
   line-height: 1.4;
 }
 
+.card-action-menu__readonly {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgb(159 202 178 / 22%);
+  border-radius: 8px;
+  color: #b7d2c3;
+  background: rgb(159 202 178 / 7%);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .card-action-menu__row {
   display: grid;
   grid-template-columns: 1fr 1fr;

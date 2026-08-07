@@ -59,7 +59,7 @@ const instance: CardInstance = {
   position: { x: 0.3, y: 0.4, z: 2 },
 }
 
-const renderCard = (cardDefinition = definition) => {
+const renderCard = (cardDefinition = definition, controllable = true) => {
   const switchFace = vi.fn()
   const game = {
     players: {
@@ -82,7 +82,7 @@ const renderCard = (cardDefinition = definition) => {
     mode: "offline",
     game,
     viewerPlayerId: "player-1",
-    controllablePlayerIds: new Set(["player-1"]),
+    controllablePlayerIds: new Set(controllable ? ["player-1"] : []),
     hiddenZoneCounts: {},
     selectedCardIds: [],
     setSelectedCardIds: vi.fn(),
@@ -153,4 +153,25 @@ test("enkelzijdige kaart toont geen flipacties", async () => {
   await screen.findByAltText("Edgar, Charmed Groom, grote kaartpreview")
   expect(screen.queryByText("Kaart omdraaien")).not.toBeInTheDocument()
   expect(screen.queryByText("Andere zijde bekijken")).not.toBeInTheDocument()
+})
+
+test("tegenstanderskaart opent een alleen-lezen preview met lokale faceflip", async () => {
+  const { switchFace } = renderCard(definition, false)
+  fireEvent.contextMenu(
+    screen.getByLabelText(/Edgar, Charmed Groom, Battlefield/),
+  )
+
+  expect(
+    await screen.findByText(/Je bekijkt een kaart van een andere speler/),
+  ).toBeInTheDocument()
+  expect(screen.queryByText("Kaart omdraaien")).not.toBeInTheDocument()
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: /Toon Edgar Markov's Coffin in preview/,
+    }),
+  )
+  expect(
+    await screen.findByAltText("Edgar Markov's Coffin, grote kaartpreview"),
+  ).toBeInTheDocument()
+  expect(switchFace).not.toHaveBeenCalled()
 })
