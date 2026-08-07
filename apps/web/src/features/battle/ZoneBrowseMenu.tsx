@@ -4,15 +4,21 @@ type ZoneBrowseMenuProps = {
   title: string
   onBrowse: () => void
   onSearch: () => void
+  openRequest?: number
 }
 
 export const ZoneBrowseMenu = ({
   title,
   onBrowse,
   onSearch,
+  openRequest = 0,
 }: ZoneBrowseMenuProps) => {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true)
+  }, [openRequest])
 
   useEffect(() => {
     if (!open) return

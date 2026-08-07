@@ -1544,6 +1544,14 @@ html.card-drag-active .zone--drop-target {
   transform: scale(1.5);
 }
 
+.zone--face-up-stack .card:hover,
+.zone--face-up-stack .card:focus-visible {
+  z-index: auto;
+  transform: none;
+  box-shadow: none;
+  outline: none;
+}
+
 .player-board--self .pile-rail .card {
   transform-origin: center right;
 }

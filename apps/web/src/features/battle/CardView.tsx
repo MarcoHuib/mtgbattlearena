@@ -17,6 +17,7 @@ type CardViewProps = {
   displaySelected?: boolean
   onDisplayClick?: () => void
   disableDrag?: boolean
+  disableContextMenu?: boolean
 }
 
 const zoneLabels: Record<Zone, string> = {
@@ -70,6 +71,7 @@ export const CardView = ({
   displaySelected = false,
   onDisplayClick,
   disableDrag = false,
+  disableContextMenu = false,
 }: CardViewProps) => {
   const runtime = useBattleRuntime()
   const { actions, game, selectedCardIds, setSelectedCardIds } = runtime
@@ -562,9 +564,13 @@ export const CardView = ({
         aria-label={cardLabel}
         role={displayOnly && onDisplayClick ? "button" : undefined}
         aria-disabled={displayOnly && onDisplayClick ? false : undefined}
-        aria-expanded={displayOnly ? undefined : menuPoint !== null}
-        aria-haspopup={displayOnly ? undefined : "dialog"}
-        aria-keyshortcuts={displayOnly ? undefined : "Shift+F10"}
+        aria-expanded={
+          displayOnly || disableContextMenu ? undefined : menuPoint !== null
+        }
+        aria-haspopup={displayOnly || disableContextMenu ? undefined : "dialog"}
+        aria-keyshortcuts={
+          displayOnly || disableContextMenu ? undefined : "Shift+F10"
+        }
         aria-pressed={displayOnly ? displaySelected : selected}
         data-card-name={definition.name}
         data-active-face-index={instance.activeFaceIndex}
@@ -635,13 +641,14 @@ export const CardView = ({
           }
         }}
         onContextMenu={event => {
-          if (displayOnly) return
+          if (displayOnly || disableContextMenu) return
           event.preventDefault()
           setMenuPoint({ x: event.clientX, y: event.clientY })
         }}
         onKeyDown={event => {
           if (
             displayOnly ||
+            disableContextMenu ||
             (event.key !== "ContextMenu" &&
               !(event.shiftKey && event.key === "F10"))
           ) {

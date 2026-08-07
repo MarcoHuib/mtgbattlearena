@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import type {
   CardDefinition,
   CardInstance,
@@ -63,6 +63,7 @@ export const ZoneArea = ({
   onActions,
 }: ZoneAreaProps) => {
   const runtime = useBattleRuntime()
+  const [browseMenuRequest, setBrowseMenuRequest] = useState(0)
   const groupsById = runtime.game.groupsById
   const controllable = canControlPlayer(runtime, playerId)
   const visibleCount =
@@ -108,6 +109,11 @@ export const ZoneArea = ({
         visibleCount === 1 ? "kaart" : "kaarten"
       }`}
       onContextMenu={event => {
+        if (controllable && faceUpStack && onOpen && onSearch) {
+          event.preventDefault()
+          setBrowseMenuRequest(request => request + 1)
+          return
+        }
         if (
           !controllable ||
           !onActions ||
@@ -143,7 +149,12 @@ export const ZoneArea = ({
         <span>{title}</span>
         <strong>{visibleCount}</strong>
         {controllable && onOpen && onSearch ? (
-          <ZoneBrowseMenu title={title} onBrowse={onOpen} onSearch={onSearch} />
+          <ZoneBrowseMenu
+            title={title}
+            onBrowse={onOpen}
+            onSearch={onSearch}
+            openRequest={browseMenuRequest}
+          />
         ) : controllable && (onActions || onOpen) ? (
           <button
             type="button"
@@ -183,6 +194,7 @@ export const ZoneArea = ({
                 definition={topDefinition}
                 compact
                 disableDrag={!controllable}
+                disableContextMenu
               />
             </div>
           ) : (
