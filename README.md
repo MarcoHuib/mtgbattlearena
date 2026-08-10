@@ -2,6 +2,14 @@
 
 <div align="center">
 
+<img
+  src="docs/assets/mtg-battle-arena-banner.png"
+  alt="MTG Battle Arena — een fantasy battlefield tussen licht en duisternis"
+  width="100%"
+/>
+
+<br />
+
 # ⚔️ MTG Battle Mode
 
 ### Een local-first digitale tafel voor Magic: The Gathering
