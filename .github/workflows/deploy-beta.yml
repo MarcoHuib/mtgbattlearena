@@ -1,22 +1,21 @@
-name: Deploy Production
+name: Deploy Beta
 
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      - staging
 
 permissions:
   contents: read
 
 concurrency:
-  group: production
+  group: staging
   cancel-in-progress: false
 
 jobs:
   changes:
-    name: Detect production changes
-    if: github.ref == 'refs/heads/main'
+    name: Detect Beta changes
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -30,11 +29,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Determine affected deployables
+      - name: Determine affected Beta deployables
         id: filter
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
         run: |
@@ -44,7 +42,7 @@ jobs:
           game_worker=false
           import_worker=false
 
-          if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
             frontend=true
             game_worker=true
             import_worker=true
@@ -60,7 +58,7 @@ jobs:
                   frontend=true
                   game_worker=true
                   ;;
-                apps/web/.env.staging)
+                apps/web/.env.production)
                   ;;
                 apps/web/*|firebase.json|.firebaserc)
                   frontend=true
@@ -86,10 +84,10 @@ jobs:
           echo "any=$any" >> "$GITHUB_OUTPUT"
 
   validate:
-    name: Production / Validate
+    name: Beta / Validate
     needs: changes
     if: >-
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/staging' &&
       needs.changes.outputs.any == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -121,34 +119,34 @@ jobs:
       - name: Test frontend
         if: needs.changes.outputs.frontend == 'true'
         run: npm run test:web
-      - name: Build production PWA
+      - name: Build Beta PWA
         if: needs.changes.outputs.frontend == 'true'
-        run: npm run build --workspace @mtg/web
+        run: npm run build:staging
       - name: Type-check game Worker
         if: needs.changes.outputs.game_worker == 'true'
         run: npm run worker:type-check
       - name: Test game Worker
         if: needs.changes.outputs.game_worker == 'true'
         run: npm run test:worker
-      - name: Bundle game Worker without deploying
+      - name: Bundle staging game Worker without deploying
         if: needs.changes.outputs.game_worker == 'true'
-        run: npm run deploy:cloudflare:check:game
-      - name: Bundle import Worker without deploying
+        run: npm run deploy:cloudflare:check:staging:game
+      - name: Bundle staging import Worker without deploying
         if: needs.changes.outputs.import_worker == 'true'
-        run: npm run deploy:cloudflare:check:import
+        run: npm run deploy:cloudflare:check:staging:import
 
   firebase-hosting:
-    name: Production / Firebase Hosting
+    name: Beta / Firebase Hosting
     needs:
       - changes
       - validate
     if: >-
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/staging' &&
       needs.changes.outputs.frontend == 'true' &&
       needs.validate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production
+    environment: staging
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -162,30 +160,62 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Build production PWA
-        run: npm run build --workspace @mtg/web
-      - name: Deploy Firebase Hosting live channel
+      - name: Validate Beta Firebase configuration
+        shell: bash
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: |
+          set -euo pipefail
+
+          required=(
+            VITE_FIREBASE_API_KEY
+            VITE_FIREBASE_AUTH_DOMAIN
+            VITE_FIREBASE_PROJECT_ID
+            VITE_FIREBASE_APP_ID
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required staging Environment variable: $name" >&2
+              exit 1
+            fi
+          done
+
+          if [[ "$VITE_FIREBASE_PROJECT_ID" != "mtgbattlearena" ]]; then
+            echo "Beta must use the shared Firebase Authentication project mtgbattlearena." >&2
+            exit 1
+          fi
+      - name: Build Beta PWA
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: npm run build:staging
+      - name: Deploy fixed Beta Firebase Hosting site
         uses: FirebaseExtended/action-hosting-deploy@7c850a480ce753f4f06f010801fc5a43787740bb # v0
         with:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA }}
           projectId: mtgbattlearena
-          target: production
+          target: staging
           channelId: live
           entryPoint: .
           firebaseToolsVersion: 15.26.0
 
   import-worker:
-    name: Production / Import Worker
+    name: Beta / Import Worker
     needs:
       - changes
       - validate
     if: >-
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/staging' &&
       needs.changes.outputs.import_worker == 'true' &&
       needs.validate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production
+    environment: staging
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -199,32 +229,32 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Deploy import Worker
+      - name: Deploy staging import Worker
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: 4.120.0
           workingDirectory: apps/import-worker
-          command: deploy --config wrangler.toml
+          command: deploy --env staging --config wrangler.toml
           packageManager: npm
 
   game-worker:
-    name: Production / Game Worker
+    name: Beta / Game Worker
     needs:
       - changes
       - validate
       - import-worker
     if: >-
       always() &&
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/staging' &&
       needs.changes.outputs.game_worker == 'true' &&
       needs.validate.result == 'success' &&
       (needs.changes.outputs.import_worker != 'true' ||
       needs.import-worker.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production
+    environment: staging
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -238,12 +268,12 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Deploy game Worker
+      - name: Deploy staging game Worker
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: 4.120.0
           workingDirectory: apps/game-worker
-          command: deploy --config wrangler.toml
+          command: deploy --env staging --config wrangler.toml
           packageManager: npm

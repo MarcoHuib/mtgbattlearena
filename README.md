@@ -19,6 +19,7 @@
 <br />
 
 [![CI][ci-shield]][ci-url]
+[![Deploy Beta][beta-shield]][beta-url]
 [![Deploy Production][deploy-shield]][deploy-url]
 
 [![Issues][issues-shield]][issues-url]
@@ -49,16 +50,16 @@
 
 ## ✨ Waarom MTG Battle Mode?
 
-| | |
-|---|---|
-| 📴 **Local-first** | Start en hervat battles zonder account of backend. |
-| 🃏 **Archidekt import** | Importeer openbare decks en werk met lokale snapshots. |
-| 💾 **Autosave & recovery** | Game-state, undo/redo en deckdata blijven lokaal beschikbaar. |
-| 📦 **Offline ready** | PWA + expliciete offlinepakketten met kaartdata en afbeeldingen. |
-| 👥 **2–6 spelers** | Commander-ready multiplayer met vier spelers als belangrijke use-case. |
-| 🔐 **Privacy by design** | Online spelers ontvangen alleen de state die zij mogen zien. |
+|                             |                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| 📴 **Local-first**          | Start en hervat battles zonder account of backend.                               |
+| 🃏 **Archidekt import**     | Importeer openbare decks en werk met lokale snapshots.                           |
+| 💾 **Autosave & recovery**  | Game-state, undo/redo en deckdata blijven lokaal beschikbaar.                    |
+| 📦 **Offline ready**        | PWA + expliciete offlinepakketten met kaartdata en afbeeldingen.                 |
+| 👥 **2–6 spelers**          | Commander-ready multiplayer met vier spelers als belangrijke use-case.           |
+| 🔐 **Privacy by design**    | Online spelers ontvangen alleen de state die zij mogen zien.                     |
 | ☁️ **Server authoritative** | Firebase verzorgt identiteit; Cloudflare beheert de officiële online game-state. |
-| 🎮 **Digitale tafel** | Geen automatische mana-, combat-, trigger- of kaartregelvalidatie. |
+| 🎮 **Digitale tafel**       | Geen automatische mana-, combat-, trigger- of kaartregelvalidatie.               |
 
 ---
 
@@ -66,25 +67,26 @@
 
 ### Legenda
 
-| Status | Betekenis |
-|---|---|
-| 🟢 **Ready** | Beschikbaar en onderdeel van de huidige applicatie |
-| 🟡 **In progress** | Actieve uitbreidingsrichting |
-| 🔵 **Automated** | Geautomatiseerd via GitHub Actions |
-| ⚪ **Planned** | Bewust later gepland |
+| Status             | Betekenis                                          |
+| ------------------ | -------------------------------------------------- |
+| 🟢 **Ready**       | Beschikbaar en onderdeel van de huidige applicatie |
+| 🟡 **In progress** | Actieve uitbreidingsrichting                       |
+| 🔵 **Automated**   | Geautomatiseerd via GitHub Actions                 |
+| ⚪ **Planned**     | Bewust later gepland                               |
 
-| Onderdeel | Status |
-|---|---|
-| Offline battle voor 2–6 spelers | 🟢 **Ready** |
-| Archidekt-import | 🟢 **Ready** |
-| Autosave, hervatten en undo/redo | 🟢 **Ready** |
-| Offlinepakket en PWA | 🟢 **Ready** |
-| Commander-zones en statustracking | 🟢 **Ready** |
-| Online lobby & multiplayerbasis | 🟢 **Ready** |
-| Server-authoritative game-core | 🟢 **Ready** |
-| CI-validatie op pull requests | 🔵 **Automated** |
-| Production deployment vanaf `main` | 🔵 **Automated** |
-| Verdere online game-acties | 🟡 **In progress** |
+| Onderdeel                          | Status             |
+| ---------------------------------- | ------------------ |
+| Offline battle voor 2–6 spelers    | 🟢 **Ready**       |
+| Archidekt-import                   | 🟢 **Ready**       |
+| Autosave, hervatten en undo/redo   | 🟢 **Ready**       |
+| Offlinepakket en PWA               | 🟢 **Ready**       |
+| Commander-zones en statustracking  | 🟢 **Ready**       |
+| Online lobby & multiplayerbasis    | 🟢 **Ready**       |
+| Server-authoritative game-core     | 🟢 **Ready**       |
+| CI-validatie op pull requests      | 🔵 **Automated**   |
+| Beta deployment vanaf `staging`    | 🔵 **Automated**   |
+| Production deployment vanaf `main` | 🔵 **Automated**   |
+| Verdere online game-acties         | 🟡 **In progress** |
 
 <details>
 <summary><strong>Wat kan de online game-core momenteel?</strong></summary>
@@ -239,19 +241,35 @@ runtime-gevalideerde protocol.
 ### Build & deployment health
 
 [![CI][ci-shield]][ci-url]
+[![Deploy Beta][beta-shield]][beta-url]
 [![Deploy Production][deploy-shield]][deploy-url]
 
 </div>
 
-| Workflow | Trigger | Doel |
-|---|---|---|
-| **CI** | Pull request → `main` | Alleen geraakte onderdelen linten, typechecken, testen en bouwen |
-| **Deploy Production** | Push/merge → `main` | Opnieuw valideren en alleen gewijzigde deployables publiceren |
+| Workflow              | Trigger                            | Doel                                                                    |
+| --------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| **CI**                | Pull request → `staging` of `main` | Alleen geraakte onderdelen linten, typechecken, testen en bouwen        |
+| **Deploy Beta**       | Push/merge → `staging`             | Opnieuw valideren en alleen gewijzigde deployables naar Beta publiceren |
+| **Deploy Production** | Push/merge → `main`                | Opnieuw valideren en alleen gewijzigde deployables publiceren           |
 
 > [!IMPORTANT]
 > Een groene **CI**-badge betekent dat de laatste workflowrun is geslaagd.
+> Een groene **Deploy Beta**-badge betekent dat de laatste Beta-workflow is geslaagd.
 > Een groene **Deploy Production**-badge betekent dat de laatste production-workflow is geslaagd.
 > Klik op een badge om direct de bijbehorende GitHub Actions-runs te openen.
+
+De repository gebruikt een compacte T/P-straat:
+
+```text
+Development = lokaal
+Test/Beta   = staging → beta.mtgbattlearena.nl
+Production  = main    → mtgbattlearena.nl
+```
+
+Beta gebruikt `api.beta.mtgbattlearena.nl` en `ws.beta.mtgbattlearena.nl`;
+Production blijft `api.mtgbattlearena.nl` en `ws.mtgbattlearena.nl` gebruiken.
+Een pull request valideert alleen. Deployment start pas na een merge/push naar
+`staging` of `main`.
 
 <details>
 <summary><strong>✅ CI pipeline bekijken</strong></summary>
@@ -259,7 +277,7 @@ runtime-gevalideerde protocol.
 <br />
 
 ```text
-Pull request → main
+Pull request → staging of main
         │
         ▼
 ┌──────────────────────┐
@@ -310,12 +328,12 @@ laten de pull request-validatie falen.
 </details>
 
 <details>
-<summary><strong>🚀 Production deployment pipeline bekijken</strong></summary>
+<summary><strong>🚀 Beta- en Production deployment pipeline bekijken</strong></summary>
 
 <br />
 
 ```text
-Push / merge → main
+Push / merge → staging of main
         │
         ▼
 ┌───────────────────────────┐
@@ -323,7 +341,7 @@ Push / merge → main
 └─────────────┬─────────────┘
               │
               ▼
-     Production / Validate
+     Beta / Validate of Production / Validate
               │
       ┌───────┼───────────────┐
       │       │               │
@@ -335,7 +353,7 @@ Push / merge → main
       │        waits when both
       │        Workers changed
       ▼
-   Production
+   Beta of Production
 ```
 
 De deployment is **change-aware**:
@@ -347,7 +365,9 @@ De deployment is **change-aware**:
 - wanneer beide Workers wijzigen, wacht de Game Worker op een succesvolle
   Import Worker-deployment.
 
-Alle production jobs gebruiken de GitHub Environment `production`.
+Beta gebruikt de GitHub Environment `staging`, een eigen Hosting-target binnen
+het gedeelde Firebaseproject en afzonderlijke Cloudflare-resources via Wrangler
+`--env staging`. Firebase Authentication wordt bewust met Production gedeeld.
 
 Voor de volledige technische uitleg:
 **[`docs/ci-cd.md`](docs/ci-cd.md)**
@@ -365,23 +385,26 @@ Voor de volledige technische uitleg:
 
 <br />
 
-| Command | Doel |
-|---|---|
-| `npm run dev` | Start de webapp met Vite |
-| `npm run dev:worker:game` | Start de Game Worker lokaal |
-| `npm run dev:worker:import` | Start de Import Worker lokaal |
-| `npm run build` | Bouw de productie-PWA |
-| `npm run preview` | Preview de productiebuild |
-| `npm run format` | Format met Prettier |
-| `npm run lint` | Controleer met ESLint |
-| `npm run type-check` | Typecheck alle workspaces |
-| `npm test` | Package-, web- en Workertests |
-| `npm run test:integration` | Online integratietests |
-| `npm run test:e2e` | Kritieke Playwright-flow |
-| `npm run deploy:cloudflare:check` | Cloudflare dry-run |
-| `npm run deploy:cloudflare` | Deploy beide Workers |
-| `npm run deploy:firebase` | Deploy Firebase Hosting |
-| `npm run deploy:all` | Deploy Cloudflare + Firebase |
+| Command                                   | Doel                                   |
+| ----------------------------------------- | -------------------------------------- |
+| `npm run dev`                             | Start de webapp met Vite               |
+| `npm run dev:worker:game`                 | Start de Game Worker lokaal            |
+| `npm run dev:worker:import`               | Start de Import Worker lokaal          |
+| `npm run build`                           | Bouw de productie-PWA                  |
+| `npm run build:staging`                   | Bouw de Beta-PWA met staging-endpoints |
+| `npm run preview`                         | Preview de productiebuild              |
+| `npm run format`                          | Format met Prettier                    |
+| `npm run lint`                            | Controleer met ESLint                  |
+| `npm run type-check`                      | Typecheck alle workspaces              |
+| `npm test`                                | Package-, web- en Workertests          |
+| `npm run test:integration`                | Online integratietests                 |
+| `npm run test:e2e`                        | Kritieke Playwright-flow               |
+| `npm run deploy:cloudflare:check`         | Cloudflare dry-run                     |
+| `npm run deploy:cloudflare:check:staging` | Cloudflare staging dry-run             |
+| `npm run deploy:cloudflare`               | Deploy beide Workers                   |
+| `npm run deploy:firebase`                 | Deploy Firebase Hosting                |
+| `npm run deploy:firebase:hosting:staging` | Deploy uitsluitend de vaste Beta-site  |
+| `npm run deploy:all`                      | Deploy Cloudflare + Firebase           |
 
 </details>
 
@@ -437,13 +460,13 @@ afgeschermde routes die nodig zijn voor openbare Archidekt-deckdata en assets.
 
 <br />
 
-| Dienst | Gebruik |
-|---|---|
-| **Archidekt** | Openbare decklijsten importeren |
-| **Scryfall** | Kaartmetadata en kaartafbeeldingen |
-| **Firebase** | Authenticatie en gebruikersidentiteit |
-| **Cloudflare** | Workers, WebSockets en Durable Objects |
-| **GitHub Actions** | CI, security checks en production deployment |
+| Dienst             | Gebruik                                       |
+| ------------------ | --------------------------------------------- |
+| **Archidekt**      | Openbare decklijsten importeren               |
+| **Scryfall**       | Kaartmetadata en kaartafbeeldingen            |
+| **Firebase**       | Authenticatie en gebruikersidentiteit         |
+| **Cloudflare**     | Workers, WebSockets en Durable Objects        |
+| **GitHub Actions** | CI en gescheiden Beta-/Production-deployments |
 
 Archidekt, Scryfall, Firebase, Cloudflare en Wizards of the Coast zijn geen
 sponsors van dit project en hebben het project niet beoordeeld of goedgekeurd.
@@ -472,6 +495,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 - [x] Authoritative online basiscommands en privacytests
 - [x] Persoonlijke online openingshand en mulligan
 - [x] GitHub Actions CI met change detection
+- [x] Geautomatiseerde Beta deployment vanaf `staging`
 - [x] Geautomatiseerde production deployment vanaf `main`
 
 ### 🚧 Volgende uitbreidingen
@@ -489,14 +513,14 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
 ## 📚 Documentatie
 
-| Document | Doel |
-|---|---|
-| [`AGENTS.md`](AGENTS.md) | Architectuur, scope, kwaliteit en regels voor coding agents |
-| [`docs/architecture/`](docs/architecture/) | Architecture Decision Records |
-| [`docs/ci-cd.md`](docs/ci-cd.md) | CI/CD, security checks en deployments |
-| [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md) | Context voor de online multiplayeruitbreiding |
-| [`FIRST_IMPLEMENTATION_PROMPT.md`](FIRST_IMPLEMENTATION_PROMPT.md) | Context van de oorspronkelijke offline implementatie |
-| [`docs/legal/`](docs/legal/) | Privacy, voorwaarden en third-party notices |
+| Document                                                           | Doel                                                        |
+| ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| [`AGENTS.md`](AGENTS.md)                                           | Architectuur, scope, kwaliteit en regels voor coding agents |
+| [`docs/architecture/`](docs/architecture/)                         | Architecture Decision Records                               |
+| [`docs/ci-cd.md`](docs/ci-cd.md)                                   | CI/CD, security checks en deployments                       |
+| [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md)     | Context voor de online multiplayeruitbreiding               |
+| [`FIRST_IMPLEMENTATION_PROMPT.md`](FIRST_IMPLEMENTATION_PROMPT.md) | Context van de oorspronkelijke offline implementatie        |
+| [`docs/legal/`](docs/legal/)                                       | Privacy, voorwaarden en third-party notices                 |
 
 ---
 
@@ -534,18 +558,15 @@ houden geen samenwerking, sponsoring of goedkeuring in.
 
 [ci-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/ci.yml?style=for-the-badge&label=CI&logo=githubactions&logoColor=white
 [ci-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/ci.yml
-
+[beta-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-beta.yml?branch=staging&style=for-the-badge&label=Beta&logo=githubactions&logoColor=white
+[beta-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-beta.yml
 [deploy-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-production.yml?branch=main&style=for-the-badge&label=Production&logo=githubactions&logoColor=white
 [deploy-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-production.yml
-
 [issues-shield]: https://img.shields.io/github/issues/MarcoHuib/mtgbattlearena?style=for-the-badge
 [issues-url]: https://github.com/MarcoHuib/mtgbattlearena/issues
-
 [stars-shield]: https://img.shields.io/github/stars/MarcoHuib/mtgbattlearena?style=for-the-badge
 [stars-url]: https://github.com/MarcoHuib/mtgbattlearena/stargazers
-
 [last-commit-shield]: https://img.shields.io/github/last-commit/MarcoHuib/mtgbattlearena?style=for-the-badge
 [commits-url]: https://github.com/MarcoHuib/mtgbattlearena/commits
-
 [typescript-shield]: https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white
 [typescript-url]: https://www.typescriptlang.org/
