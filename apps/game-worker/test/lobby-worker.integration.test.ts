@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite"
 import { LobbyDurableObject } from "../src/lobby-durable-object"
 import type {
   ActivateLobbyResult,
@@ -16,16 +17,63 @@ import {
   LOBBY_CREATE_WINDOW_MS,
   MAX_ACTIVE_LOBBIES_PER_UID,
   MAX_WAITING_LOBBIES_PER_UID,
+  SqliteLobbyStore,
   STARTING_LOBBY_TIMEOUT_MS,
   WAITING_LOBBY_TTL_MS,
+  type CreateLobbyStage,
 } from "../src/lobby-storage"
 import { MemorySocketTicketRepository } from "../src/tickets"
 import type {
   DurableObjectState,
   Env,
+  DurableObjectStorage,
+  SqlStorage,
   SqlStorageCursor,
+  SqlStorageValue,
   VerifiedIdentity,
 } from "../src/types"
+
+class NodeSqlStorage implements SqlStorage {
+  constructor(private readonly database: DatabaseSync) {}
+
+  exec<T extends object = Record<string, unknown>>(
+    query: string,
+    ...bindings: SqlStorageValue[]
+  ): SqlStorageCursor<T> {
+    if (bindings.length === 0 && query.trim().includes(";")) {
+      this.database.exec(query)
+      return { toArray: () => [], one: () => undefined as never }
+    }
+    const values = bindings.map(binding =>
+      binding instanceof ArrayBuffer ? new Uint8Array(binding) : binding,
+    )
+    const rows = this.database.prepare(query).all(...values) as T[]
+    return {
+      toArray: () => rows,
+      one: () => {
+        if (rows.length !== 1) throw new Error("Expected exactly one SQL row.")
+        return rows[0]!
+      },
+    }
+  }
+}
+
+const sqliteStorage = (database: DatabaseSync): DurableObjectStorage => ({
+  sql: new NodeSqlStorage(database),
+  transactionSync: callback => {
+    database.exec("BEGIN")
+    try {
+      const result = callback()
+      database.exec("COMMIT")
+      return result
+    } catch (caught) {
+      database.exec("ROLLBACK")
+      throw caught
+    }
+  },
+  getAlarm: () => Promise.resolve(null),
+  setAlarm: () => Promise.resolve(),
+})
 
 class MemoryLobbyStore implements LobbyStore {
   private readonly lobbies = new Map<string, LobbyRecord>()
@@ -348,6 +396,112 @@ const state: DurableObjectState = {
 }
 
 describe("Lobby Durable Object RPC", () => {
+  test("maakt lobby's en registreert rate limits op het pre-H-01 productieschema", () => {
+    const database = new DatabaseSync(":memory:")
+    database.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE lobbies (
+        id TEXT PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        host_uid TEXT NOT NULL,
+        host_display_name TEXT NOT NULL,
+        format TEXT NOT NULL,
+        visibility TEXT NOT NULL
+          CHECK (visibility IN ('public', 'private', 'invite-only')),
+        status TEXT NOT NULL
+          CHECK (status IN ('waiting', 'starting', 'active', 'finished')),
+        max_players INTEGER NOT NULL CHECK (max_players BETWEEN 2 AND 6),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE lobby_participants (
+        game_id TEXT NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
+        uid TEXT NOT NULL,
+        player_id TEXT,
+        role TEXT NOT NULL CHECK (role IN ('player', 'spectator')),
+        display_name TEXT NOT NULL,
+        seat_number INTEGER,
+        joined_at TEXT NOT NULL,
+        PRIMARY KEY (game_id, uid),
+        UNIQUE (game_id, player_id),
+        UNIQUE (game_id, seat_number)
+      );
+      CREATE TABLE lobby_decks (
+        game_id TEXT NOT NULL,
+        uid TEXT NOT NULL,
+        deck_json TEXT NOT NULL,
+        registered_at TEXT NOT NULL,
+        PRIMARY KEY (game_id, uid),
+        FOREIGN KEY (game_id, uid)
+          REFERENCES lobby_participants(game_id, uid) ON DELETE CASCADE
+      );
+    `)
+    const storage = sqliteStorage(database)
+    const store = new SqliteLobbyStore(storage)
+    const attemptedAt = Date.parse("2026-08-10T10:00:00.000Z")
+    const stages: CreateLobbyStage[] = []
+
+    for (let index = 0; index < LOBBY_CREATE_BURST_LIMIT; index += 1) {
+      const id = `game-${index}`
+      const createdAt = new Date(attemptedAt).toISOString()
+      expect(
+        store.createLobbyWithHost(
+          {
+            id,
+            code: `CODE0${index}`,
+            title: `Lobby ${index}`,
+            hostUid: "production-owner",
+            hostDisplayName: "Owner",
+            format: "Commander",
+            visibility: "public",
+            status: "waiting",
+            playerCount: 1,
+            maxPlayers: 4,
+            createdAt,
+            updatedAt: createdAt,
+          },
+          {
+            gameId: id,
+            uid: "production-owner",
+            playerId: `player-${index}`,
+            role: "player",
+            displayName: "Owner",
+            seatNumber: 0,
+            joinedAt: createdAt,
+          },
+          attemptedAt,
+          index === 0 ? stage => stages.push(stage) : undefined,
+        ),
+      ).toEqual({ status: "inserted" })
+    }
+
+    expect(stages).toEqual([
+      "create_lobby_rate_limit",
+      "create_lobby_quota",
+      "create_lobby_insert",
+      "create_lobby_host_insert",
+      "create_lobby_transaction_complete",
+    ])
+
+    const rateRow = database
+      .prepare(
+        `SELECT burst_attempts AS burstAttempts,
+                window_attempts AS windowAttempts
+         FROM lobby_creation_limits WHERE uid = ?`,
+      )
+      .get("production-owner") as {
+      burstAttempts: number
+      windowAttempts: number
+    }
+    expect(rateRow).toEqual({ burstAttempts: 3, windowAttempts: 3 })
+    expect(
+      database.prepare("SELECT COUNT(*) AS count FROM lobbies").get(),
+    ).toEqual({ count: 3 })
+
+    database.close()
+  })
+
   test("handhaaft wachtende-lobbyquota per geverifieerde UID", () => {
     let now = Date.parse("2026-08-10T10:00:00.000Z")
     const store = new MemoryLobbyStore()
