@@ -154,18 +154,18 @@ omgevingen:
 | Repository Variable    | Inhoud                               |
 | ---------------------- | ------------------------------------ |
 | `FIREBASE_API_KEY`     | publieke gedeelde Firebase-webconfig |
-| `FIREBASE_AUTH_DOMAIN` | publieke gedeelde Firebase-webconfig |
 | `FIREBASE_PROJECT_ID`  | gedeeld Firebaseproject-ID           |
 | `FIREBASE_APP_ID`      | publieke gedeelde Firebase-webconfig |
 
 Configureer daarnaast deze GitHub Environment Variables per omgeving:
 
-| Environment Variable | `staging`                            | `production`                    |
+| Environment Variable  | `staging`                            | `production`                    |
 | -------------------- | ------------------------------------ | ------------------------------- |
 | `APP_ENV`            | `staging`                            | `production`                    |
 | `IMPORT_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
 | `ONLINE_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
 | `ONLINE_SOCKET_URL`  | `https://ws.beta.mtgbattlearena.nl`  | `https://ws.mtgbattlearena.nl`  |
+| `FIREBASE_AUTH_DOMAIN` | `beta.mtgbattlearena.nl`           | `mtgbattlearena.nl`             |
 
 `RELEASE_VERSION` wordt door de workflow gezet op `github.run_number` en
 `RUNTIME_CONFIG_OUTPUT` op `apps/web/dist/runtime-config.js`; deze hoeven niet
@@ -237,8 +237,9 @@ gebruikt uitsluitend de bestaande GitHub Environment-protection.
 2. Controleer dat Environment `production` eveneens alleen `main` toestaat.
 3. Configureer onder Environment `production` bij **Deployment protection
    rules** één of meer **Required reviewers**.
-4. Plaats de gedeelde Firebasewaarden als Repository Variables en alleen de
-   omgevingsspecifieke runtimewaarden in beide Environments.
+4. Plaats de gedeelde Firebasewaarden als Repository Variables en de
+   omgevingsspecifieke runtimewaarden, inclusief `FIREBASE_AUTH_DOMAIN`, in
+   Environments `staging` en `production`.
 5. Behoud de bestaande Environment secrets; er zijn geen nieuwe secrets nodig.
 6. Controleer dat beide Firebase Hosting-targets en custom domains nog correct
    gekoppeld zijn.

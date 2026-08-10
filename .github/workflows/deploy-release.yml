@@ -262,7 +262,8 @@ jobs:
           ONLINE_API_URL: ${{ vars.ONLINE_API_URL }}
           ONLINE_SOCKET_URL: ${{ vars.ONLINE_SOCKET_URL }}
           RELEASE_VERSION: ${{ github.run_number }}
-          # Repository Variables shared by Beta and Production.
+          # Firebase settings resolve from the active environment first. Values
+          # not overridden there may continue to use repository variables.
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
@@ -447,7 +448,8 @@ jobs:
           ONLINE_API_URL: ${{ vars.ONLINE_API_URL }}
           ONLINE_SOCKET_URL: ${{ vars.ONLINE_SOCKET_URL }}
           RELEASE_VERSION: ${{ github.run_number }}
-          # Repository Variables shared by Beta and Production.
+          # Firebase settings resolve from the active environment first. Values
+          # not overridden there may continue to use repository variables.
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}

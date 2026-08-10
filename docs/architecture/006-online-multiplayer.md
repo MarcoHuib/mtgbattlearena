@@ -34,6 +34,17 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
   behoudt origin-isolatie voor normale navigaties maar staat de cross-origin
   Firebase OAuth-popuprelatie toe die nodig is voor `signInWithPopup`; er zijn
   hiervoor geen bestaande securityheaders verwijderd of afgezwakt.
+- Chromium kan tijdens een verder succesvolle Firebase-popupflow desondanks
+  `Cross-Origin-Opener-Policy policy would block the window.closed call`
+  rapporteren. Firebase Auth pollt intern periodiek `popup.window.closed` om
+  annulering te detecteren; de applicatie zelf leest of sluit browservensters
+  niet. Productie gebruikt `same-origin-allow-popups`, terwijl de door Firebase
+  gehoste gereserveerde `__/auth/handler`- en `__/auth/iframe`-responses geen
+  aanvullende COOP-, COEP- of CSP-header opleggen. Wanneer de popup-Promise een
+  Firebase-resultaat of een concrete Auth-fout retourneert en accountkoppeling
+  slaagt, behandelen we deze Chromium-consolemelding daarom als niet-functionele
+  browser/SDK-diagnostiek. We verlagen securityheaders niet en voegen geen
+  popup-workaround toe om alleen deze melding te verbergen.
 - Cloudflare Access en Cloudflare RBAC worden niet voor spelers gebruikt.
 - Een Cloudflare Worker in TypeScript beheert de publieke HTTPS-API,
   Firebase-tokenvalidatie en WebSocket-upgrades.
