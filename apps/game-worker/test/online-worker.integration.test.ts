@@ -1,7 +1,17 @@
 import type { GameCommand, ServerEvent } from "@mtg/game-protocol"
 import { parsePersonalSnapshot, parseServerEvent } from "@mtg/game-protocol"
 import { GameDurableObject } from "../src/game-durable-object"
+import {
+  GAME_COMMAND_LIMIT,
+  MAX_GAME_COMMAND_MESSAGE_BYTES,
+  MAX_COUNTER_TYPES_PER_CARD,
+  MAX_SERIALIZED_GAME_STATE_BYTES,
+  MemoryBroadcastBudget,
+  MemoryCommandRateLimiter,
+} from "../src/game-security"
+import type { BroadcastBudget } from "../src/game-security"
 import type { OnlineGameSeed } from "../src/game-server-adapter"
+import type { StoredGameRecord } from "../src/game-snapshot-store"
 import type {
   DurableObjectState,
   Env,
@@ -82,7 +92,11 @@ class LocalDurableObjectEnvironment {
   readonly sockets: LocalSocket[] = []
   readonly durableObject: GameDurableObject
 
-  constructor(readonly sql = new LocalGameSqlStorage()) {
+  constructor(
+    readonly sql = new LocalGameSqlStorage(),
+    now: () => number = Date.now,
+    broadcastBudget: BroadcastBudget = new MemoryBroadcastBudget(),
+  ) {
     const state: DurableObjectState = {
       storage: {
         sql,
@@ -97,7 +111,14 @@ class LocalDurableObjectEnvironment {
       },
       getWebSockets: () => this.sockets,
     }
-    this.durableObject = new GameDurableObject(state, {} as Env)
+    this.durableObject = new GameDurableObject(
+      state,
+      {} as Env,
+      undefined,
+      new MemoryCommandRateLimiter(),
+      now,
+      broadcastBudget,
+    )
   }
 
   connect(session: GameSession) {
@@ -110,6 +131,20 @@ class LocalDurableObjectEnvironment {
     const index = this.sockets.indexOf(socket)
     if (index >= 0) this.sockets.splice(index, 1)
     socket.close(1000, "Test disconnect")
+  }
+
+  socketUpgrade(session: GameSession) {
+    const headers = new Headers({
+      Upgrade: "websocket",
+      "X-Game-Id": session.gameId,
+      "X-Verified-Uid": session.uid,
+      "X-Connection-Role": session.role,
+      "X-Is-Host": String(session.isHost),
+    })
+    if (session.playerId) headers.set("X-Player-Id", session.playerId)
+    return this.durableObject.fetch(
+      new Request("https://game.internal/socket", { headers }),
+    )
   }
 
   async reconnect(session: GameSession) {
@@ -288,6 +323,100 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     throw new Error("De startspelerworp is niet binnen 100 worpen afgerond.")
   }
 
+  test("telt ook ongeldige commandspam en isoleert de allowance per UID", async () => {
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+    const attacker = playerSockets[0]!
+    for (let attempt = 0; attempt < GAME_COMMAND_LIMIT; attempt += 1) {
+      await runtime.durableObject.webSocketMessage(attacker, "{}")
+    }
+    await runtime.durableObject.webSocketMessage(attacker, "{}")
+    expect(attacker.events().at(-1)).toMatchObject({
+      type: "ERROR",
+      error: { code: "GAME_COMMAND_RATE_LIMITED" },
+    })
+
+    await runtime.durableObject.webSocketMessage(playerSockets[1]!, "{}")
+    expect(playerSockets[1]!.events().at(-1)).toMatchObject({
+      type: "ERROR",
+      error: { code: "INVALID_COMMAND" },
+    })
+    warning.mockRestore()
+  })
+
+  test("begrensd ook commandachtige spectatorberichten per UID", async () => {
+    spectatorSocket.clearMessages()
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+    for (let attempt = 0; attempt < GAME_COMMAND_LIMIT; attempt += 1) {
+      await runtime.durableObject.webSocketMessage(spectatorSocket, "{}")
+    }
+    expect(spectatorSocket.events().at(-1)).toMatchObject({
+      type: "ERROR",
+      error: { code: "FORBIDDEN" },
+    })
+    await runtime.durableObject.webSocketMessage(spectatorSocket, "{}")
+    expect(spectatorSocket.events().at(-1)).toMatchObject({
+      type: "ERROR",
+      error: { code: "GAME_COMMAND_RATE_LIMITED" },
+    })
+    warning.mockRestore()
+  })
+
+  test("wijst te grote string- en binaryframes vóór parsing af en telt ze", async () => {
+    const socket = playerSockets[0]!
+    socket.clearMessages()
+    const oversizedString = "{".padEnd(MAX_GAME_COMMAND_MESSAGE_BYTES + 1, "x")
+    await runtime.durableObject.webSocketMessage(socket, oversizedString)
+    await runtime.durableObject.webSocketMessage(
+      socket,
+      new Uint8Array(MAX_GAME_COMMAND_MESSAGE_BYTES + 1).buffer,
+    )
+    expect(
+      socket
+        .events()
+        .map(event => (event.type === "ERROR" ? event.error.code : event.type)),
+    ).toEqual(["INVALID_COMMAND", "INVALID_COMMAND"])
+    expect((await runtime.snapshot(playerSession(0))).version).toBe(0)
+
+    for (let attempt = 2; attempt < GAME_COMMAND_LIMIT; attempt += 1) {
+      await runtime.durableObject.webSocketMessage(socket, "{}")
+    }
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+    await runtime.durableObject.webSocketMessage(socket, "{}")
+    expect(socket.events().at(-1)).toMatchObject({
+      type: "ERROR",
+      error: { code: "GAME_COMMAND_RATE_LIMITED" },
+    })
+    warning.mockRestore()
+  })
+
+  test("weigert een derde actieve socket via de echte upgradeflow", async () => {
+    const second = runtime.connect(playerSession(0))
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+    const rejected = await runtime.socketUpgrade(playerSession(0))
+    expect(rejected.status).toBe(429)
+    await expect(rejected.json()).resolves.toMatchObject({
+      code: "WEBSOCKET_CONNECTION_LIMIT_REACHED",
+    })
+    expect(warning).toHaveBeenCalledWith(
+      "WebSocket connection limit exceeded.",
+      expect.objectContaining({
+        gameId,
+        uid: playerSession(0).uid,
+      }),
+    )
+    runtime.disconnect(second)
+    expect((await runtime.socketUpgrade(playerSession(0))).status).toBe(501)
+    warning.mockRestore()
+  })
+
   const keepAllOpeningHands = async (): Promise<number> => {
     let version = await completeFirstPlayerRoll()
     for (let index = 0; index < playerIds.length; index += 1) {
@@ -302,6 +431,130 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     }
     return version
   }
+
+  test("weigert stategroei atomair zonder snapshotwrite of broadcast", async () => {
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+    let version = await keepAllOpeningHands()
+    const hand = (await runtime.snapshot(playerSession(0))).privateView?.hand
+    const instanceId = hand?.[0]?.instanceId
+    if (!instanceId) throw new Error("Testkaart in hand ontbreekt.")
+    version += 1
+    expectAccepted(
+      await runtime.command(
+        playerSession(0),
+        command("MOVE_CARD", version - 1, {
+          instanceId,
+          zone: "battlefield",
+          position: { x: 0.5, y: 0.5, z: 1 },
+        }),
+      ),
+      version,
+    )
+
+    const persisted = JSON.parse(runtime.sql.payload!) as StoredGameRecord
+    const card = persisted.game.cardsById[instanceId]!
+    card.counters = Object.fromEntries(
+      Array.from({ length: MAX_COUNTER_TYPES_PER_CARD }, (_, index) => [
+        `counter-${index}`,
+        1,
+      ]),
+    )
+    runtime.sql.payload = JSON.stringify(persisted)
+    const writeCount = runtime.sql.writeCount
+    runtime = new LocalDurableObjectEnvironment(runtime.sql)
+    const socket = runtime.connect(playerSession(0))
+
+    const rejected = await runtime.command(
+      playerSession(0),
+      command("SET_COUNTER", version, {
+        instanceId,
+        counter: "one-too-many",
+        value: 1,
+      }),
+    )
+    expect(rejected).toMatchObject({
+      type: "ERROR",
+      error: {
+        code: "GAME_STATE_LIMIT_REACHED",
+        currentVersion: version,
+      },
+    })
+    expect(runtime.sql.writeCount).toBe(writeCount)
+    expect((await runtime.snapshot(playerSession(0))).version).toBe(version)
+    expect(socket.messages).toHaveLength(0)
+    warning.mockRestore()
+  })
+
+  test("persistenteert of broadcast geen kandidaat boven de bytelimiet", async () => {
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+    const version = await keepAllOpeningHands()
+    const persisted = JSON.parse(runtime.sql.payload!) as StoredGameRecord
+    const baseline = new TextEncoder().encode(
+      JSON.stringify(persisted),
+    ).byteLength
+    persisted.game.title = "x".repeat(
+      MAX_SERIALIZED_GAME_STATE_BYTES -
+        baseline -
+        1 +
+        persisted.game.title.length,
+    )
+    runtime.sql.payload = JSON.stringify(persisted)
+    expect(new TextEncoder().encode(runtime.sql.payload).byteLength).toBe(
+      MAX_SERIALIZED_GAME_STATE_BYTES - 1,
+    )
+    const writeCount = runtime.sql.writeCount
+    runtime = new LocalDurableObjectEnvironment(runtime.sql)
+    const socket = runtime.connect(playerSession(0))
+
+    const rejected = await runtime.command(
+      playerSession(0),
+      command("CHANGE_LIFE", version, { delta: -1 }),
+    )
+    expect(rejected).toMatchObject({
+      type: "ERROR",
+      error: { code: "GAME_STATE_LIMIT_REACHED", currentVersion: version },
+    })
+    expect(runtime.sql.writeCount).toBe(writeCount)
+    expect(new TextEncoder().encode(runtime.sql.payload!).byteLength).toBe(
+      MAX_SERIALIZED_GAME_STATE_BYTES - 1,
+    )
+    expect(socket.messages).toHaveLength(0)
+    warning.mockRestore()
+  })
+
+  test("weigert een command atomair wanneer het gamebroadcastbudget op is", async () => {
+    const version = await keepAllOpeningHands()
+    const writeCount = runtime.sql.writeCount
+    runtime = new LocalDurableObjectEnvironment(
+      runtime.sql,
+      Date.now,
+      new MemoryBroadcastBudget(0),
+    )
+    const socket = runtime.connect(playerSession(0))
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+
+    const rejected = await runtime.command(
+      playerSession(0),
+      command("CHANGE_LIFE", version, { delta: -1 }),
+    )
+    expect(rejected).toMatchObject({
+      type: "ERROR",
+      error: {
+        code: "GAME_BROADCAST_RATE_LIMITED",
+        currentVersion: version,
+      },
+    })
+    expect(runtime.sql.writeCount).toBe(writeCount)
+    expect((await runtime.snapshot(playerSession(0))).version).toBe(version)
+    expect(socket.messages).toHaveLength(0)
+    warning.mockRestore()
+  })
 
   test("serialiseert per verbinding zonder verborgen tegenstanderdata", async () => {
     const playerA = await runtime.snapshot(playerSession(0))
@@ -343,6 +596,21 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
         ? spectatorBroadcast.privateView
         : undefined,
     ).toBeNull()
+  })
+
+  test("synchroniseert twee sockets van één UID met dezelfde private view", async () => {
+    const secondSocket = runtime.connect(playerSession(0))
+    playerSockets[0]!.clearMessages()
+    secondSocket.clearMessages()
+    const version = await completeFirstPlayerRoll()
+    const firstSnapshot = playerSockets[0]!.messages.at(-1)
+    const secondSnapshot = secondSocket.messages.at(-1)
+    expect(firstSnapshot).toBe(secondSnapshot)
+    expect(parseServerEvent(JSON.parse(firstSnapshot!))).toMatchObject({
+      type: "PERSONAL_SNAPSHOT",
+      version,
+      privateView: { playerId: "seat-a" },
+    })
   })
 
   test("genereert worpen server-side en bewaart dezelfde openbare rollstate bij reconnect", async () => {

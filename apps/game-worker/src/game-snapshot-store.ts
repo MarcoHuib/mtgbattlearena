@@ -39,7 +39,7 @@ const storedGameRecordSchema = z
 
 export type GameSnapshotStore = {
   load(): StoredGameRecord | null
-  save(record: StoredGameRecord): void
+  save(record: StoredGameRecord, serialized?: string): void
 }
 
 export class SqliteGameSnapshotStore implements GameSnapshotStore {
@@ -70,7 +70,7 @@ export class SqliteGameSnapshotStore implements GameSnapshotStore {
     ) as unknown as StoredGameRecord
   }
 
-  save(record: StoredGameRecord) {
+  save(record: StoredGameRecord, serialized = JSON.stringify(record)) {
     this.sql.exec(
       `INSERT INTO game_snapshots
         (singleton, schema_version, state_version, payload, updated_at)
@@ -82,7 +82,7 @@ export class SqliteGameSnapshotStore implements GameSnapshotStore {
          updated_at = excluded.updated_at`,
       record.game.schemaVersion,
       record.game.version,
-      JSON.stringify(record),
+      serialized,
       record.game.updatedAt,
     )
   }
