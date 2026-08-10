@@ -28,7 +28,10 @@ const firebaseEnvironmentKeys = [
 
 type FirebaseEnvironmentKey = (typeof firebaseEnvironmentKeys)[number]
 type FirebaseEnvironment = Partial<
-  Record<FirebaseEnvironmentKey, string | undefined>
+  Record<
+    FirebaseEnvironmentKey | "VITE_FIREBASE_MEASUREMENT_ID",
+    string | undefined
+  >
 >
 
 const firebaseAuthMessages: Record<string, string> = {
@@ -184,11 +187,14 @@ export const readFirebaseConfig = (
       authDomain: values.VITE_FIREBASE_AUTH_DOMAIN,
       projectId: values.VITE_FIREBASE_PROJECT_ID,
       appId: values.VITE_FIREBASE_APP_ID,
+      ...(environment.VITE_FIREBASE_MEASUREMENT_ID?.trim()
+        ? { measurementId: environment.VITE_FIREBASE_MEASUREMENT_ID.trim() }
+        : {}),
     },
   }
 }
 
-const firebaseAppName = "mtg-battle-mode-online"
+export const firebaseAppName = "mtg-battle-mode-online"
 
 export const createFirebaseAuthPort = (
   options: FirebaseOptions,

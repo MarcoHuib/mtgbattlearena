@@ -40,5 +40,6 @@ test("ontbrekende configuratie blijft leeg voor local-first gebruik", () => {
     firebaseAuthDomain: "",
     firebaseProjectId: "",
     firebaseAppId: "",
+    firebaseMeasurementId: "",
   })
 })

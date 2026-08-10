@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from "./app/hooks"
 import { navigate, useAppRoute } from "./app/router"
 import { hydrateApplication } from "./app/thunks"
 import { UpdatePrompt } from "./components/UpdatePrompt"
+import { AnalyticsConsent } from "./components/AnalyticsConsent"
 import { BattleScreen } from "./features/battle/BattleScreen"
 import { closeBattle } from "./features/game/gameSlice"
 import { DecksScreen } from "./features/menu/DecksScreen"
@@ -175,6 +176,7 @@ export const App = ({ services = defaultServices }: AppProps) => {
         </div>
       ) : null}
       <UpdatePrompt />
+      <AnalyticsConsent route={route} />
     </ArenaStatusProvider>
   )
 }

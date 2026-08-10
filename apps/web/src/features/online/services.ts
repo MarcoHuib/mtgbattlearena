@@ -662,6 +662,7 @@ export const createApplicationServices = (): ApplicationServices => {
       VITE_FIREBASE_AUTH_DOMAIN: runtimeConfig.firebaseAuthDomain,
       VITE_FIREBASE_PROJECT_ID: runtimeConfig.firebaseProjectId,
       VITE_FIREBASE_APP_ID: runtimeConfig.firebaseAppId,
+      VITE_FIREBASE_MEASUREMENT_ID: runtimeConfig.firebaseMeasurementId,
     })
     if (!firebaseConfig.configured) {
       const auth = new UnavailableAuthService(

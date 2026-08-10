@@ -4087,6 +4087,53 @@ html.card-pointer-active .card.card--tapped {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.analytics-consent {
+  position: fixed;
+  z-index: 1000;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  max-width: 70rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+  color: var(--color-text, #f7f1df);
+  background: #102b29;
+  border: 1px solid rgb(216 180 98 / 55%);
+  border-radius: 1rem;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 45%);
+}
+
+.analytics-consent h2,
+.analytics-consent p {
+  margin: 0;
+}
+
+.analytics-consent p {
+  margin-top: 0.4rem;
+  color: rgb(247 241 223 / 78%);
+}
+
+.analytics-consent__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .analytics-consent {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analytics-consent__actions {
+    justify-content: flex-end;
+  }
+}
+
 .mode-badge {
   display: inline-flex;
   width: fit-content;

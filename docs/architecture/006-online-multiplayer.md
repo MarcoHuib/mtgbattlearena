@@ -49,6 +49,13 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
   gereserveerde `/__/`-namespace uit. Daardoor bereiken custom-domain
   OAuth-popups altijd de echte `/__/auth/handler` en worden ze niet door een
   actieve service worker vervangen met de gecachte React-appshell.
+- Firebase Analytics wordt alleen dynamisch geladen nadat de bezoeker
+  analytische cookies expliciet toestaat. De keuze staat lokaal onder
+  `mtg-analytics-consent-v1`, is via Instellingen intrekbaar en staat los van
+  Firebase Authentication. Analyticsopslag kan worden toegestaan;
+  advertentieopslag, advertentie-userdata en personalisatie blijven altijd
+  geweigerd. SPA-routewisselingen sturen na toestemming een handmatige
+  `page_view`; vóór toestemming wordt de Analytics SDK niet geladen.
 - Cloudflare Access en Cloudflare RBAC worden niet voor spelers gebruikt.
 - Een Cloudflare Worker in TypeScript beheert de publieke HTTPS-API,
   Firebase-tokenvalidatie en WebSocket-upgrades.

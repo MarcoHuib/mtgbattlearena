@@ -18,6 +18,7 @@ const requiredEnvironment = {
   FIREBASE_AUTH_DOMAIN: readRequiredEnvironment("FIREBASE_AUTH_DOMAIN"),
   FIREBASE_PROJECT_ID: readRequiredEnvironment("FIREBASE_PROJECT_ID"),
   FIREBASE_APP_ID: readRequiredEnvironment("FIREBASE_APP_ID"),
+  FIREBASE_MEASUREMENT_ID: readRequiredEnvironment("FIREBASE_MEASUREMENT_ID"),
   RUNTIME_CONFIG_OUTPUT: readRequiredEnvironment("RUNTIME_CONFIG_OUTPUT"),
 }
 
@@ -59,6 +60,7 @@ const config = {
   firebaseAuthDomain: requiredEnvironment.FIREBASE_AUTH_DOMAIN,
   firebaseProjectId: requiredEnvironment.FIREBASE_PROJECT_ID,
   firebaseAppId: requiredEnvironment.FIREBASE_APP_ID,
+  firebaseMeasurementId: requiredEnvironment.FIREBASE_MEASUREMENT_ID,
 }
 const destination = resolve(requiredEnvironment.RUNTIME_CONFIG_OUTPUT)
 await mkdir(dirname(destination), { recursive: true })

@@ -156,6 +156,7 @@ omgevingen:
 | `FIREBASE_API_KEY`     | publieke gedeelde Firebase-webconfig |
 | `FIREBASE_PROJECT_ID`  | gedeeld Firebaseproject-ID           |
 | `FIREBASE_APP_ID`      | publieke gedeelde Firebase-webconfig |
+| `FIREBASE_MEASUREMENT_ID` | publieke Analytics measurement-ID |
 
 Configureer daarnaast deze GitHub Environment Variables per omgeving:
 

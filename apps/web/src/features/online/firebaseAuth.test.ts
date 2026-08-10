@@ -12,6 +12,7 @@ describe("Firebase webconfig", () => {
         VITE_FIREBASE_AUTH_DOMAIN: "project.firebaseapp.com",
         VITE_FIREBASE_PROJECT_ID: "project",
         VITE_FIREBASE_APP_ID: "app-id",
+        VITE_FIREBASE_MEASUREMENT_ID: "G-TEST123",
       }),
     ).toEqual({
       configured: true,
@@ -20,6 +21,7 @@ describe("Firebase webconfig", () => {
         authDomain: "project.firebaseapp.com",
         projectId: "project",
         appId: "app-id",
+        measurementId: "G-TEST123",
       },
     })
   })

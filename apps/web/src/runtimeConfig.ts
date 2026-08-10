@@ -8,6 +8,7 @@ export type RuntimeConfig = {
   firebaseAuthDomain: string
   firebaseProjectId: string
   firebaseAppId: string
+  firebaseMeasurementId: string
 }
 
 type RuntimeConfigInput = Partial<Record<keyof RuntimeConfig, unknown>>
@@ -21,6 +22,7 @@ type BuildEnvironment = Partial<
     | "VITE_FIREBASE_AUTH_DOMAIN"
     | "VITE_FIREBASE_PROJECT_ID"
     | "VITE_FIREBASE_APP_ID"
+    | "VITE_FIREBASE_MEASUREMENT_ID"
   >
 >
 
@@ -58,6 +60,9 @@ export const resolveRuntimeConfig = (
   firebaseAppId:
     stringValue(runtime?.firebaseAppId) ||
     stringValue(buildEnvironment.VITE_FIREBASE_APP_ID),
+  firebaseMeasurementId:
+    stringValue(runtime?.firebaseMeasurementId) ||
+    stringValue(buildEnvironment.VITE_FIREBASE_MEASUREMENT_ID),
 })
 
 const localBuildEnvironment = import.meta.env.DEV
@@ -69,6 +74,8 @@ const localBuildEnvironment = import.meta.env.DEV
       VITE_FIREBASE_AUTH_DOMAIN: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
       VITE_FIREBASE_PROJECT_ID: import.meta.env.VITE_FIREBASE_PROJECT_ID,
       VITE_FIREBASE_APP_ID: import.meta.env.VITE_FIREBASE_APP_ID,
+      VITE_FIREBASE_MEASUREMENT_ID:
+        import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
     }
   : {}
 

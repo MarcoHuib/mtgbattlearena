@@ -268,6 +268,7 @@ jobs:
           FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          FIREBASE_MEASUREMENT_ID: ${{ vars.FIREBASE_MEASUREMENT_ID }}
           RUNTIME_CONFIG_OUTPUT: apps/web/dist/runtime-config.js
         run: node scripts/write-runtime-config.mjs
       - name: Deploy fixed Beta Hosting site
@@ -454,6 +455,7 @@ jobs:
           FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          FIREBASE_MEASUREMENT_ID: ${{ vars.FIREBASE_MEASUREMENT_ID }}
           RUNTIME_CONFIG_OUTPUT: apps/web/dist/runtime-config.js
         run: node scripts/write-runtime-config.mjs
       - name: Deploy fixed Production Hosting site

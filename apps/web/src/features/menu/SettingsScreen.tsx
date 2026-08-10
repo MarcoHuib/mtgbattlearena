@@ -1,8 +1,11 @@
 import { AppShell } from "../../components/AppShell"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
+import { setAnalyticsConsent } from "../../analytics"
+import { useAnalyticsConsent } from "../../components/AnalyticsConsent"
 
 export const SettingsScreen = () => {
   const online = useOnlineStatus()
+  const analyticsConsent = useAnalyticsConsent()
 
   return (
     <AppShell>
@@ -38,6 +41,29 @@ export const SettingsScreen = () => {
               Offline autosave, deck snapshots en offlinepakketten gebruiken
               IndexedDB.
             </p>
+          </div>
+          <div className="content-card">
+            <h2>Analytische cookies</h2>
+            <p>
+              {analyticsConsent === "granted"
+                ? "Firebase Analytics is toegestaan."
+                : analyticsConsent === "denied"
+                  ? "Firebase Analytics is uitgeschakeld."
+                  : "Je hebt nog geen keuze gemaakt."}
+            </p>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() =>
+                void setAnalyticsConsent(
+                  analyticsConsent === "granted" ? "denied" : "granted",
+                )
+              }
+            >
+              {analyticsConsent === "granted"
+                ? "Toestemming intrekken"
+                : "Analytics toestaan"}
+            </button>
           </div>
         </div>
       </section>
