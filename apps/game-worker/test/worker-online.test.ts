@@ -5,6 +5,7 @@ import {
 } from "../src/auth"
 import worker, { isOriginAllowed } from "../src/index"
 import {
+  hashSocketTicket,
   MemorySocketTicketRepository,
   SocketTicketService,
 } from "../src/tickets"
@@ -62,10 +63,8 @@ test("Firebase-certificaten worden met de globale fetch-context opgehaald", asyn
 
 test("socket-ticket is kortlevend en exact eenmaal te gebruiken", async () => {
   let now = Date.parse("2026-07-29T18:00:00.000Z")
-  const service = new SocketTicketService(
-    new MemorySocketTicketRepository(),
-    () => now,
-  )
+  const repository = new MemorySocketTicketRepository()
+  const service = new SocketTicketService(repository, () => now)
   const issued = await service.issue({
     gameId: "game",
     uid: "verified-user",
@@ -79,6 +78,7 @@ test("socket-ticket is kortlevend en exact eenmaal te gebruiken", async () => {
     uid: "verified-user",
     playerId: "server-assigned-player",
   })
+  expect(repository.has(await hashSocketTicket(issued.ticket))).toBe(false)
   expect(await service.consume(issued.ticket)).toBeNull()
 
   const expired = await service.issue({
@@ -90,6 +90,73 @@ test("socket-ticket is kortlevend en exact eenmaal te gebruiken", async () => {
   })
   now += 31_000
   expect(await service.consume(expired.ticket)).toBeNull()
+  expect(repository.size).toBe(0)
+  await expect(repository.cleanup(now)).resolves.toBe(0)
+  await expect(repository.cleanup(now)).resolves.toBe(0)
+})
+
+test("begrenst ongebruikte socket-tickets per gebruiker en game", async () => {
+  const service = new SocketTicketService(new MemorySocketTicketRepository())
+  const session = {
+    gameId: "quota-game",
+    uid: "verified-user",
+    playerId: "player",
+    role: "player" as const,
+    isHost: false,
+  }
+
+  await expect(service.issue(session)).resolves.toHaveProperty("ticket")
+  await expect(service.issue(session)).resolves.toHaveProperty("ticket")
+  await expect(service.issue(session)).rejects.toMatchObject({
+    reason: "outstanding-limit",
+  })
+  await expect(
+    service.issue({ ...session, gameId: "other-game" }),
+  ).resolves.toHaveProperty("ticket")
+})
+
+test("begrenst ticketuitgiftepogingen tot tien per minuut", async () => {
+  let now = Date.parse("2026-07-29T18:00:00.000Z")
+  const repository = new MemorySocketTicketRepository()
+  const service = new SocketTicketService(repository, () => now)
+  const session = {
+    gameId: "rate-game",
+    uid: "verified-user",
+    playerId: "player",
+    role: "player" as const,
+    isHost: false,
+  }
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const issued = await service.issue(session)
+    await service.consume(issued.ticket)
+  }
+  await expect(service.issue(session)).rejects.toMatchObject({
+    reason: "rate-limit",
+  })
+
+  now += 60_000
+  await expect(service.issue(session)).resolves.toHaveProperty("ticket")
+})
+
+test("gelijktijdige consumptie kan maar eenmaal slagen", async () => {
+  const repository = new MemorySocketTicketRepository()
+  const service = new SocketTicketService(repository)
+  const issued = await service.issue({
+    gameId: "race-game",
+    uid: "verified-user",
+    playerId: "player",
+    role: "player",
+    isHost: false,
+  })
+
+  const results = await Promise.all([
+    service.consume(issued.ticket),
+    service.consume(issued.ticket),
+  ])
+  expect(results.filter(Boolean)).toHaveLength(1)
+  expect(results.filter(result => result === null)).toHaveLength(1)
+  expect(repository.size).toBe(0)
 })
 
 test("CORS accepteert uitsluitend exact geconfigureerde origins", () => {

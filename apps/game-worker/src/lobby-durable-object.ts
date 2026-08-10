@@ -15,6 +15,7 @@ import {
 } from "./lobby-storage"
 import {
   SocketTicketService,
+  SocketTicketIssueError,
   SqliteSocketTicketRepository,
   type SocketTicketRepository,
 } from "./tickets"
@@ -288,7 +289,24 @@ export class LobbyDurableObject extends DurableObject<Env> {
     if (!session) {
       return failure(403, "FORBIDDEN", "Je bent geen deelnemer aan deze game.")
     }
-    return { ok: true, value: await this.tickets.issue(session) }
+    try {
+      return { ok: true, value: await this.tickets.issue(session) }
+    } catch (caught) {
+      if (caught instanceof SocketTicketIssueError) {
+        return caught.reason === "rate-limit"
+          ? failure(
+              429,
+              "TICKET_RATE_LIMITED",
+              "Te veel socket-ticketaanvragen. Probeer het over een minuut opnieuw.",
+            )
+          : failure(
+              409,
+              "TICKET_LIMIT_REACHED",
+              "Er zijn al twee ongebruikte socket-tickets voor deze game.",
+            )
+      }
+      throw caught
+    }
   }
 
   consumeSocketTicket(ticket: string) {

@@ -102,6 +102,16 @@ markeert de lobby als `finished`, het Game Durable Object stuurt
 `GAME_ABORTED` naar alle verbonden spelers en sluit daarna de sockets. Nieuwe
 socket-tickets en reconnects voor die game worden vervolgens geweigerd.
 
+Socket-tickets blijven uitsluitend als SHA-256-hash in SQLite staan. Een
+geldige consumptie leest en verwijdert de rij in dezelfde synchrone
+SQLite-transactie; een tweede consumptie kan de rij daardoor niet meer vinden.
+Verlopen tickets en eventuele legacy-rijen met `used_at` worden opportunistisch
+opgeruimd, maximaal eenmaal per 30 seconden per actief Durable Object. Dezelfde
+cleanup verwijdert verlopen rate-limitwindows. Uitgifte is per geverifieerde
+UID/game begrensd op twee nog geldige tickets en tien uitgiftepogingen per
+minuut. De quota- en rate-limitcontrole en het opslaan van een nieuw ticket
+gebeuren samen atomair.
+
 De volledige speeltafelpresentatie en alle gebruikersacties worden sinds
 [ADR 007](007-shared-battle-runtime.md) door offline en online gedeeld. Alleen
 de lokale Redux-adapter en de persoonlijke-snapshot/commandadapter verschillen.
