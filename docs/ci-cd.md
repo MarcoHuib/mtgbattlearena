@@ -180,9 +180,16 @@ Pas de deployment branch policy van GitHub Environment `staging` aan: alleen
 | --------------- | -------------------------------- | ------------------------------------ |
 | Import Worker   | `mtg-battle-mode-import-staging` | `mtg-battle-mode-import`             |
 | Game Worker     | `mtg-battle-mode-online-staging` | `mtg-battle-mode-online`             |
-| Wrangler        | `--env staging`                  | standaardconfiguratie zonder `--env` |
+| Wrangler        | `--env staging`                  | top-levelconfiguratie via `--env=""` |
 | Import binding  | staging Import Worker            | Production Import Worker             |
 | Durable Objects | eigen staging namespaces         | Production namespaces                |
+
+De Import Workers hebben in beide omgevingen expliciet `workers_dev = false`
+en `preview_urls = false`. Zij hebben dus geen publiek `workers.dev`- of
+preview-adres en geen eigen publieke route. Alleen de bijbehorende Game Worker
+kan ze via de Cloudflare Service Binding `IMPORT` bereiken. De browser gebruikt
+uitsluitend de publieke Game Worker-origin uit `IMPORT_API_URL`; CORS op de
+Import Worker blijft defense-in-depth en is geen authenticatiemechanisme.
 
 Wranglerbindings en migrations blijven expliciet per environment gedefinieerd.
 De gedeelde releasebron verandert niets aan de scheiding van Lobby- en

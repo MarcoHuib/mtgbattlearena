@@ -28,6 +28,11 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
 - `api.mtgbattlearena.nl` is de publieke REST-gateway. De online Worker stuurt
   `/api/import/archidekt/*` intern via een Cloudflare service binding door naar
   de afzonderlijke import-Worker.
+- De Import Worker heeft voor zowel Production als Beta `workers_dev` en
+  preview-URL's uitgeschakeld en heeft geen publieke route. Alleen de
+  environment-specifieke `IMPORT` Service Binding kan hem bereiken; CORS geldt
+  daarbij uitsluitend als browsercompatibiliteit/defense-in-depth, niet als
+  authenticatie.
 - `ws.mtgbattlearena.nl` accepteert uitsluitend de WebSocket-upgrade. De
   API-hostnaam accepteert geen socket-upgrade en de WebSocket-hostnaam
   publiceert geen REST-routes.

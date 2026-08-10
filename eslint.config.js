@@ -123,6 +123,14 @@ const eslintConfig = config(
       globals: globals.serviceworker,
     },
   },
+  {
+    name: "import-worker-scripts",
+    files: ["apps/import-worker/scripts/**/*.mjs"],
+    extends: [configs.disableTypeChecked],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 
   prettierConfig,
 )
