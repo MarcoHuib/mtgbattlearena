@@ -3,6 +3,7 @@ import * as path from "node:path"
 import { VitePWA } from "vite-plugin-pwa"
 import { defineConfig } from "vitest/config"
 import packageJson from "./package.json" with { type: "json" }
+import { oauthPopupSecurityHeaders } from "./src/securityHeaders"
 
 export default defineConfig({
   root: import.meta.dirname,
@@ -74,6 +75,7 @@ export default defineConfig({
 
   server: {
     open: true,
+    headers: oauthPopupSecurityHeaders,
     proxy: {
       "/api/online": {
         target: "https://api.mtgbattlearena.nl",
@@ -111,6 +113,10 @@ export default defineConfig({
           path.replace(/^\/api\/import\/archidekt\/(\d+)$/, "/api/decks/$1/"),
       },
     },
+  },
+
+  preview: {
+    headers: oauthPopupSecurityHeaders,
   },
 
   build: {

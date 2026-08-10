@@ -1,13 +1,21 @@
-import { getApps, initializeApp, type FirebaseOptions } from "firebase/app"
 import {
+  FirebaseError,
+  getApps,
+  initializeApp,
+  type FirebaseOptions,
+} from "firebase/app"
+import {
+  type AuthCredential,
   createUserWithEmailAndPassword,
   getAuth,
   GoogleAuthProvider,
+  linkWithCredential,
   OAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  type User,
 } from "firebase/auth"
 import type { FirebaseAuthPort } from "./services"
 
@@ -33,6 +41,14 @@ const firebaseAuthMessages: Record<string, string> = {
     "Firebase kon niet worden bereikt. Controleer je verbinding en probeer opnieuw.",
   "auth/operation-not-allowed":
     "Deze inlogmethode staat nog niet aan in Firebase Authentication.",
+  "auth/account-exists-with-different-credential":
+    "Dit e-mailadres hoort al bij een bestaand account. Log één keer in met Google om Microsoft veilig aan hetzelfde account te koppelen.",
+  "auth/cancelled-popup-request":
+    "De eerdere inlogpoging is geannuleerd omdat een nieuwe inlogpopup werd geopend.",
+  "auth/credential-already-in-use":
+    "Dit Microsoft-account is al gekoppeld aan een ander account. Er zijn geen accounts samengevoegd.",
+  "auth/provider-already-linked":
+    "Microsoft is al aan dit account gekoppeld.",
   "auth/popup-blocked":
     "De SSO-login werd door de browser geblokkeerd. Sta pop-ups toe en probeer opnieuw.",
   "auth/popup-closed-by-user":
@@ -62,6 +78,87 @@ export const describeFirebaseAuthError = (error: unknown) => {
   return error instanceof Error && error.message
     ? error.message
     : "Inloggen is mislukt. Probeer het opnieuw."
+}
+
+const firebaseErrorCode = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : undefined
+
+export type FederatedAccountLinkOperations<UserValue, CredentialValue> = {
+  signInWithGoogle(): Promise<{ user: UserValue }>
+  signInWithMicrosoft(): Promise<{ user: UserValue }>
+  microsoftCredentialFromError(error: unknown): CredentialValue | null
+  linkWithCredential(
+    user: UserValue,
+    credential: CredentialValue,
+  ): Promise<unknown>
+}
+
+export class FederatedAccountLinker<UserValue, CredentialValue> {
+  private pendingMicrosoftCredential: CredentialValue | null = null
+
+  constructor(
+    private readonly operations: FederatedAccountLinkOperations<
+      UserValue,
+      CredentialValue
+    >,
+  ) {}
+
+  async signInWithMicrosoft() {
+    this.clearPendingCredential()
+    try {
+      await this.operations.signInWithMicrosoft()
+    } catch (error) {
+      if (
+        firebaseErrorCode(error) ===
+        "auth/account-exists-with-different-credential"
+      ) {
+        const credential =
+          this.operations.microsoftCredentialFromError(error)
+        if (credential) {
+          this.pendingMicrosoftCredential = credential
+          throw Object.assign(
+            new Error(
+              "Dit e-mailadres hoort al bij een bestaand account. Log één keer in met Google om Microsoft veilig aan hetzelfde account te koppelen.",
+            ),
+            { code: "auth/account-exists-with-different-credential" },
+          )
+        }
+      }
+      this.clearPendingCredential()
+      throw error
+    }
+  }
+
+  async signInWithGoogle() {
+    const pendingCredential = this.pendingMicrosoftCredential
+    if (!pendingCredential) {
+      await this.operations.signInWithGoogle()
+      return
+    }
+
+    try {
+      const { user } = await this.operations.signInWithGoogle()
+      try {
+        await this.operations.linkWithCredential(user, pendingCredential)
+      } catch (error) {
+        if (firebaseErrorCode(error) !== "auth/provider-already-linked") {
+          throw error
+        }
+      }
+    } finally {
+      this.clearPendingCredential()
+    }
+  }
+
+  clearPendingCredential() {
+    this.pendingMicrosoftCredential = null
+  }
+
+  hasPendingMicrosoftCredential() {
+    return this.pendingMicrosoftCredential !== null
+  }
 }
 
 export type FirebaseConfigResult =
@@ -103,6 +200,15 @@ export const createFirebaseAuthPort = (
   googleProvider.setCustomParameters({ prompt: "select_account" })
   const microsoftProvider = new OAuthProvider("microsoft.com")
   microsoftProvider.setCustomParameters({ prompt: "select_account" })
+  const accountLinker = new FederatedAccountLinker<User, AuthCredential>({
+    signInWithGoogle: () => signInWithPopup(auth, googleProvider),
+    signInWithMicrosoft: () => signInWithPopup(auth, microsoftProvider),
+    microsoftCredentialFromError: error =>
+      error instanceof FirebaseError
+        ? OAuthProvider.credentialFromError(error)
+        : null,
+    linkWithCredential,
+  })
 
   return {
     get currentUser() {
@@ -112,18 +218,21 @@ export const createFirebaseAuthPort = (
       return onAuthStateChanged(auth, listener)
     },
     async signInWithEmail(email, password) {
+      accountLinker.clearPendingCredential()
       await signInWithEmailAndPassword(auth, email, password)
     },
     async registerWithEmail(email, password) {
+      accountLinker.clearPendingCredential()
       await createUserWithEmailAndPassword(auth, email, password)
     },
     async signInWithGoogle() {
-      await signInWithPopup(auth, googleProvider)
+      await accountLinker.signInWithGoogle()
     },
     async signInWithMicrosoft() {
-      await signInWithPopup(auth, microsoftProvider)
+      await accountLinker.signInWithMicrosoft()
     },
     async signOut() {
+      accountLinker.clearPendingCredential()
       await signOut(auth)
     },
   }

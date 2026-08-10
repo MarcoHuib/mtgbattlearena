@@ -22,6 +22,18 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
 - Firebase Authentication is de enige identity provider en verzorgt login,
   accountproviders en ID-tokens. De Worker valideert die tokens en bepaalt zelf
   alle host-, speler- en spectatorrechten.
+- Google en Microsoft mogen aan dezelfde Firebase-user worden gekoppeld. Bij
+  `account-exists-with-different-credential` bewaart de webadapter de pending
+  Microsoft-credential uitsluitend kort in geheugen, authenticeert de gebruiker
+  opnieuw met Google en roept daarna `linkWithCredential` aan op die bestaande
+  user. Daardoor blijft de bestaande Firebase-UID — en alle UID-gebonden
+  applicatiedata — behouden; koppeling gebeurt nooit alleen op basis van een
+  gelijk e-mailadres en credentials worden niet gelogd of persistent opgeslagen.
+- De weborigin stuurt in Production, Beta en lokale Vite-runs expliciet
+  `Cross-Origin-Opener-Policy: same-origin-allow-popups`. Deze COOP-variant
+  behoudt origin-isolatie voor normale navigaties maar staat de cross-origin
+  Firebase OAuth-popuprelatie toe die nodig is voor `signInWithPopup`; er zijn
+  hiervoor geen bestaande securityheaders verwijderd of afgezwakt.
 - Cloudflare Access en Cloudflare RBAC worden niet voor spelers gebruikt.
 - Een Cloudflare Worker in TypeScript beheert de publieke HTTPS-API,
   Firebase-tokenvalidatie en WebSocket-upgrades.
