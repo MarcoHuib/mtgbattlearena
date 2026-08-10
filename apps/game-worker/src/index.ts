@@ -4,6 +4,11 @@ import {
   parseGameCommand,
 } from "@mtg/game-protocol"
 import { FirebaseTokenVerifier, readBearerToken } from "./auth"
+import {
+  APP_CHECK_HEADER,
+  FirebaseAppCheckVerifier,
+  parseAllowedAppIds,
+} from "./app-check"
 import { GameDurableObject } from "./game-durable-object"
 import { LobbyDurableObject } from "./lobby-durable-object"
 import type {
@@ -37,6 +42,9 @@ const ticketRequestSchema = z
   .strict()
 
 let verifier: { projectId: string; instance: FirebaseTokenVerifier } | undefined
+let appCheckVerifier:
+  | { configuration: string; instance: FirebaseAppCheckVerifier }
+  | undefined
 
 const getVerifier = (env: Env) => {
   if (!env.FIREBASE_PROJECT_ID) throw new Error("AUTH_NOT_CONFIGURED")
@@ -47,6 +55,55 @@ const getVerifier = (env: Env) => {
     }
   }
   return verifier.instance
+}
+
+export type AppCheckEnforcementMode = "off" | "monitor" | "enforce"
+
+export const readAppCheckEnforcementMode = (
+  configured?: string,
+): AppCheckEnforcementMode => {
+  if (!configured) return "off"
+  if (["off", "monitor", "enforce"].includes(configured)) {
+    return configured as AppCheckEnforcementMode
+  }
+  return "enforce"
+}
+
+const getAppCheckVerifier = (env: Env) => {
+  const projectNumber = env.FIREBASE_PROJECT_NUMBER?.trim()
+  const allowedAppIds = parseAllowedAppIds(env.FIREBASE_ALLOWED_APP_IDS)
+  if (!projectNumber || allowedAppIds.size === 0) {
+    throw new Error("APP_CHECK_NOT_CONFIGURED")
+  }
+  const configuration = `${projectNumber}:${[...allowedAppIds].sort().join(",")}`
+  if (appCheckVerifier?.configuration !== configuration) {
+    appCheckVerifier = {
+      configuration,
+      instance: new FirebaseAppCheckVerifier(projectNumber, allowedAppIds),
+    }
+  }
+  return appCheckVerifier.instance
+}
+
+const requireAppCheck = async (request: Request, env: Env) => {
+  const mode = readAppCheckEnforcementMode(env.APP_CHECK_ENFORCEMENT)
+  if (mode === "off") return
+  const configuredEnvironment = env.APP_ENV?.trim()
+  const result = await getAppCheckVerifier(env).verify(
+    request.headers.get(APP_CHECK_HEADER),
+  )
+  console.log("Firebase App Check verification.", {
+    event: result.valid ? "app_check_valid" : "app_check_invalid",
+    failureReason: result.valid ? undefined : result.reason,
+    environment: configuredEnvironment ?? "unknown",
+    route: new URL(request.url).pathname,
+    requestId: request.headers.get("cf-ray") ?? undefined,
+    authPresent: request.headers.has("Authorization"),
+    enforcementMode: mode,
+  })
+  if (!result.valid && mode === "enforce") {
+    throw new Error("APP_CHECK_REQUIRED")
+  }
 }
 
 const json = (body: unknown, status = 200, headers?: HeadersInit) => {
@@ -176,10 +233,14 @@ const routeRequest = async (request: Request, env: Env) => {
   }
 
   if (url.pathname.startsWith("/api/import/archidekt")) {
+    // Card images are loaded by native <img> requests, which cannot attach a
+    // custom App Check header. The image endpoint remains narrowly constrained
+    // by its UUID/hash schema, upstream allowlist, response limit and cache.
+    if (!url.pathname.startsWith("/api/import/archidekt/image/")) {
+      await requireAppCheck(request, env)
+    }
     return env.IMPORT.fetch(request)
   }
-
-  const lobby = env.LOBBY.getByName("global")
 
   if (request.method === "GET" && url.pathname === "/api/online/health") {
     return json({
@@ -188,10 +249,13 @@ const routeRequest = async (request: Request, env: Env) => {
     })
   }
 
+  const lobby = env.LOBBY.getByName("global")
+
   if (request.method === "GET" && url.pathname === "/api/online/lobbies") {
     const identity = request.headers.has("Authorization")
       ? await authenticate(request, env)
       : null
+    await requireAppCheck(request, env)
     return json(
       await lobby.listPublicLobbies(identity?.uid),
       200,
@@ -201,6 +265,7 @@ const routeRequest = async (request: Request, env: Env) => {
 
   if (request.method === "POST" && url.pathname === "/api/online/lobbies") {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const input = createLobbySchema.parse(await readJson(request))
     return resultResponse(await lobby.createLobby(input, identity), 201)
   }
@@ -210,6 +275,7 @@ const routeRequest = async (request: Request, env: Env) => {
     url.pathname === "/api/online/lobbies/join"
   ) {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const input = joinLobbySchema.parse(await readJson(request))
     return resultResponse(
       await lobby.joinByCode(input.code, input.role, identity),
@@ -220,6 +286,7 @@ const routeRequest = async (request: Request, env: Env) => {
     /^\/api\/online\/lobbies\/([^/]+)\/(deck|start)$/.exec(url.pathname)
   if (lobbyActionRoute?.[1] && lobbyActionRoute[2]) {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const gameId = decodeURIComponent(lobbyActionRoute[1])
     if (lobbyActionRoute[2] === "deck" && request.method === "PUT") {
       const submission = onlineDeckSubmissionSchema.parse(
@@ -256,6 +323,7 @@ const routeRequest = async (request: Request, env: Env) => {
   )
   if (abortGameRoute?.[1] && request.method === "POST") {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const gameId = decodeURIComponent(abortGameRoute[1])
     const session = await lobby.getSession(gameId, identity.uid)
     if (!session?.isHost) {
@@ -273,6 +341,7 @@ const routeRequest = async (request: Request, env: Env) => {
   const lobbyRoomRoute = /^\/api\/online\/lobbies\/([^/]+)$/.exec(url.pathname)
   if (lobbyRoomRoute?.[1]) {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const gameId = decodeURIComponent(lobbyRoomRoute[1])
     if (request.method === "GET") {
       return resultResponse(await lobby.getLobbyRoom(gameId, identity))
@@ -287,6 +356,7 @@ const routeRequest = async (request: Request, env: Env) => {
     url.pathname === "/api/online/socket-ticket"
   ) {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const { gameId } = ticketRequestSchema.parse(await readJson(request))
     return resultResponse(await lobby.issueSocketTicket(gameId, identity), 201)
   }
@@ -312,6 +382,7 @@ const routeRequest = async (request: Request, env: Env) => {
   )
   if (gameRoute?.[1] && gameRoute[2]) {
     const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
     const gameId = decodeURIComponent(gameRoute[1])
     const sessionResult = await findSession(env, gameId, identity)
     if (!sessionResult.ok) return resultResponse(sessionResult)
@@ -366,7 +437,8 @@ export default {
         new Response(null, {
           status: 204,
           headers: {
-            "Access-Control-Allow-Headers": "Authorization, Content-Type",
+            "Access-Control-Allow-Headers":
+              "Authorization, Content-Type, X-Firebase-AppCheck",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
           },
         }),
@@ -422,6 +494,22 @@ export default {
             401,
             "INVALID_TOKEN",
             "Authenticatie kon niet worden gevalideerd.",
+          ),
+          request,
+          env,
+        )
+      }
+      if (
+        caught instanceof Error &&
+        ["APP_CHECK_REQUIRED", "APP_CHECK_NOT_CONFIGURED"].includes(
+          caught.message,
+        )
+      ) {
+        return withCors(
+          error(
+            403,
+            "APP_CHECK_REQUIRED",
+            "De app-integriteit kon niet worden gevalideerd.",
           ),
           request,
           env,

@@ -21,6 +21,11 @@ import {
 } from "./types"
 import { createFirebaseAuthPort, readFirebaseConfig } from "./firebaseAuth"
 import { runtimeConfig } from "../../runtimeConfig"
+import {
+  addAppCheckHeader,
+  createFirebaseAppCheckTokenProvider,
+  setAppCheckTokenProvider,
+} from "../../firebaseAppCheck"
 import { MockRealtimeConnection } from "./mockRealtime"
 import { CloudflareWebSocketConnection } from "./realtime"
 
@@ -619,6 +624,7 @@ export class CloudflareOnlineGameService implements OnlineGameService {
       headers.set("Content-Type", "application/json")
     }
     if (token) headers.set("Authorization", `Bearer ${token}`)
+    if (path !== "/api/online/health") await addAppCheckHeader(headers)
     const response = await fetch(new URL(path, this.baseUrl), {
       ...init,
       headers,
@@ -664,9 +670,14 @@ export const createApplicationServices = (): ApplicationServices => {
       VITE_FIREBASE_APP_ID: runtimeConfig.firebaseAppId,
       VITE_FIREBASE_MEASUREMENT_ID: runtimeConfig.firebaseMeasurementId,
     })
+    const appCheckSiteKey =
+      runtimeConfig.firebaseAppCheckRecaptchaEnterpriseSiteKey.trim()
     if (!firebaseConfig.configured) {
+      const missingConfiguration = [
+        ...firebaseConfig.missing,
+      ]
       const auth = new UnavailableAuthService(
-        `Firebase-configuratie ontbreekt (${firebaseConfig.missing.join(", ")}). Offline spelen blijft beschikbaar.`,
+        `Firebase-configuratie ontbreekt (${missingConfiguration.join(", ")}). Offline spelen blijft beschikbaar.`,
       )
       return {
         auth,
@@ -676,6 +687,28 @@ export const createApplicationServices = (): ApplicationServices => {
           socketUrl ?? apiUrl,
         ),
       }
+    }
+    if (!appCheckSiteKey) {
+      const auth = new UnavailableAuthService(
+        "Firebase-configuratie ontbreekt (FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY). Offline spelen blijft beschikbaar.",
+      )
+      return {
+        auth,
+        onlineGames: new CloudflareOnlineGameService(
+          apiUrl,
+          auth,
+          socketUrl ?? apiUrl,
+        ),
+      }
+    }
+    if (import.meta.env.MODE !== "test") {
+      setAppCheckTokenProvider(
+        createFirebaseAppCheckTokenProvider(
+          firebaseConfig.options,
+          appCheckSiteKey,
+          import.meta.env.DEV,
+        ),
+      )
     }
     const auth = new FirebaseAuthService(
       createFirebaseAuthPort(firebaseConfig.options),

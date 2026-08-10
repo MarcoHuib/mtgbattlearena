@@ -196,11 +196,14 @@ export const readFirebaseConfig = (
 
 export const firebaseAppName = "mtg-battle-mode-online"
 
+export const getOrInitializeFirebaseApp = (options: FirebaseOptions) =>
+  getApps().find(app => app.name === firebaseAppName) ??
+  initializeApp(options, firebaseAppName)
+
 export const createFirebaseAuthPort = (
   options: FirebaseOptions,
 ): FirebaseAuthPort => {
-  const existingApp = getApps().find(app => app.name === firebaseAppName)
-  const app = existingApp ?? initializeApp(options, firebaseAppName)
+  const app = getOrInitializeFirebaseApp(options)
   const auth = getAuth(app)
   const googleProvider = new GoogleAuthProvider()
   googleProvider.setCustomParameters({ prompt: "select_account" })

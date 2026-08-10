@@ -9,6 +9,7 @@ export type RuntimeConfig = {
   firebaseProjectId: string
   firebaseAppId: string
   firebaseMeasurementId: string
+  firebaseAppCheckRecaptchaEnterpriseSiteKey: string
 }
 
 type RuntimeConfigInput = Partial<Record<keyof RuntimeConfig, unknown>>
@@ -23,6 +24,7 @@ type BuildEnvironment = Partial<
     | "VITE_FIREBASE_PROJECT_ID"
     | "VITE_FIREBASE_APP_ID"
     | "VITE_FIREBASE_MEASUREMENT_ID"
+    | "VITE_FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY"
   >
 >
 
@@ -63,6 +65,11 @@ export const resolveRuntimeConfig = (
   firebaseMeasurementId:
     stringValue(runtime?.firebaseMeasurementId) ||
     stringValue(buildEnvironment.VITE_FIREBASE_MEASUREMENT_ID),
+  firebaseAppCheckRecaptchaEnterpriseSiteKey:
+    stringValue(runtime?.firebaseAppCheckRecaptchaEnterpriseSiteKey) ||
+    stringValue(
+      buildEnvironment.VITE_FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY,
+    ),
 })
 
 const localBuildEnvironment = import.meta.env.DEV
@@ -76,6 +83,8 @@ const localBuildEnvironment = import.meta.env.DEV
       VITE_FIREBASE_APP_ID: import.meta.env.VITE_FIREBASE_APP_ID,
       VITE_FIREBASE_MEASUREMENT_ID:
         import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+      VITE_FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY:
+        import.meta.env.VITE_FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY,
     }
   : {}
 

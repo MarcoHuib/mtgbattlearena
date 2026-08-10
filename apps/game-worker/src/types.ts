@@ -201,6 +201,10 @@ export type Env = {
   GAMES: DurableObjectNamespace<GameDurableObjectStub>
   IMPORT: WorkerService
   FIREBASE_PROJECT_ID: string
+  FIREBASE_PROJECT_NUMBER?: string
+  FIREBASE_ALLOWED_APP_IDS?: string
+  APP_CHECK_ENFORCEMENT?: string
+  APP_ENV?: string
   ALLOWED_ORIGIN?: string
   REALTIME_DEBUG?: string
 }

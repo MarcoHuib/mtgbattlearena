@@ -3,7 +3,10 @@ import {
   validateFirebaseClaims,
   type FirebaseClaims,
 } from "../src/auth"
-import worker, { isOriginAllowed } from "../src/index"
+import worker, {
+  isOriginAllowed,
+  readAppCheckEnforcementMode,
+} from "../src/index"
 import {
   hashSocketTicket,
   MemorySocketTicketRepository,
@@ -204,6 +207,90 @@ test("custom domains scheiden REST, imports en WebSockets", async () => {
     env,
   )
   expect(restOnSocket.status).toBe(404)
+})
+
+test("App Check modes zijn expliciet en onbekende waarden falen veilig", () => {
+  expect(readAppCheckEnforcementMode()).toBe("off")
+  expect(readAppCheckEnforcementMode("off")).toBe("off")
+  expect(readAppCheckEnforcementMode("monitor")).toBe("monitor")
+  expect(readAppCheckEnforcementMode("enforce")).toBe("enforce")
+  expect(readAppCheckEnforcementMode("typo")).toBe("enforce")
+})
+
+test("enforce blokkeert protected imports, monitor observeert en health blijft publiek", async () => {
+  const importFetch = vi.fn(() => Promise.resolve(Response.json({ ok: true })))
+  const baseEnv = {
+    IMPORT: { fetch: importFetch },
+    FIREBASE_PROJECT_NUMBER: "445284154827",
+    FIREBASE_ALLOWED_APP_IDS: "1:445284154827:web:production",
+    ALLOWED_ORIGIN: "https://mtgbattlearena.nl",
+  } as unknown as Env
+  const importRequest = new Request(
+    "https://api.mtgbattlearena.nl/api/import/archidekt/24190600",
+    { headers: { Origin: "https://mtgbattlearena.nl" } },
+  )
+
+  const blocked = await worker.fetch(importRequest.clone(), {
+    ...baseEnv,
+    APP_CHECK_ENFORCEMENT: "enforce",
+  })
+  expect(blocked.status).toBe(403)
+  await expect(blocked.json()).resolves.toMatchObject({
+    code: "APP_CHECK_REQUIRED",
+  })
+  expect(importFetch).not.toHaveBeenCalled()
+
+  const monitored = await worker.fetch(
+    new Request(importRequest, {
+      headers: {
+        Origin: "https://mtgbattlearena.nl",
+        "X-Firebase-AppCheck": "malformed",
+      },
+    }),
+    { ...baseEnv, APP_CHECK_ENFORCEMENT: "monitor" },
+  )
+  expect(monitored.status).toBe(200)
+  expect(importFetch).toHaveBeenCalledOnce()
+
+  const health = await worker.fetch(
+    new Request("https://api.mtgbattlearena.nl/api/online/health"),
+    { ...baseEnv, APP_CHECK_ENFORCEMENT: "enforce" },
+  )
+  expect(health.status).toBe(200)
+})
+
+test("preflight staat alleen vereiste securityheaders toe", async () => {
+  const response = await worker.fetch(
+    new Request("https://api.mtgbattlearena.nl/api/online/lobbies", {
+      method: "OPTIONS",
+      headers: { Origin: "https://mtgbattlearena.nl" },
+    }),
+    {
+      ALLOWED_ORIGIN: "https://mtgbattlearena.nl",
+      APP_CHECK_ENFORCEMENT: "enforce",
+    } as unknown as Env,
+  )
+  expect(response.status).toBe(204)
+  expect(response.headers.get("Access-Control-Allow-Headers")).toBe(
+    "Authorization, Content-Type, X-Firebase-AppCheck",
+  )
+})
+
+test("socket-ticket controleert Auth vóór App Check", async () => {
+  const response = await worker.fetch(
+    new Request("https://api.mtgbattlearena.nl/api/online/socket-ticket", {
+      method: "POST",
+      body: JSON.stringify({ gameId: "game" }),
+    }),
+    {
+      APP_CHECK_ENFORCEMENT: "enforce",
+      FIREBASE_PROJECT_NUMBER: "445284154827",
+      FIREBASE_ALLOWED_APP_IDS: "1:445284154827:web:production",
+      LOBBY: { getByName: vi.fn(() => ({})) },
+    } as unknown as Env,
+  )
+  expect(response.status).toBe(401)
+  await expect(response.json()).resolves.toMatchObject({ code: "AUTH_REQUIRED" })
 })
 
 test("socketlimiet-afwijzing maakt een verbruikt ticket niet herbruikbaar", async () => {

@@ -41,5 +41,6 @@ test("ontbrekende configuratie blijft leeg voor local-first gebruik", () => {
     firebaseProjectId: "",
     firebaseAppId: "",
     firebaseMeasurementId: "",
+    firebaseAppCheckRecaptchaEnterpriseSiteKey: "",
   })
 })

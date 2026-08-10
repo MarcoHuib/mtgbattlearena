@@ -8,6 +8,7 @@ import {
 import { archidektImportUrl } from "./endpoints"
 import { DeckImportError } from "./errors"
 import { parseArchidektDeckId } from "./url"
+import { addAppCheckHeader } from "../firebaseAppCheck"
 
 const withUniqueDefinitions = (
   deck: ImportedDeck,
@@ -40,7 +41,9 @@ export const importArchidektDeck: DeckImporter = async (url, signal) => {
 
   try {
     const response = await fetch(archidektImportUrl(`/${deckId}`), {
-      headers: { Accept: "application/json" },
+      headers: await addAppCheckHeader(
+        new Headers({ Accept: "application/json" }),
+      ),
       signal: combinedSignal,
     })
     if (response.status === 404) {
@@ -90,7 +93,9 @@ export const importArchidektDeck: DeckImporter = async (url, signal) => {
           `/tokens?ids=${encodeURIComponent(tokenIds.join(","))}`,
         ),
         {
-          headers: { Accept: "application/json" },
+          headers: await addAppCheckHeader(
+            new Headers({ Accept: "application/json" }),
+          ),
           signal: combinedSignal,
         },
       )

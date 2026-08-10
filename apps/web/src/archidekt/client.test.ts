@@ -1,5 +1,12 @@
-import { afterEach, vi } from "vitest"
+import { afterEach, beforeEach, vi } from "vitest"
+import { setAppCheckTokenProvider } from "../firebaseAppCheck"
 import { importArchidektDeck } from "./client"
+
+beforeEach(() => {
+  setAppCheckTokenProvider({
+    getToken: () => Promise.resolve("test-app-check-token"),
+  })
+})
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -21,5 +28,10 @@ describe("importArchidektDeck", () => {
       message:
         "De deckservice gaf geen geldige deckdata terug. Probeer het later opnieuw.",
     })
+    expect(
+      new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers).get(
+        "X-Firebase-AppCheck",
+      ),
+    ).toBe("test-app-check-token")
   })
 })

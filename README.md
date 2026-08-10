@@ -545,6 +545,11 @@ Voor de volledige technische uitleg:
 <br />
 
 Firebase Authentication verzorgt uitsluitend de online identiteit.
+
+Firebase App Check met reCAPTCHA Enterprise vormt daarnaast een extra
+client-attestationlaag voor browserrequests naar de Cloudflare backend. De
+architectuur, configuratie, rollout en lokale debugflow staan in
+[`docs/security/firebase-app-check.md`](docs/security/firebase-app-check.md).
 De globale lobbydirectory handhaaft server-side per-UID quota en
 creatieratelimits. Wachtende lobby's verlopen na twee uur; afgeronde lobby's
 worden na 24 uur via Durable Object-alarms opgeruimd.

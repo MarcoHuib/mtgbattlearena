@@ -269,6 +269,7 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
           FIREBASE_MEASUREMENT_ID: ${{ vars.FIREBASE_MEASUREMENT_ID }}
+          FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ vars.FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY }}
           RUNTIME_CONFIG_OUTPUT: apps/web/dist/runtime-config.js
         run: node scripts/write-runtime-config.mjs
       - name: Deploy fixed Beta Hosting site
@@ -346,10 +347,23 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Validate Beta App Check configuration
+        env:
+          APP_CHECK_ENFORCEMENT: ${{ vars.APP_CHECK_ENFORCEMENT }}
+          FIREBASE_PROJECT_NUMBER: ${{ vars.FIREBASE_PROJECT_NUMBER }}
+          FIREBASE_ALLOWED_APP_IDS: ${{ vars.FIREBASE_ALLOWED_APP_IDS }}
+        run: |
+          test "$APP_CHECK_ENFORCEMENT" = "enforce"
+          test -n "$FIREBASE_PROJECT_NUMBER"
+          test -n "$FIREBASE_ALLOWED_APP_IDS"
       - name: Deploy Beta game Worker
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         env:
           RELEASE_VERSION: ${{ github.run_number }}
+          APP_ENV: ${{ vars.APP_ENV }}
+          APP_CHECK_ENFORCEMENT: ${{ vars.APP_CHECK_ENFORCEMENT }}
+          FIREBASE_PROJECT_NUMBER: ${{ vars.FIREBASE_PROJECT_NUMBER }}
+          FIREBASE_ALLOWED_APP_IDS: ${{ vars.FIREBASE_ALLOWED_APP_IDS }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -357,7 +371,12 @@ jobs:
           workingDirectory: apps/game-worker
           command: deploy --env staging --config wrangler.toml
           packageManager: npm
-          vars: RELEASE_VERSION
+          vars: |
+            RELEASE_VERSION
+            APP_ENV
+            APP_CHECK_ENFORCEMENT
+            FIREBASE_PROJECT_NUMBER
+            FIREBASE_ALLOWED_APP_IDS
 
   beta-complete:
     name: Beta / Complete
@@ -456,6 +475,7 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
           FIREBASE_MEASUREMENT_ID: ${{ vars.FIREBASE_MEASUREMENT_ID }}
+          FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ vars.FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY }}
           RUNTIME_CONFIG_OUTPUT: apps/web/dist/runtime-config.js
         run: node scripts/write-runtime-config.mjs
       - name: Deploy fixed Production Hosting site
@@ -533,10 +553,23 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Validate Production App Check configuration
+        env:
+          APP_CHECK_ENFORCEMENT: ${{ vars.APP_CHECK_ENFORCEMENT }}
+          FIREBASE_PROJECT_NUMBER: ${{ vars.FIREBASE_PROJECT_NUMBER }}
+          FIREBASE_ALLOWED_APP_IDS: ${{ vars.FIREBASE_ALLOWED_APP_IDS }}
+        run: |
+          test "$APP_CHECK_ENFORCEMENT" = "monitor" -o "$APP_CHECK_ENFORCEMENT" = "enforce"
+          test -n "$FIREBASE_PROJECT_NUMBER"
+          test -n "$FIREBASE_ALLOWED_APP_IDS"
       - name: Deploy Production game Worker
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         env:
           RELEASE_VERSION: ${{ github.run_number }}
+          APP_ENV: ${{ vars.APP_ENV }}
+          APP_CHECK_ENFORCEMENT: ${{ vars.APP_CHECK_ENFORCEMENT }}
+          FIREBASE_PROJECT_NUMBER: ${{ vars.FIREBASE_PROJECT_NUMBER }}
+          FIREBASE_ALLOWED_APP_IDS: ${{ vars.FIREBASE_ALLOWED_APP_IDS }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -544,7 +577,12 @@ jobs:
           workingDirectory: apps/game-worker
           command: deploy --config wrangler.toml
           packageManager: npm
-          vars: RELEASE_VERSION
+          vars: |
+            RELEASE_VERSION
+            APP_ENV
+            APP_CHECK_ENFORCEMENT
+            FIREBASE_PROJECT_NUMBER
+            FIREBASE_ALLOWED_APP_IDS
 
   production-complete:
     name: Production / Complete

@@ -155,7 +155,6 @@ omgevingen:
 | ---------------------- | ------------------------------------ |
 | `FIREBASE_API_KEY`     | publieke gedeelde Firebase-webconfig |
 | `FIREBASE_PROJECT_ID`  | gedeeld Firebaseproject-ID           |
-| `FIREBASE_APP_ID`      | publieke gedeelde Firebase-webconfig |
 | `FIREBASE_MEASUREMENT_ID` | publieke Analytics measurement-ID |
 
 Configureer daarnaast deze GitHub Environment Variables per omgeving:
@@ -167,6 +166,11 @@ Configureer daarnaast deze GitHub Environment Variables per omgeving:
 | `ONLINE_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
 | `ONLINE_SOCKET_URL`  | `https://ws.beta.mtgbattlearena.nl`  | `https://ws.mtgbattlearena.nl`  |
 | `FIREBASE_AUTH_DOMAIN` | `beta.mtgbattlearena.nl`           | `mtgbattlearena.nl`             |
+| `FIREBASE_APP_ID` | afzonderlijke publieke beta Web App-ID | publieke productie Web App-ID |
+| `FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY` | publieke beta Enterprise-sitekey | publieke productie Enterprise-sitekey |
+| `FIREBASE_PROJECT_NUMBER` | numeriek Firebase-projectnummer | numeriek Firebase-projectnummer |
+| `FIREBASE_ALLOWED_APP_IDS` | uitsluitend beta App-ID(s) | uitsluitend productie App-ID(s) |
+| `APP_CHECK_ENFORCEMENT` | `enforce` | eerst `monitor`, na observatie `enforce` |
 
 `RELEASE_VERSION` wordt door de workflow gezet op `github.run_number` en
 `RUNTIME_CONFIG_OUTPUT` op `apps/web/dist/runtime-config.js`; deze hoeven niet
@@ -239,7 +243,8 @@ gebruikt uitsluitend de bestaande GitHub Environment-protection.
 3. Configureer onder Environment `production` bij **Deployment protection
    rules** één of meer **Required reviewers**.
 4. Plaats de gedeelde Firebasewaarden als Repository Variables en de
-   omgevingsspecifieke runtimewaarden, inclusief `FIREBASE_AUTH_DOMAIN`, in
+   omgevingsspecifieke runtimewaarden, inclusief `FIREBASE_AUTH_DOMAIN` en de
+   App Check-waarden, in
    Environments `staging` en `production`.
 5. Behoud de bestaande Environment secrets; er zijn geen nieuwe secrets nodig.
 6. Controleer dat beide Firebase Hosting-targets en custom domains nog correct
@@ -255,7 +260,7 @@ gebruikt uitsluitend de bestaande GitHub Environment-protection.
 - **Production is skipped:** open `Beta / Complete`; minstens één
   vereiste Beta-deployment is niet geslaagd.
 - **Runtimeconfig ontbreekt:** controleer zowel de vier Firebase Repository
-  Variables als de vier runtime Environment Variables uit de tabellen. De
+  Variables als de runtime Environment Variables uit de tabellen. De
   generator faalt veilig bij een ontbrekende of ongeldige waarde.
 - **Verkeerde endpoint zichtbaar:** controleer `/runtime-config.js` op de
   betreffende site en de `no-store` responseheader.
