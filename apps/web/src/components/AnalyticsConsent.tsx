@@ -44,9 +44,9 @@ export const AnalyticsConsent = ({ route }: { route: AppRoute }) => {
       <div>
         <h2 id="analytics-consent-title">Mogen we analytische cookies gebruiken?</h2>
         <p>
-          Met Firebase Analytics meten we hoe de app wordt gebruikt. Zo kunnen
-          we de battle-ervaring verbeteren. Advertentiepersonalisatie blijft
-          uitgeschakeld.
+          Help ons MTG Battle Arena te verbeteren. We gebruiken anonieme
+          gegevens over het gebruik van de app. Deze gegevens worden niet
+          gebruikt voor persoonlijke advertenties.
         </p>
       </div>
       <div className="analytics-consent__actions">
