@@ -119,6 +119,10 @@ export class MockAuthService implements AuthService {
     return this.signInWithEmail("google-player@example.com")
   }
 
+  signInWithMicrosoft() {
+    return this.signInWithEmail("microsoft-player@example.com")
+  }
+
   async signOut() {
     await wait(40)
     this.state = { status: "signed-out", user: null }
@@ -163,6 +167,10 @@ export class UnavailableAuthService implements AuthService {
     return Promise.reject(new Error(this.state.message))
   }
 
+  signInWithMicrosoft() {
+    return Promise.reject(new Error(this.state.message))
+  }
+
   signOut() {
     return Promise.resolve()
   }
@@ -185,6 +193,7 @@ export type FirebaseAuthPort = {
   signInWithEmail(email: string, password: string): Promise<void>
   registerWithEmail(email: string, password: string): Promise<void>
   signInWithGoogle(): Promise<void>
+  signInWithMicrosoft(): Promise<void>
   signOut(): Promise<void>
 }
 
@@ -231,6 +240,11 @@ export class FirebaseAuthService implements AuthService {
 
   async signInWithGoogle() {
     await this.firebase.signInWithGoogle()
+    return this.readSignedInUser()
+  }
+
+  async signInWithMicrosoft() {
+    await this.firebase.signInWithMicrosoft()
     return this.readSignedInUser()
   }
 

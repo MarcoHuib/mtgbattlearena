@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -33,9 +34,9 @@ const firebaseAuthMessages: Record<string, string> = {
   "auth/operation-not-allowed":
     "Deze inlogmethode staat nog niet aan in Firebase Authentication.",
   "auth/popup-blocked":
-    "De Google-login werd door de browser geblokkeerd. Sta pop-ups toe en probeer opnieuw.",
+    "De SSO-login werd door de browser geblokkeerd. Sta pop-ups toe en probeer opnieuw.",
   "auth/popup-closed-by-user":
-    "De Google-login is gesloten voordat deze was afgerond.",
+    "De SSO-login is gesloten voordat deze was afgerond.",
   "auth/too-many-requests":
     "Er zijn te veel inlogpogingen gedaan. Wacht even en probeer opnieuw.",
   "auth/unauthorized-domain":
@@ -100,6 +101,8 @@ export const createFirebaseAuthPort = (
   const auth = getAuth(app)
   const googleProvider = new GoogleAuthProvider()
   googleProvider.setCustomParameters({ prompt: "select_account" })
+  const microsoftProvider = new OAuthProvider("microsoft.com")
+  microsoftProvider.setCustomParameters({ prompt: "select_account" })
 
   return {
     get currentUser() {
@@ -116,6 +119,9 @@ export const createFirebaseAuthPort = (
     },
     async signInWithGoogle() {
       await signInWithPopup(auth, googleProvider)
+    },
+    async signInWithMicrosoft() {
+      await signInWithPopup(auth, microsoftProvider)
     },
     async signOut() {
       await signOut(auth)

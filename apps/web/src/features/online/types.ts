@@ -78,6 +78,7 @@ export type AuthService = {
   signInWithEmail(email: string, password: string): Promise<AuthUser>
   registerWithEmail(email: string, password: string): Promise<AuthUser>
   signInWithGoogle(): Promise<AuthUser>
+  signInWithMicrosoft(): Promise<AuthUser>
   signOut(): Promise<void>
   getIdToken(): Promise<string | null>
 }

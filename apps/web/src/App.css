@@ -4325,47 +4325,6 @@ html.card-pointer-active .card.card--tapped {
   content: "";
 }
 
-.button--google {
-  grid-column: 1 / -1;
-  border: 1px solid rgb(184 225 216 / 24%);
-  color: #eff9f6;
-  background: linear-gradient(135deg, rgb(31 76 75 / 82%), rgb(15 48 55 / 92%));
-  box-shadow:
-    0 10px 25px rgb(0 12 16 / 14%),
-    inset 0 1px rgb(255 255 255 / 7%);
-}
-
-.button--google > span {
-  width: 1.6rem;
-  height: 1.6rem;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #4285f4;
-  background: conic-gradient(
-    from -45deg,
-    #4285f4 0 25%,
-    #34a853 0 50%,
-    #fbbc05 0 75%,
-    #ea4335 0
-  );
-  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-  font-size: 0;
-  font-weight: 850;
-}
-
-.button--google > span::after {
-  width: 1rem;
-  height: 1rem;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #2d5cb8;
-  background: #fff;
-  content: "G";
-  font-size: 0.68rem;
-}
-
 .auth-panel__signed-in {
   min-width: 0;
   display: grid;

@@ -403,7 +403,7 @@ export const OnlineScreen = ({
                     </button>
                     <span className="auth-login-form__divider">of</span>
                     <button
-                      className="button button--google"
+                      className="button button--secondary"
                       type="button"
                       disabled={
                         authenticating ||
@@ -414,8 +414,21 @@ export const OnlineScreen = ({
                         void runAuth(() => auth.signInWithGoogle())
                       }}
                     >
-                      <span aria-hidden="true">G</span>
                       Doorgaan met Google
+                    </button>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={
+                        authenticating ||
+                        authState.status === "loading" ||
+                        authState.status === "error"
+                      }
+                      onClick={() => {
+                        void runAuth(() => auth.signInWithMicrosoft())
+                      }}
+                    >
+                      Doorgaan met Microsoft
                     </button>
                   </div>
                 </form>

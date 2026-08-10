@@ -160,6 +160,24 @@ test("hoofdmenu houdt offline direct beschikbaar en routeert naar online", async
   expect(screen.queryByText("Online verbonden")).not.toBeInTheDocument()
 })
 
+test("biedt Google en Microsoft als normale SSO-knoppen aan", async () => {
+  window.history.replaceState({}, "", "/online")
+  const { user } = renderWithProviders(<App services={createServices()} />)
+
+  await screen.findByRole("heading", { name: "Niet ingelogd" })
+  const google = screen.getByRole("button", { name: "Doorgaan met Google" })
+  const microsoft = screen.getByRole("button", {
+    name: "Doorgaan met Microsoft",
+  })
+  expect(google).toHaveClass("button--secondary")
+  expect(microsoft).toHaveClass("button--secondary")
+
+  await user.click(microsoft)
+  expect(
+    await screen.findByRole("heading", { name: /Ingelogd als microsoft-player/ }),
+  ).toBeInTheDocument()
+})
+
 test("toont auth, 2–6 spelerkeuze en opent een aparte hostwachtkamer", async () => {
   const services = createServices()
   window.history.replaceState({}, "", "/online")
