@@ -51,3 +51,41 @@ tag = "v2"
 new_sqlite_classes = ["LobbyDurableObject"]
 
 # Firebase private keys are neither required nor supported here.
+
+# Staging is een afzonderlijke Worker deployment. De environment-specifieke
+# bindings hieronder zijn bewust herhaald omdat vars, services en Durable
+# Objects niet door Wrangler environments worden geërfd.
+[env.staging]
+name = "mtg-battle-mode-online-staging"
+
+[[env.staging.routes]]
+pattern = "api.beta.mtgbattlearena.nl"
+custom_domain = true
+
+[[env.staging.routes]]
+pattern = "ws.beta.mtgbattlearena.nl"
+custom_domain = true
+
+[env.staging.vars]
+FIREBASE_PROJECT_ID = "mtgbattlearena"
+ALLOWED_ORIGIN = "http://localhost:5173,https://beta.mtgbattlearena.nl,https://mtgbattlearena-beta.web.app,https://mtgbattlearena-beta.firebaseapp.com"
+
+[[env.staging.services]]
+binding = "IMPORT"
+service = "mtg-battle-mode-import-staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyDurableObject"
+
+[[env.staging.durable_objects.bindings]]
+name = "GAMES"
+class_name = "GameDurableObject"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameDurableObject"]
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["LobbyDurableObject"]

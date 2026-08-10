@@ -231,3 +231,20 @@ Firebase-UID; de Lobby Durable Object voegt pas bij de start de
 server-toegewezen speler-ID en displaynaam aan de interne seed toe. De
 voormalige publieke initialisatieroute waarbij de host alle spelerdecks
 aanleverde is verwijderd.
+
+## Omgevingsisolatie
+
+De online architectuur draait in twee volledig gescheiden omgevingen. De
+standaard-Wranglerconfiguratie blijft Production (`mtg-battle-mode-online` met
+`mtg-battle-mode-import`); `[env.staging]` maakt Beta
+(`mtg-battle-mode-online-staging` met `mtg-battle-mode-import-staging`). De
+staging service binding wordt expliciet opnieuw gedefinieerd en kan daardoor
+niet stilzwijgend naar de Production Import Worker wijzen.
+
+Lobby- en Game-bindings staan eveneens expliciet onder `[env.staging]`. Ze
+verwijzen zonder `script_name` naar de staging Game Worker en gebruiken daarmee
+eigen Durable Object-namespaces en SQLite-state. De migratiereeks wordt voor de
+nieuwe namespaces herhaald; de Production migrations en bestaande state worden
+niet gewijzigd. Beta en Production valideren ID-tokens bewust tegen hetzelfde
+Firebaseproject en delen Firebase Authentication. Alleen Hosting-sites en de
+Cloudflare game-state zijn per omgeving gescheiden.

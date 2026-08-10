@@ -1,5 +1,20 @@
 {
   "projects": {
-    "default": "mtgbattlearena"
-  }
+    "default": "mtgbattlearena",
+    "production": "mtgbattlearena",
+    "staging": "mtgbattlearena"
+  },
+  "targets": {
+    "mtgbattlearena": {
+      "hosting": {
+        "production": [
+          "mtgbattlearena"
+        ],
+        "staging": [
+          "mtgbattlearena-beta"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

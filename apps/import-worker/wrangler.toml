@@ -20,3 +20,9 @@ invocation_logs = true
 enabled = false
 persist = true
 head_sampling_rate = 1
+
+[env.staging]
+name = "mtg-battle-mode-import-staging"
+
+[env.staging.vars]
+ALLOWED_ORIGIN = "http://localhost:5173,https://beta.mtgbattlearena.nl,https://mtgbattlearena-beta.web.app,https://mtgbattlearena-beta.firebaseapp.com"
