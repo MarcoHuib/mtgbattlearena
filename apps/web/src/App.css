@@ -4325,6 +4325,12 @@ html.card-pointer-active .card.card--tapped {
   content: "";
 }
 
+.auth-provider-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+}
+
 .auth-panel__signed-in {
   min-width: 0;
   display: grid;

@@ -171,6 +171,8 @@ test("biedt Google en Microsoft als normale SSO-knoppen aan", async () => {
   })
   expect(google).toHaveClass("button--secondary")
   expect(microsoft).toHaveClass("button--secondary")
+  expect(google.querySelector("svg.auth-provider-icon")).not.toBeNull()
+  expect(microsoft.querySelector("svg.auth-provider-icon")).not.toBeNull()
 
   await user.click(microsoft)
   expect(

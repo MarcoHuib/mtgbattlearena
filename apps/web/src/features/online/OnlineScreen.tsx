@@ -15,6 +15,7 @@ import type {
 } from "./types"
 import { describeFirebaseAuthError } from "./firebaseAuth"
 import { useArenaStatus } from "./ArenaStatus"
+import { AuthProviderIcon } from "./AuthProviderIcon"
 
 type OnlineScreenProps = {
   auth: AuthService
@@ -414,6 +415,7 @@ export const OnlineScreen = ({
                         void runAuth(() => auth.signInWithGoogle())
                       }}
                     >
+                      <AuthProviderIcon provider="google" />
                       Doorgaan met Google
                     </button>
                     <button
@@ -428,6 +430,7 @@ export const OnlineScreen = ({
                         void runAuth(() => auth.signInWithMicrosoft())
                       }}
                     >
+                      <AuthProviderIcon provider="microsoft" />
                       Doorgaan met Microsoft
                     </button>
                   </div>
