@@ -2,6 +2,8 @@ name = "mtg-battle-mode-import"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
 compatibility_flags = ["global_fetch_strictly_public"]
+workers_dev = false
+preview_urls = false
 
 [vars]
 RELEASE_VERSION = "local"
@@ -24,6 +26,8 @@ head_sampling_rate = 1
 
 [env.staging]
 name = "mtg-battle-mode-import-staging"
+workers_dev = false
+preview_urls = false
 
 [env.staging.vars]
 RELEASE_VERSION = "local"

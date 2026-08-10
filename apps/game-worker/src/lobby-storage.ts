@@ -78,6 +78,13 @@ export type CreateLobbyResult =
   | { status: "waiting-quota" }
   | { status: "rate-limit" }
 
+export type CreateLobbyStage =
+  | "create_lobby_rate_limit"
+  | "create_lobby_quota"
+  | "create_lobby_insert"
+  | "create_lobby_host_insert"
+  | "create_lobby_transaction_complete"
+
 export type LobbyCleanupResult = {
   startingRecovered: number
   waiting: number
@@ -105,6 +112,7 @@ export type LobbyStore = {
     lobby: LobbyRecord,
     participant: ParticipantRecord,
     attemptedAt: number,
+    stage?: (stage: CreateLobbyStage) => void,
   ): CreateLobbyResult
   getParticipant(gameId: string, uid: string): ParticipantRecord | null
   listParticipants(gameId: string): ParticipantRecord[]
@@ -282,8 +290,9 @@ export class SqliteLobbyStore implements LobbyStore {
     lobby: LobbyRecord,
     participant: ParticipantRecord,
     attemptedAt: number,
+    stage?: (stage: CreateLobbyStage) => void,
   ): CreateLobbyResult {
-    return this.storage.transactionSync(() => {
+    const result: CreateLobbyResult = this.storage.transactionSync(() => {
       const rate = this.sql
         .exec<CreationLimitRow>(
           `SELECT burst_started_at AS burstStartedAt,
@@ -306,8 +315,10 @@ export class SqliteLobbyStore implements LobbyStore {
         burstAttempts >= LOBBY_CREATE_BURST_LIMIT ||
         windowAttempts >= LOBBY_CREATE_WINDOW_LIMIT
       ) {
+        stage?.("create_lobby_rate_limit")
         return { status: "rate-limit" }
       }
+      stage?.("create_lobby_rate_limit")
       this.sql.exec(
         `INSERT INTO lobby_creation_limits
           (uid, burst_started_at, burst_attempts, window_started_at, window_attempts)
@@ -330,7 +341,6 @@ export class SqliteLobbyStore implements LobbyStore {
         attemptedAt,
         LOBBY_CREATE_BURST_WINDOW_MS,
         attemptedAt,
-        attemptedAt,
         LOBBY_CREATE_WINDOW_MS,
         attemptedAt,
         attemptedAt,
@@ -346,6 +356,7 @@ export class SqliteLobbyStore implements LobbyStore {
           )
           .toArray()[0],
       )
+      stage?.("create_lobby_quota")
       if (waiting >= MAX_WAITING_LOBBIES_PER_UID) {
         return { status: "waiting-quota" }
       }
@@ -366,9 +377,13 @@ export class SqliteLobbyStore implements LobbyStore {
         lobby.createdAt,
         lobby.updatedAt,
       )
+      stage?.("create_lobby_insert")
       this.insertParticipant(participant)
+      stage?.("create_lobby_host_insert")
       return { status: "inserted" }
     })
+    stage?.("create_lobby_transaction_complete")
+    return result
   }
 
   getParticipant(gameId: string, uid: string) {

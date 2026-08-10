@@ -18,12 +18,12 @@
     "deploy:cloudflare": "npm run deploy:cloudflare:import && npm run deploy:cloudflare:game",
     "deploy:cloudflare:check": "npm run deploy:cloudflare:check:game && npm run deploy:cloudflare:check:import",
     "deploy:cloudflare:check:game": "wrangler deploy --cwd apps/game-worker --config wrangler.toml --dry-run",
-    "deploy:cloudflare:check:import": "wrangler deploy --cwd apps/import-worker --config wrangler.toml --dry-run",
+    "deploy:cloudflare:check:import": "wrangler deploy --cwd apps/import-worker --env=\"\" --config wrangler.toml --dry-run",
     "deploy:cloudflare:check:staging": "npm run deploy:cloudflare:check:staging:game && npm run deploy:cloudflare:check:staging:import",
     "deploy:cloudflare:check:staging:game": "wrangler deploy --cwd apps/game-worker --env staging --config wrangler.toml --dry-run",
     "deploy:cloudflare:check:staging:import": "wrangler deploy --cwd apps/import-worker --env staging --config wrangler.toml --dry-run",
     "deploy:cloudflare:game": "wrangler deploy --cwd apps/game-worker --config wrangler.toml",
-    "deploy:cloudflare:import": "wrangler deploy --cwd apps/import-worker --config wrangler.toml",
+    "deploy:cloudflare:import": "wrangler deploy --cwd apps/import-worker --env=\"\" --config wrangler.toml",
     "deploy:cloudflare:staging": "npm run deploy:cloudflare:staging:import && npm run deploy:cloudflare:staging:game",
     "deploy:cloudflare:staging:game": "wrangler deploy --cwd apps/game-worker --env staging --config wrangler.toml",
     "deploy:cloudflare:staging:import": "wrangler deploy --cwd apps/import-worker --env staging --config wrangler.toml",
@@ -48,8 +48,9 @@
     "test:web": "vitest --run --config apps/web/vite.config.ts",
     "test:worker": "vitest --run --config apps/game-worker/vitest.config.ts",
     "test:integration": "vitest --run --config apps/game-worker/vitest.config.ts test/online-worker.integration.test.ts test/lobby-worker.integration.test.ts test/worker-online.test.ts && vitest --run --config apps/web/vite.config.ts src/features/online/realtime.test.ts src/features/online/OnlineScreen.test.tsx",
+    "test:import-worker-config": "node apps/import-worker/scripts/validate-private-config.mjs",
     "type-check": "tsc -b --noEmit",
-    "validate:import-worker": "npm run lint:import-worker && npm run deploy:cloudflare:check:staging:import && npm run deploy:cloudflare:check:import"
+    "validate:import-worker": "npm run lint:import-worker && npm run test:import-worker-config && npm run deploy:cloudflare:check:staging:import && npm run deploy:cloudflare:check:import"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

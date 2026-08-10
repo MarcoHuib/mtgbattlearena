@@ -14,6 +14,7 @@ import {
   SqliteLobbyStore,
   STARTING_LOBBY_TIMEOUT_MS,
   WAITING_LOBBY_TTL_MS,
+  type CreateLobbyStage,
   type LobbyRecord,
   type LobbyStore,
   type ParticipantRecord,
@@ -78,6 +79,49 @@ const failure = (
   message: string,
 ): RpcResult<never> => ({ ok: false, status, code, message })
 
+type CreateLobbyDiagnosticStage =
+  | "create_lobby_begin"
+  | CreateLobbyStage
+  | "create_lobby_alarm_schedule"
+  | "create_lobby_complete"
+
+const sanitizeDiagnosticText = (value: string) =>
+  value
+    .replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]")
+    .replace(
+      /(?:authorization|ticket|join[_ -]?code)\s*[:=]\s*[^\s,}]+/gi,
+      "credential=[redacted]",
+    )
+    .slice(0, 4_000)
+
+const errorDiagnostics = (caught: unknown) => {
+  if (!(caught instanceof Error)) {
+    return {
+      errorName: "NonError",
+      errorMessage: sanitizeDiagnosticText(String(caught)),
+    }
+  }
+  const cause = caught.cause
+  return {
+    errorName: caught.name,
+    errorMessage: sanitizeDiagnosticText(caught.message),
+    stack: caught.stack ? sanitizeDiagnosticText(caught.stack) : undefined,
+    cause:
+      cause instanceof Error
+        ? {
+            name: cause.name,
+            message: sanitizeDiagnosticText(cause.message),
+          }
+        : cause === undefined
+          ? undefined
+          : typeof cause === "string" ||
+              typeof cause === "number" ||
+              typeof cause === "boolean"
+            ? sanitizeDiagnosticText(String(cause))
+            : "Non-Error cause omitted",
+  }
+}
+
 export class LobbyDurableObject extends DurableObject<Env> {
   private readonly store: LobbyStore
   private readonly tickets: SocketTicketService
@@ -113,62 +157,89 @@ export class LobbyDurableObject extends DurableObject<Env> {
     input: CreateLobbyInput,
     identity: VerifiedIdentity,
   ): RpcResult<LobbySummary> {
-    const gameId = crypto.randomUUID()
-    const playerId = crypto.randomUUID()
-    const code = this.createUniqueCode()
-    const attemptedAt = this.now()
-    const createdAt = new Date(attemptedAt).toISOString()
-    const displayName = displayNameFor(identity)
-    const lobby: LobbyRecord = {
-      id: gameId,
-      code,
-      title: input.title,
-      hostUid: identity.uid,
-      hostDisplayName: displayName,
-      format: input.format,
-      visibility: input.visibility,
-      status: "waiting",
-      playerCount: 1,
-      maxPlayers: input.maxPlayers,
-      createdAt,
-      updatedAt: createdAt,
-    }
-    const host: ParticipantRecord = {
-      gameId,
-      uid: identity.uid,
-      playerId,
-      role: "player",
-      displayName,
-      seatNumber: 0,
-      joinedAt: createdAt,
-    }
-    const created = this.store.createLobbyWithHost(lobby, host, attemptedAt)
-    if (created.status === "rate-limit") {
-      console.warn("Lobby creation rate limit exceeded.", {
-        event: "lobby_creation_rate_limit_exceeded",
+    let lastCompletedStage: CreateLobbyDiagnosticStage = "create_lobby_begin"
+    const completeStage = (stage: CreateLobbyDiagnosticStage) => {
+      lastCompletedStage = stage
+      console.info("Create lobby stage completed.", {
+        event: stage,
         uid: identity.uid,
       })
-      return failure(
-        429,
-        "LOBBY_CREATE_RATE_LIMITED",
-        "Te veel lobby-aanmaakpogingen. Probeer het later opnieuw.",
-      )
     }
-    if (created.status !== "inserted") {
-      console.warn("Lobby quota exceeded.", {
-        event: "lobby_quota_exceeded",
+    completeStage("create_lobby_begin")
+    try {
+      const gameId = crypto.randomUUID()
+      const playerId = crypto.randomUUID()
+      const code = this.createUniqueCode()
+      const attemptedAt = this.now()
+      const createdAt = new Date(attemptedAt).toISOString()
+      const displayName = displayNameFor(identity)
+      const lobby: LobbyRecord = {
+        id: gameId,
+        code,
+        title: input.title,
+        hostUid: identity.uid,
+        hostDisplayName: displayName,
+        format: input.format,
+        visibility: input.visibility,
+        status: "waiting",
+        playerCount: 1,
+        maxPlayers: input.maxPlayers,
+        createdAt,
+        updatedAt: createdAt,
+      }
+      const host: ParticipantRecord = {
+        gameId,
         uid: identity.uid,
-        group: "waiting",
-        limit: MAX_WAITING_LOBBIES_PER_UID,
-      })
-      return failure(
-        409,
-        "LOBBY_QUOTA_EXCEEDED",
-        "Je hebt het maximum aantal wachtende lobby's bereikt.",
+        playerId,
+        role: "player",
+        displayName,
+        seatNumber: 0,
+        joinedAt: createdAt,
+      }
+      const created = this.store.createLobbyWithHost(
+        lobby,
+        host,
+        attemptedAt,
+        completeStage,
       )
+      if (created.status === "rate-limit") {
+        console.warn("Lobby creation rate limit exceeded.", {
+          event: "lobby_creation_rate_limit_exceeded",
+          uid: identity.uid,
+        })
+        return failure(
+          429,
+          "LOBBY_CREATE_RATE_LIMITED",
+          "Te veel lobby-aanmaakpogingen. Probeer het later opnieuw.",
+        )
+      }
+      if (created.status !== "inserted") {
+        console.warn("Lobby quota exceeded.", {
+          event: "lobby_quota_exceeded",
+          uid: identity.uid,
+          group: "waiting",
+          limit: MAX_WAITING_LOBBIES_PER_UID,
+        })
+        return failure(
+          409,
+          "LOBBY_QUOTA_EXCEEDED",
+          "Je hebt het maximum aantal wachtende lobby's bereikt.",
+        )
+      }
+      this.scheduleNextCleanup()
+      completeStage("create_lobby_alarm_schedule")
+      const value = this.toSummary(lobby, identity.uid)
+      completeStage("create_lobby_complete")
+      return { ok: true, value }
+    } catch (caught) {
+      console.error("Unexpected lobby creation failure.", {
+        event: "create_lobby_internal_error",
+        uid: identity.uid,
+        lastCompletedStage,
+        ...errorDiagnostics(caught),
+      })
+      throw caught
     }
-    this.scheduleNextCleanup()
-    return { ok: true, value: this.toSummary(lobby, identity.uid) }
   }
 
   joinByCode(

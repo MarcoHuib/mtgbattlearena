@@ -50,12 +50,14 @@ export default {
       })
     }
     if (request.method !== "GET") {
-      return jsonError(
+      const response = jsonError(
         405,
         "METHOD_NOT_ALLOWED",
         "Alleen GET is toegestaan.",
         corsHeaders,
       )
+      response.headers.set("Allow", "GET, OPTIONS")
+      return response
     }
 
     const url = new URL(request.url)
