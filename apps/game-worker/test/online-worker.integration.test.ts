@@ -87,8 +87,11 @@ class LocalDurableObjectEnvironment {
       storage: {
         sql,
         transactionSync: callback => callback(),
+        getAlarm: () => Promise.resolve(null),
+        setAlarm: () => Promise.resolve(),
       },
       blockConcurrencyWhile: callback => callback(),
+      waitUntil: () => undefined,
       acceptWebSocket: socket => {
         this.sockets.push(socket as LocalSocket)
       },

@@ -44,6 +44,40 @@ aanmaken, deelnemen en ticketuitgifte lopen via normale HTTPS-requests met
 JSON. Het centrale Lobby Durable Object verwerkt deze operaties via Durable
 Object RPC en gebruikt zijn eigen SQLite-opslag. Er is geen lobby-WebSocket.
 
+Omdat alle lobbydirectorydata voorlopig in één globaal Lobby Durable Object
+staat, begrenst de server creatie met de geverifieerde Firebase-UID. Per UID
+zijn maximaal drie `waiting`-lobby's en afzonderlijk drie lobby's in
+`starting`/`active` toegestaan. Creatie heeft daarnaast een burstlimiet van
+drie pogingen per minuut en een vensterlimiet van vijf pogingen per tien
+minuten. Rate-windowregistratie, quotacontrole en lobby/host-insert gebeuren in
+één synchrone SQLite-transactie.
+
+Een `waiting`-lobby verloopt twee uur na `created_at`; een `finished`-lobby
+wordt 24 uur na zijn laatste `updated_at` verwijderd. Het Durable Object zet
+een alarm op de eerstvolgende vervaldatum. Cleanup verwijdert lobby,
+participants en decks atomair via foreign-keycascades en is idempotent.
+Een startreservering die door een afgebroken Workerflow langer dan tien minuten
+in `starting` blijft staan, wordt door hetzelfde alarm teruggezet naar
+`waiting`. De oorspronkelijke `created_at` blijft behouden, zodat een inmiddels
+verlopen wachtende lobby in dezelfde cleanup alsnog wordt verwijderd.
+Listings filteren verlopen wachtende lobby's ook vóór een alarmcleanup, zodat
+oude of misbruikte records geen geldige openbare resultaten verdringen.
+Inactieve `lobby_creation_limits`-rijen worden na 24 uur fysiek verwijderd via
+de index op `window_started_at`.
+Securitylogs bevatten alleen een eventnaam, UID, quotagroep/limiet of
+cleanup-aantallen—nooit tokens, authorizationheaders, socket-tickets of
+joincodes.
+
+Een `active` lobby wordt momenteel alleen `finished` wanneer de host de actieve
+game expliciet afbreekt. Er bestaat nog geen betrouwbare normale
+match-completion- of inactivity-transition. Daardoor kunnen verlaten actieve
+lobby's, inclusief hun deelnemers- en deckrecords, onbeperkt bewaard blijven.
+Een vervolghardening moet serveractiviteit op het Game Durable Object bijhouden
+en een ruime, productmatig gekozen inactiviteitsretentie toepassen (bijvoorbeeld
+30 dagen met waarschuwing/herstelruimte), waarna lobby en gamesnapshot samen
+veilig naar `finished`/cleanup kunnen. Een korte generieke timeout is bewust
+niet toegepast, omdat persistente langdurige Commander-games geldig zijn.
+
 ### Game, transport en opslag
 
 De Worker gebruikt Durable Object namespacebindings en RPC voor

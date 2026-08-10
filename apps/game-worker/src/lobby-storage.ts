@@ -57,17 +57,55 @@ type LobbyDeckRow = {
   registeredAt: string
 }
 
+type CountRow = { count: number }
+type CreationLimitRow = {
+  burstStartedAt: number
+  burstAttempts: number
+  windowStartedAt: number
+  windowAttempts: number
+}
+
+const readCount = (row: CountRow | undefined) => row?.count ?? 0
+
 export type AddParticipantResult =
   | { status: "existing"; participant: ParticipantRecord }
   | { status: "inserted"; participant: ParticipantRecord }
   | { status: "full" }
   | { status: "missing" }
 
+export type CreateLobbyResult =
+  | { status: "inserted" }
+  | { status: "waiting-quota" }
+  | { status: "rate-limit" }
+
+export type LobbyCleanupResult = {
+  startingRecovered: number
+  waiting: number
+  finished: number
+  rateLimitsDeleted: number
+}
+
+export type ActivateLobbyResult = "updated" | "quota" | "missing"
+
+export const MAX_WAITING_LOBBIES_PER_UID = 3
+export const MAX_ACTIVE_LOBBIES_PER_UID = 3
+export const LOBBY_CREATE_BURST_LIMIT = 3
+export const LOBBY_CREATE_BURST_WINDOW_MS = 60_000
+export const LOBBY_CREATE_WINDOW_LIMIT = 5
+export const LOBBY_CREATE_WINDOW_MS = 10 * 60_000
+export const WAITING_LOBBY_TTL_MS = 2 * 60 * 60_000
+export const STARTING_LOBBY_TIMEOUT_MS = 10 * 60_000
+export const FINISHED_LOBBY_RETENTION_MS = 24 * 60 * 60_000
+
 export type LobbyStore = {
-  listVisible(viewerUid?: string): LobbyRecord[]
+  listVisible(waitingCreatedAfter: string, viewerUid?: string): LobbyRecord[]
   getByCode(code: string): LobbyRecord | null
   getById(gameId: string): LobbyRecord | null
-  insertLobbyWithHost(lobby: LobbyRecord, participant: ParticipantRecord): void
+  createLobbyWithHost(
+    lobby: LobbyRecord,
+    participant: ParticipantRecord,
+    attemptedAt: number,
+  ): CreateLobbyResult
   getParticipant(gameId: string, uid: string): ParticipantRecord | null
   listParticipants(gameId: string): ParticipantRecord[]
   listPlayers(gameId: string): ParticipantRecord[]
@@ -79,7 +117,23 @@ export type LobbyStore = {
     participant: ParticipantRecord,
   ): AddParticipantResult
   setStatus(gameId: string, status: LobbyStatus, updatedAt: string): boolean
+  activateLobby(
+    gameId: string,
+    hostUid: string,
+    updatedAt: string,
+  ): ActivateLobbyResult
+  reserveLobbyStart(
+    gameId: string,
+    hostUid: string,
+    updatedAt: string,
+  ): ActivateLobbyResult
   deleteLobby(gameId: string): boolean
+  cleanupExpired(
+    startingUpdatedBefore: string,
+    waitingCreatedBefore: string,
+    finishedUpdatedBefore: string,
+  ): LobbyCleanupResult
+  nextExpirationAt(): string | null
 }
 
 const toSummary = (row: LobbyRow): Omit<LobbySummary, "viewerRole"> => ({
@@ -135,6 +189,10 @@ export class SqliteLobbyStore implements LobbyStore {
       );
       CREATE INDEX IF NOT EXISTS lobbies_public_list
       ON lobbies (visibility, status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS lobbies_host_status_created
+      ON lobbies (host_uid, status, created_at);
+      CREATE INDEX IF NOT EXISTS lobbies_status_updated
+      ON lobbies (status, updated_at);
       CREATE TABLE IF NOT EXISTS lobby_participants (
         game_id TEXT NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
         uid TEXT NOT NULL,
@@ -156,24 +214,39 @@ export class SqliteLobbyStore implements LobbyStore {
         FOREIGN KEY (game_id, uid)
           REFERENCES lobby_participants(game_id, uid) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS lobby_creation_limits (
+        uid TEXT PRIMARY KEY,
+        burst_started_at INTEGER NOT NULL,
+        burst_attempts INTEGER NOT NULL,
+        window_started_at INTEGER NOT NULL,
+        window_attempts INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS lobby_creation_limits_window
+      ON lobby_creation_limits (window_started_at);
     `)
   }
 
-  listVisible(viewerUid?: string) {
+  listVisible(waitingCreatedAfter: string, viewerUid?: string) {
     if (viewerUid) {
       return this.sql
         .exec<LobbyRow>(
           `${lobbySelect}
            WHERE (
              l.visibility = 'public' AND l.status = 'waiting'
+             AND l.created_at > ?
            ) OR (
-             l.status IN ('waiting', 'starting', 'active')
+             (
+               l.status IN ('starting', 'active')
+               OR (l.status = 'waiting' AND l.created_at > ?)
+             )
              AND EXISTS (
                SELECT 1 FROM lobby_participants viewer
                WHERE viewer.game_id = l.id AND viewer.uid = ?
              )
            )
            ORDER BY l.created_at DESC LIMIT 50`,
+          waitingCreatedAfter,
+          waitingCreatedAfter,
           viewerUid,
         )
         .toArray()
@@ -183,7 +256,9 @@ export class SqliteLobbyStore implements LobbyStore {
       .exec<LobbyRow>(
         `${lobbySelect}
          WHERE l.visibility = 'public' AND l.status = 'waiting'
+           AND l.created_at > ?
          ORDER BY l.created_at DESC LIMIT 50`,
+        waitingCreatedAfter,
       )
       .toArray()
       .map(toRecord)
@@ -203,8 +278,77 @@ export class SqliteLobbyStore implements LobbyStore {
     return row ? toRecord(row) : null
   }
 
-  insertLobbyWithHost(lobby: LobbyRecord, participant: ParticipantRecord) {
-    this.storage.transactionSync(() => {
+  createLobbyWithHost(
+    lobby: LobbyRecord,
+    participant: ParticipantRecord,
+    attemptedAt: number,
+  ): CreateLobbyResult {
+    return this.storage.transactionSync(() => {
+      const rate = this.sql
+        .exec<CreationLimitRow>(
+          `SELECT burst_started_at AS burstStartedAt,
+                  burst_attempts AS burstAttempts,
+                  window_started_at AS windowStartedAt,
+                  window_attempts AS windowAttempts
+           FROM lobby_creation_limits WHERE uid = ?`,
+          lobby.hostUid,
+        )
+        .toArray()[0]
+      const burstAttempts =
+        rate && attemptedAt - rate.burstStartedAt < LOBBY_CREATE_BURST_WINDOW_MS
+          ? rate.burstAttempts
+          : 0
+      const windowAttempts =
+        rate && attemptedAt - rate.windowStartedAt < LOBBY_CREATE_WINDOW_MS
+          ? rate.windowAttempts
+          : 0
+      if (
+        burstAttempts >= LOBBY_CREATE_BURST_LIMIT ||
+        windowAttempts >= LOBBY_CREATE_WINDOW_LIMIT
+      ) {
+        return { status: "rate-limit" }
+      }
+      this.sql.exec(
+        `INSERT INTO lobby_creation_limits
+          (uid, burst_started_at, burst_attempts, window_started_at, window_attempts)
+         VALUES (?, ?, 1, ?, 1)
+         ON CONFLICT (uid) DO UPDATE SET
+          burst_started_at = CASE WHEN ? - burst_started_at >= ?
+            THEN ? ELSE burst_started_at END,
+          burst_attempts = CASE WHEN ? - burst_started_at >= ?
+            THEN 1 ELSE burst_attempts + 1 END,
+          window_started_at = CASE WHEN ? - window_started_at >= ?
+            THEN ? ELSE window_started_at END,
+          window_attempts = CASE WHEN ? - window_started_at >= ?
+            THEN 1 ELSE window_attempts + 1 END`,
+        lobby.hostUid,
+        attemptedAt,
+        attemptedAt,
+        attemptedAt,
+        LOBBY_CREATE_BURST_WINDOW_MS,
+        attemptedAt,
+        attemptedAt,
+        LOBBY_CREATE_BURST_WINDOW_MS,
+        attemptedAt,
+        attemptedAt,
+        LOBBY_CREATE_WINDOW_MS,
+        attemptedAt,
+        attemptedAt,
+        LOBBY_CREATE_WINDOW_MS,
+      )
+      const waiting = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobbies
+             WHERE host_uid = ? AND status = 'waiting' AND created_at > ?`,
+            lobby.hostUid,
+            new Date(attemptedAt - WAITING_LOBBY_TTL_MS).toISOString(),
+          )
+          .toArray()[0],
+      )
+      if (waiting >= MAX_WAITING_LOBBIES_PER_UID) {
+        return { status: "waiting-quota" }
+      }
       this.sql.exec(
         `INSERT INTO lobbies
           (id, code, title, host_uid, host_display_name, format, visibility,
@@ -223,6 +367,7 @@ export class SqliteLobbyStore implements LobbyStore {
         lobby.updatedAt,
       )
       this.insertParticipant(participant)
+      return { status: "inserted" }
     })
   }
 
@@ -333,11 +478,153 @@ export class SqliteLobbyStore implements LobbyStore {
     return true
   }
 
+  activateLobby(
+    gameId: string,
+    hostUid: string,
+    updatedAt: string,
+  ): ActivateLobbyResult {
+    return this.storage.transactionSync(() => {
+      const existing = this.getById(gameId)
+      if (existing?.hostUid !== hostUid) return "missing"
+      const active = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobbies
+             WHERE host_uid = ? AND status IN ('starting', 'active')
+               AND id <> ?`,
+            hostUid,
+            gameId,
+          )
+          .toArray()[0],
+      )
+      if (active >= MAX_ACTIVE_LOBBIES_PER_UID) return "quota"
+      this.sql.exec(
+        "UPDATE lobbies SET status = 'active', updated_at = ? WHERE id = ?",
+        updatedAt,
+        gameId,
+      )
+      return "updated"
+    })
+  }
+
+  reserveLobbyStart(
+    gameId: string,
+    hostUid: string,
+    updatedAt: string,
+  ): ActivateLobbyResult {
+    return this.storage.transactionSync(() => {
+      const existing = this.getById(gameId)
+      if (existing?.hostUid !== hostUid || existing.status !== "waiting") {
+        return "missing"
+      }
+      const active = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobbies
+             WHERE host_uid = ? AND status IN ('starting', 'active')`,
+            hostUid,
+          )
+          .toArray()[0],
+      )
+      if (active >= MAX_ACTIVE_LOBBIES_PER_UID) return "quota"
+      this.sql.exec(
+        "UPDATE lobbies SET status = 'starting', updated_at = ? WHERE id = ?",
+        updatedAt,
+        gameId,
+      )
+      return "updated"
+    })
+  }
+
   deleteLobby(gameId: string) {
     const existing = this.getById(gameId)
     if (!existing) return false
     this.sql.exec("DELETE FROM lobbies WHERE id = ?", gameId)
     return true
+  }
+
+  cleanupExpired(
+    startingUpdatedBefore: string,
+    waitingCreatedBefore: string,
+    finishedUpdatedBefore: string,
+  ): LobbyCleanupResult {
+    return this.storage.transactionSync(() => {
+      const startingRecovered = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobbies
+             WHERE status = 'starting' AND updated_at <= ?`,
+            startingUpdatedBefore,
+          )
+          .toArray()[0],
+      )
+      this.sql.exec(
+        `UPDATE lobbies SET status = 'waiting', updated_at = ?
+         WHERE status = 'starting' AND updated_at <= ?`,
+        startingUpdatedBefore,
+        startingUpdatedBefore,
+      )
+      const waiting = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobbies
+             WHERE status = 'waiting' AND created_at <= ?`,
+            waitingCreatedBefore,
+          )
+          .toArray()[0],
+      )
+      const finished = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobbies
+             WHERE status = 'finished' AND updated_at <= ?`,
+            finishedUpdatedBefore,
+          )
+          .toArray()[0],
+      )
+      this.sql.exec(
+        `DELETE FROM lobbies
+         WHERE (status = 'waiting' AND created_at <= ?)
+            OR (status = 'finished' AND updated_at <= ?)`,
+        waitingCreatedBefore,
+        finishedUpdatedBefore,
+      )
+      const rateLimitCutoff = Date.parse(finishedUpdatedBefore)
+      const rateLimitsDeleted = readCount(
+        this.sql
+          .exec<CountRow>(
+            `SELECT COUNT(*) AS count FROM lobby_creation_limits
+             WHERE window_started_at < ?`,
+            rateLimitCutoff,
+          )
+          .toArray()[0],
+      )
+      this.sql.exec(
+        `DELETE FROM lobby_creation_limits WHERE window_started_at < ?`,
+        rateLimitCutoff,
+      )
+      return { startingRecovered, waiting, finished, rateLimitsDeleted }
+    })
+  }
+
+  nextExpirationAt() {
+    const row = this.sql
+      .exec<{ expirationAt: string | null }>(
+        `SELECT MIN(expiration_at) AS expirationAt FROM (
+           SELECT datetime(created_at, '+2 hours') AS expiration_at
+           FROM lobbies WHERE status = 'waiting'
+           UNION ALL
+           SELECT datetime(updated_at, '+10 minutes') AS expiration_at
+           FROM lobbies WHERE status = 'starting'
+           UNION ALL
+           SELECT datetime(updated_at, '+24 hours') AS expiration_at
+           FROM lobbies WHERE status = 'finished'
+         )`,
+      )
+      .toArray()[0]
+    return row?.expirationAt
+      ? new Date(`${row.expirationAt}Z`).toISOString()
+      : null
   }
 
   private insertParticipant(participant: ParticipantRecord) {

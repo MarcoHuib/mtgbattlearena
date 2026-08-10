@@ -232,12 +232,20 @@ const routeRequest = async (request: Request, env: Env) => {
     if (lobbyActionRoute[2] === "start" && request.method === "POST") {
       const prepared = await lobby.prepareRegisteredGame(gameId, identity)
       if (!prepared.ok) return resultResponse(prepared)
-      const initialized = await env.GAMES.getByName(gameId).initializeGame(
-        prepared.value.seed,
-        prepared.value.session,
-      )
+      let initialized: GameSnapshotResult
+      try {
+        initialized = await env.GAMES.getByName(gameId).initializeGame(
+          prepared.value.seed,
+          prepared.value.session,
+        )
+      } catch (caught) {
+        await lobby.releaseGameStart(gameId, identity)
+        throw caught
+      }
       if (initialized.ok && initialized.value.type === "PERSONAL_SNAPSHOT") {
         await lobby.markGameActive(gameId, identity)
+      } else {
+        await lobby.releaseGameStart(gameId, identity)
       }
       return gameResultResponse(initialized, 201)
     }
