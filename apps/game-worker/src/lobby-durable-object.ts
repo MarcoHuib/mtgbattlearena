@@ -8,7 +8,12 @@ import {
   type OnlineGameSeed,
 } from "./game-server-adapter"
 import {
+  FINISHED_LOBBY_RETENTION_MS,
+  MAX_ACTIVE_LOBBIES_PER_UID,
+  MAX_WAITING_LOBBIES_PER_UID,
   SqliteLobbyStore,
+  STARTING_LOBBY_TIMEOUT_MS,
+  WAITING_LOBBY_TTL_MS,
   type LobbyRecord,
   type LobbyStore,
   type ParticipantRecord,
@@ -22,6 +27,7 @@ import {
 import type {
   ConnectionRole,
   CreateLobbyInput,
+  DurableObjectStorage,
   DurableObjectState,
   Env,
   GameSession,
@@ -75,6 +81,9 @@ const failure = (
 export class LobbyDurableObject extends DurableObject<Env> {
   private readonly store: LobbyStore
   private readonly tickets: SocketTicketService
+  private readonly storage: DurableObjectStorage
+  private readonly state: DurableObjectState
+  private readonly now: () => number
 
   constructor(
     state: DurableObjectState,
@@ -84,6 +93,9 @@ export class LobbyDurableObject extends DurableObject<Env> {
     now: () => number = Date.now,
   ) {
     super(state, env)
+    this.state = state
+    this.storage = state.storage
+    this.now = now
     this.store = store ?? new SqliteLobbyStore(state.storage)
     this.tickets = new SocketTicketService(
       ticketRepository ?? new SqliteSocketTicketRepository(state.storage),
@@ -93,7 +105,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
 
   listPublicLobbies(viewerUid?: string): LobbySummary[] {
     return this.store
-      .listVisible(viewerUid)
+      .listVisible(this.waitingCutoff(), viewerUid)
       .map(lobby => this.toSummary(lobby, viewerUid))
   }
 
@@ -104,7 +116,8 @@ export class LobbyDurableObject extends DurableObject<Env> {
     const gameId = crypto.randomUUID()
     const playerId = crypto.randomUUID()
     const code = this.createUniqueCode()
-    const createdAt = new Date().toISOString()
+    const attemptedAt = this.now()
+    const createdAt = new Date(attemptedAt).toISOString()
     const displayName = displayNameFor(identity)
     const lobby: LobbyRecord = {
       id: gameId,
@@ -129,7 +142,32 @@ export class LobbyDurableObject extends DurableObject<Env> {
       seatNumber: 0,
       joinedAt: createdAt,
     }
-    this.store.insertLobbyWithHost(lobby, host)
+    const created = this.store.createLobbyWithHost(lobby, host, attemptedAt)
+    if (created.status === "rate-limit") {
+      console.warn("Lobby creation rate limit exceeded.", {
+        event: "lobby_creation_rate_limit_exceeded",
+        uid: identity.uid,
+      })
+      return failure(
+        429,
+        "LOBBY_CREATE_RATE_LIMITED",
+        "Te veel lobby-aanmaakpogingen. Probeer het later opnieuw.",
+      )
+    }
+    if (created.status !== "inserted") {
+      console.warn("Lobby quota exceeded.", {
+        event: "lobby_quota_exceeded",
+        uid: identity.uid,
+        group: "waiting",
+        limit: MAX_WAITING_LOBBIES_PER_UID,
+      })
+      return failure(
+        409,
+        "LOBBY_QUOTA_EXCEEDED",
+        "Je hebt het maximum aantal wachtende lobby's bereikt.",
+      )
+    }
+    this.scheduleNextCleanup()
     return { ok: true, value: this.toSummary(lobby, identity.uid) }
   }
 
@@ -139,7 +177,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
     identity: VerifiedIdentity,
   ): RpcResult<JoinLobbyResult> {
     const lobby = this.store.getByCode(code.trim().toUpperCase())
-    if (lobby?.status !== "waiting") {
+    if (
+      lobby?.status !== "waiting" ||
+      Date.parse(lobby.createdAt) <= this.now() - WAITING_LOBBY_TTL_MS
+    ) {
       return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
     }
     const existing = this.store.getParticipant(lobby.id, identity.uid)
@@ -182,7 +223,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
   ): RpcResult<LobbyRoom> {
     const lobby = this.store.getById(gameId)
     const viewer = this.store.getParticipant(gameId, identity.uid)
-    if (!lobby || !viewer) {
+    if (!lobby || !viewer || this.isExpiredWaiting(lobby)) {
       return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
     }
     const decks = new Map(
@@ -223,6 +264,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
     }
     if (
       lobby.status !== "waiting" ||
+      this.isExpiredWaiting(lobby) ||
       participant.role !== "player" ||
       !participant.playerId
     ) {
@@ -271,7 +313,14 @@ export class LobbyDurableObject extends DurableObject<Env> {
   getSession(gameId: string, uid: string): GameSession | null {
     const lobby = this.store.getById(gameId)
     const participant = this.store.getParticipant(gameId, uid)
-    if (!lobby || lobby.status === "finished" || !participant) return null
+    if (
+      !lobby ||
+      lobby.status === "finished" ||
+      !participant ||
+      this.isExpiredWaiting(lobby)
+    ) {
+      return null
+    }
     return {
       gameId,
       uid,
@@ -378,7 +427,42 @@ export class LobbyDurableObject extends DurableObject<Env> {
         "De game-initialisatie is ongeldig.",
       )
     }
+    const reserved = this.store.reserveLobbyStart(
+      gameId,
+      identity.uid,
+      new Date(this.now()).toISOString(),
+    )
+    if (reserved === "quota") {
+      console.warn("Lobby quota exceeded.", {
+        event: "lobby_quota_exceeded",
+        uid: identity.uid,
+        group: "active",
+        limit: MAX_ACTIVE_LOBBIES_PER_UID,
+      })
+      return failure(
+        409,
+        "LOBBY_QUOTA_EXCEEDED",
+        "Je hebt het maximum aantal startende of actieve lobby's bereikt.",
+      )
+    }
+    if (reserved === "missing") {
+      return failure(409, "LOBBY_NOT_READY", "Deze lobby kan niet starten.")
+    }
+    this.scheduleNextCleanup()
     return { ok: true, value: { seed: seed.data, session } }
+  }
+
+  releaseGameStart(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): RpcResult<null> {
+    const lobby = this.store.getById(gameId)
+    if (lobby?.hostUid !== identity.uid || lobby.status !== "starting") {
+      return failure(409, "LOBBY_NOT_READY", "Deze lobby start niet.")
+    }
+    this.store.setStatus(gameId, "waiting", new Date(this.now()).toISOString())
+    this.scheduleNextCleanup()
+    return { ok: true, value: null }
   }
 
   markGameActive(gameId: string, identity: VerifiedIdentity): RpcResult<null> {
@@ -390,7 +474,25 @@ export class LobbyDurableObject extends DurableObject<Env> {
         "Alleen de geverifieerde host kan de lobbystatus wijzigen.",
       )
     }
-    if (!this.store.setStatus(gameId, "active", new Date().toISOString())) {
+    const activated = this.store.activateLobby(
+      gameId,
+      identity.uid,
+      new Date(this.now()).toISOString(),
+    )
+    if (activated === "quota") {
+      console.warn("Lobby quota exceeded.", {
+        event: "lobby_quota_exceeded",
+        uid: identity.uid,
+        group: "active",
+        limit: MAX_ACTIVE_LOBBIES_PER_UID,
+      })
+      return failure(
+        409,
+        "LOBBY_QUOTA_EXCEEDED",
+        "Je hebt het maximum aantal actieve lobby's bereikt.",
+      )
+    }
+    if (activated === "missing") {
       return failure(404, "GAME_NOT_FOUND", "Lobby niet gevonden.")
     }
     return { ok: true, value: null }
@@ -418,8 +520,35 @@ export class LobbyDurableObject extends DurableObject<Env> {
         "Alleen een actieve game kan worden afgebroken.",
       )
     }
-    this.store.setStatus(gameId, "finished", new Date().toISOString())
+    this.store.setStatus(gameId, "finished", new Date(this.now()).toISOString())
+    this.scheduleNextCleanup()
     return { ok: true, value: null }
+  }
+
+  alarm() {
+    const now = this.now()
+    try {
+      const cleaned = this.store.cleanupExpired(
+        new Date(now - STARTING_LOBBY_TIMEOUT_MS).toISOString(),
+        new Date(now - WAITING_LOBBY_TTL_MS).toISOString(),
+        new Date(now - FINISHED_LOBBY_RETENTION_MS).toISOString(),
+      )
+      console.info("Automatic lobby cleanup completed.", {
+        event: "lobby_cleanup_completed",
+        startingRecovered: cleaned.startingRecovered,
+        waitingDeleted: cleaned.waiting,
+        finishedDeleted: cleaned.finished,
+        rateLimitsDeleted: cleaned.rateLimitsDeleted,
+        totalDeleted: cleaned.waiting + cleaned.finished,
+      })
+      this.scheduleNextCleanup()
+    } catch (caught) {
+      console.error("Automatic lobby cleanup failed.", {
+        event: "lobby_cleanup_failed",
+        reason: caught instanceof Error ? caught.message : "UNKNOWN",
+      })
+      throw caught
+    }
   }
 
   private createUniqueCode() {
@@ -428,6 +557,21 @@ export class LobbyDurableObject extends DurableObject<Env> {
       if (!this.store.getByCode(code)) return code
     }
     throw new Error("JOIN_CODE_EXHAUSTED")
+  }
+
+  private waitingCutoff() {
+    return new Date(this.now() - WAITING_LOBBY_TTL_MS).toISOString()
+  }
+
+  private isExpiredWaiting(lobby: LobbyRecord) {
+    return lobby.status === "waiting" && lobby.createdAt <= this.waitingCutoff()
+  }
+
+  private scheduleNextCleanup() {
+    const expiration = this.store.nextExpirationAt()
+    if (expiration) {
+      this.state.waitUntil(this.storage.setAlarm(Date.parse(expiration)))
+    }
   }
 
   private toSummary(lobby: LobbyRecord, viewerUid?: string): LobbySummary {

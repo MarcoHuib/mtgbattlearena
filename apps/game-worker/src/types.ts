@@ -23,11 +23,14 @@ export type SqlStorage = {
 export type DurableObjectStorage = {
   sql: SqlStorage
   transactionSync<T>(callback: () => T): T
+  getAlarm(): Promise<number | null>
+  setAlarm(scheduledTime: number | Date): Promise<void>
 }
 
 export type DurableObjectState = {
   storage: DurableObjectStorage
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>
+  waitUntil(promise: Promise<unknown>): void
   acceptWebSocket(socket: WorkerWebSocket): void
   getWebSockets(): WorkerWebSocket[]
 }
@@ -157,6 +160,10 @@ export type LobbyDurableObjectStub = {
     gameId: string,
     identity: VerifiedIdentity,
   ): Promise<RpcResult<{ seed: OnlineGameSeed; session: GameSession }>>
+  releaseGameStart(
+    gameId: string,
+    identity: VerifiedIdentity,
+  ): Promise<RpcResult<null>>
   markGameActive(
     gameId: string,
     identity: VerifiedIdentity,

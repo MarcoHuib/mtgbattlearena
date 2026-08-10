@@ -545,6 +545,9 @@ Voor de volledige technische uitleg:
 <br />
 
 Firebase Authentication verzorgt uitsluitend de online identiteit.
+De globale lobbydirectory handhaaft server-side per-UID quota en
+creatieratelimits. Wachtende lobby's verlopen na twee uur; afgeronde lobby's
+worden na 24 uur via Durable Object-alarms opgeruimd.
 De lokale offline battle is hier niet van afhankelijk.
 
 ```sh
