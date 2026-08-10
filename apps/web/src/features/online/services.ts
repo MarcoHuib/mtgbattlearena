@@ -20,6 +20,7 @@ import {
   type OnlineLobby,
 } from "./types"
 import { createFirebaseAuthPort, readFirebaseConfig } from "./firebaseAuth"
+import { runtimeConfig } from "../../runtimeConfig"
 import { MockRealtimeConnection } from "./mockRealtime"
 import { CloudflareWebSocketConnection } from "./realtime"
 
@@ -629,8 +630,8 @@ export type ApplicationServices = {
 }
 
 export const createApplicationServices = (): ApplicationServices => {
-  const configuredApiUrl: unknown = import.meta.env.VITE_ONLINE_API_URL
-  const configuredSocketUrl: unknown = import.meta.env.VITE_ONLINE_SOCKET_URL
+  const configuredApiUrl: unknown = runtimeConfig.onlineApiUrl
+  const configuredSocketUrl: unknown = runtimeConfig.onlineSocketUrl
   const remoteApiUrl =
     typeof configuredApiUrl === "string" && configuredApiUrl.trim()
       ? configuredApiUrl
@@ -642,7 +643,12 @@ export const createApplicationServices = (): ApplicationServices => {
       ? configuredSocketUrl
       : remoteApiUrl
   if (apiUrl) {
-    const firebaseConfig = readFirebaseConfig(import.meta.env)
+    const firebaseConfig = readFirebaseConfig({
+      VITE_FIREBASE_API_KEY: runtimeConfig.firebaseApiKey,
+      VITE_FIREBASE_AUTH_DOMAIN: runtimeConfig.firebaseAuthDomain,
+      VITE_FIREBASE_PROJECT_ID: runtimeConfig.firebaseProjectId,
+      VITE_FIREBASE_APP_ID: runtimeConfig.firebaseAppId,
+    })
     if (!firebaseConfig.configured) {
       const auth = new UnavailableAuthService(
         `Firebase-configuratie ontbreekt (${firebaseConfig.missing.join(", ")}). Offline spelen blijft beschikbaar.`,

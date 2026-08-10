@@ -1,24 +1,38 @@
 # CI/CD
 
-MTG Battle Arena gebruikt één npm-workspace en één lockfile. Development is
-lokaal, `staging` vertegenwoordigt Test/Beta en `main` vertegenwoordigt
-Production.
+`main` is de single source of truth voor iedere release. Development gebeurt
+lokaal; pull requests naar `main` valideren code zonder credentials of
+deployment. Na merge promoot één workflow dezelfde release eerst naar Beta en
+daarna naar Production.
 
-| Omgeving              | Branch    | Frontend                         | API / WebSocket                                                            |
-| --------------------- | --------- | -------------------------------- | -------------------------------------------------------------------------- |
-| Development           | lokaal    | Vite dev server                  | lokale Workers                                                             |
-| Test/Beta (`staging`) | `staging` | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` |
-| Production            | `main`    | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           |
+```text
+feature/* → PR naar main → CI → merge naar main
+                                      │
+                                      ▼
+                               Release Build #X
+                                      │
+                                      ▼
+                             Beta · Build #X
+                                      │ success required
+                                      ▼
+                         Production · Build #X
+```
 
-Een pull request voert nooit een deployment uit. Een merge/push naar `staging`
-start Beta; een merge/push naar `main` start Production.
+| Omgeving    | GitHub Environment | Bron                        | Frontend                         | API / WebSocket                                                            |
+| ----------- | ------------------ | --------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
+| Development | geen               | lokaal                      | Vite dev server                  | lokale Workers/proxy                                                       |
+| Test/Beta   | `staging`          | release uit `main`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` |
+| Production  | `production`       | dezelfde release uit `main` | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           |
+
+De branch `staging` is niet meer nodig voor CI/CD. De naam `staging` blijft
+uitsluitend bestaan als GitHub Environment, Firebase Hosting-target en Wrangler
+environment voor Beta.
 
 ## Pull request CI
 
-`.github/workflows/ci.yml` draait voor pull requests naar `staging` en `main` en
-kan handmatig worden gestart. Change detection bepaalt welke projecten geraakt
-zijn. De stabiele checks worden altijd aangemaakt, ook als een project niet is
-geraakt:
+`.github/workflows/ci.yml` draait voor pull requests naar `main` en kan
+handmatig worden gestart. Change detection houdt de stabiele checks goedkoop,
+maar alle vereiste checknamen blijven altijd zichtbaar:
 
 - `CI / Frontend`
 - `CI / Game Worker`
@@ -27,188 +41,206 @@ geraakt:
 
 Geraakte projecten krijgen lint, typecheck, tests, PWA-build en/of Wrangler
 dry-run. Dependency Review blokkeert nieuw geïntroduceerde high en critical
-kwetsbaarheden. CI gebruikt uitsluitend `contents: read`, krijgt geen deployment
-environment en ontvangt geen productie- of stagingcredentials. CodeQL blijft de
-bestaande afzonderlijke GitHub-configuratie gebruiken.
+kwetsbaarheden. De workflow gebruikt `contents: read`, ontvangt geen deployment
+secrets en gebruikt geen `pull_request_target`. CodeQL blijft afzonderlijk door
+GitHub beheerd.
+
+## Releaseworkflow
+
+`.github/workflows/deploy-release.yml` start bij iedere push naar `main`. Een
+handmatige run is alleen effectief wanneer `main` als ref is geselecteerd. De
+workflow gebruikt concurrencygroep `release-main` met annuleren uitgeschakeld,
+zodat releases niet racen of een lopende promotie onderbreken.
+
+Handmatig starten: **Actions → Deploy Release → Run workflow → main**. Zo'n run
+selecteert bewust alle deployables en doorloopt opnieuw Beta vóór Production.
+
+De jobs zijn:
+
+1. `Release / Detect changes`
+2. `Release / Validate`
+3. `Release / Build frontend artifact` wanneer de frontend geraakt is
+4. Beta-deployments voor geraakte deployables
+5. `Beta / Release complete`
+6. Production-deployments voor dezelfde geraakte deployables
+7. `Production / Release complete`
+
+Iedere Production-job vereist een succesvolle `Beta / Release complete`. Die
+aggregatiejob controleert expliciet dat iedere geraakte Beta-deployment is
+geslaagd. Een mislukte Firebase-, Import Worker- of Game Worker-deployment laat
+de aggregatie falen en slaat Production volledig over.
+
+Wanneer beide Workers geraakt zijn, wordt binnen iedere omgeving eerst de
+Import Worker en daarna de Game Worker gedeployed. Hiermee blijft de bestaande
+service-bindingvolgorde behouden.
+
+## Build once, deploy many
+
+Vite bouwt één environment-neutrale PWA. De job uploadt `apps/web/dist` als
+artifact `frontend-release-<run_number>`. Zowel Beta als Production downloaden
+exact dit artifact; de JavaScript- en CSS-bundles worden niet opnieuw gebouwd.
+
+Omgevingswaarden staan in `/runtime-config.js`, buiten de Vite-bundle. De
+generator kent geen namen, URLs of Firebaseprojecten: hij leest en valideert
+uitsluitend procesvariabelen. GitHub Actions vult die met gedeelde Repository
+Variables en waarden uit de actieve GitHub Environment. Daardoor vereist een
+derde omgeving geen scriptwijziging. `RELEASE_VERSION` komt in de workflow uit
+`github.run_number`; Beta en Production krijgen zo hetzelfde buildnummer.
+
+Het gegenereerde `runtime-config.js` wordt niet door Workbox geprecachet en
+krijgt via Firebase `Cache-Control: no-store`. Bij een volledig offline bezoek
+mag dit script niet laden; de app-shell start dan nog steeds en de online laag
+blijft volgens het local-first principe niet beschikbaar.
+
+De oude `.env.production` en `.env.staging` zijn verwijderd om te voorkomen dat
+omgevingendpoints opnieuw in de bundle terechtkomen. `.env.local` blijft voor
+lokale ontwikkeling als fallback ondersteund.
+
+## Releaseversie
+
+`github.run_number` is het release-/buildnummer voor de volledige workflow.
+Wrangler ontvangt dezelfde waarde als `RELEASE_VERSION` voor beide Workers en
+de frontend-runtimeconfig bevat `releaseVersion`.
+
+Na een succesvolle Beta-promotie publiceert een job een GitHub Deployment-record
+voor `staging` met task `release-metadata` en beschrijving `Build #X`.
+Production publiceert pas na
+een volledig succesvolle Production-promotie een record voor
+`production` met dezelfde task. Alleen deze twee metadatajobs hebben
+`deployments: write`; alle overige jobs houden `contents: read`.
+
+De README-badges lezen het nieuwste record per metadataomgeving. Daardoor kan
+Beta `Build #143` tonen terwijl Production na een fout op `Build #142` blijft.
+Een mislukte deployment publiceert geen nieuw succesvol releaserecord.
+
+## Firebase Hosting en Authentication
+
+Beta en Production gebruiken hetzelfde Firebaseproject `mtgbattlearena` en
+delen bewust Authentication, providers en gebruikers. Hosting blijft door
+expliciete targets gescheiden:
+
+| Target       | Site                  | Custom domain            |
+| ------------ | --------------------- | ------------------------ |
+| `staging`    | `mtgbattlearena-beta` | `beta.mtgbattlearena.nl` |
+| `production` | `mtgbattlearena`      | `mtgbattlearena.nl`      |
+
+De Beta-job gebruikt uitsluitend target `staging`; de Production-job uitsluitend
+target `production`. Er zijn geen Preview Channels.
+
+Beide GitHub Environments hebben nodig:
+
+| Secret                                    | Inhoud                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| `FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA` | Service-account JSON met Hostingrechten in het gedeelde Firebaseproject |
+| `CLOUDFLARE_API_TOKEN`                    | Scoped token voor de betreffende Workers en routes                      |
+| `CLOUDFLARE_ACCOUNT_ID`                   | Cloudflare-account met de Workers                                       |
+
+Configureer deze niet-geheime GitHub Repository Variables eenmaal voor beide
+omgevingen:
+
+| Repository Variable    | Inhoud                               |
+| ---------------------- | ------------------------------------ |
+| `FIREBASE_API_KEY`     | publieke gedeelde Firebase-webconfig |
+| `FIREBASE_AUTH_DOMAIN` | publieke gedeelde Firebase-webconfig |
+| `FIREBASE_PROJECT_ID`  | gedeeld Firebaseproject-ID           |
+| `FIREBASE_APP_ID`      | publieke gedeelde Firebase-webconfig |
+
+Configureer daarnaast deze GitHub Environment Variables per omgeving:
+
+| Environment Variable | `staging`                            | `production`                    |
+| -------------------- | ------------------------------------ | ------------------------------- |
+| `APP_ENV`            | `staging`                            | `production`                    |
+| `IMPORT_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
+| `ONLINE_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
+| `ONLINE_SOCKET_URL`  | `https://ws.beta.mtgbattlearena.nl`  | `https://ws.mtgbattlearena.nl`  |
+
+`RELEASE_VERSION` wordt door de workflow gezet op `github.run_number` en
+`RUNTIME_CONFIG_OUTPUT` op `apps/web/dist/runtime-config.js`; deze hoeven niet
+handmatig als Environment Variable te worden beheerd.
+
+Pas de deployment branch policy van GitHub Environment `staging` aan: alleen
+`main` hoeft nog toegestaan te zijn. Doe hetzelfde voor `production`.
+
+## Cloudflare-isolatie
+
+| Component       | Beta                             | Production                           |
+| --------------- | -------------------------------- | ------------------------------------ |
+| Import Worker   | `mtg-battle-mode-import-staging` | `mtg-battle-mode-import`             |
+| Game Worker     | `mtg-battle-mode-online-staging` | `mtg-battle-mode-online`             |
+| Wrangler        | `--env staging`                  | standaardconfiguratie zonder `--env` |
+| Import binding  | staging Import Worker            | Production Import Worker             |
+| Durable Objects | eigen staging namespaces         | Production namespaces                |
+
+Wranglerbindings en migrations blijven expliciet per environment gedefinieerd.
+De gedeelde releasebron verandert niets aan de scheiding van Lobby- en
+Game-state.
+
+De Cloudflare-token heeft minimaal nodig:
+
+- Account → Workers Scripts → Edit
+- Zone → Workers Routes → Edit voor de relevante zone
+
+Gebruik nooit de Global API Key.
 
 ## Change detection
 
-- `apps/web/**`, de bijbehorende environmentfile en Firebaseconfiguratie raken
-  de frontend.
+- `apps/web/**`, runtimeconfigscript en Firebaseconfiguratie raken de frontend.
 - `apps/game-worker/**` raakt de Game Worker.
 - `apps/import-worker/**` raakt de Import Worker.
 - `packages/**` en root-TypeScriptconfiguratie raken frontend en Game Worker.
-- `package.json` en `package-lock.json` raken alle deployables.
-- Staging-only frontendconfiguratie activeert geen Production Hosting-deploy;
-  Production-only frontendconfiguratie activeert geen Beta Hosting-deploy.
-- Een gewijzigd Worker-`wrangler.toml` raakt die Worker conservatief in beide
-  omgevingen, omdat production- en stagingsecties hetzelfde bestand delen.
+- `package.json`, `package-lock.json` en de releaseworkflow raken alle
+  deployables.
+- Een handmatige release vanaf `main` selecteert alle deployables.
 
-## Beta deployment
-
-`.github/workflows/deploy-beta.yml` draait uitsluitend na een push naar
-`staging`. Het gebruikt concurrencygroep `staging` met annuleren uitgeschakeld.
-`Beta / Validate` heeft geen environment of secrets en valideert alleen geraakte
-deployables. Daarna kunnen onafhankelijk draaien:
-
-- `Beta / Firebase Hosting`
-- `Beta / Import Worker`
-- `Beta / Game Worker`
-
-Als beide Workers veranderen, wacht de Game Worker op de Import Worker. Bij een
-Game Worker-only wijziging blokkeert de overgeslagen Import Worker-job niet.
-
-De frontend wordt gebouwd met Vite mode `staging` en `.env.staging`. De drie
-service-endpoints zijn daarmee vast op de Beta-hosts gezet. De publieke Firebase
-webconfiguratie wordt tijdens de build uit GitHub Environment variables
-ingevuld en moet gelijk zijn aan de Production Firebase Auth-configuratie.
-`.firebaserc` koppelt target `staging` expliciet aan Hosting-site
-`mtgbattlearena-beta`; de workflow deployt alleen dit target binnen het gedeelde
-project `mtgbattlearena`. Er worden geen Preview Channels gebruikt.
-
-Cloudflare wordt gedeployed met `wrangler deploy --env staging`:
-
-| Component              | Production (standaardconfiguratie) | Staging environment              |
-| ---------------------- | ---------------------------------- | -------------------------------- |
-| Import Worker          | `mtg-battle-mode-import`           | `mtg-battle-mode-import-staging` |
-| Game Worker            | `mtg-battle-mode-online`           | `mtg-battle-mode-online-staging` |
-| Import service binding | Production Import Worker           | Staging Import Worker            |
-| Durable Objects        | Production Worker-namespaces       | Eigen staging Worker-namespaces  |
-
-Wrangler erft `vars`, service bindings en Durable Objectconfiguratie niet naar
-een named environment. Daarom staan de stagingbindings en migrations expliciet
-in `wrangler.toml`. Beide omgevingen gebruiken `FIREBASE_PROJECT_ID =
-"mtgbattlearena"` en delen dus Authentication. De bindings zonder `script_name`
-verwijzen naar de staging Game Worker zelf en houden Lobby- en Game-state
-gescheiden van Production. De
-bestaande migrations worden herhaald voor de nieuwe namespaces; er wordt geen
-Production-migratie verwijderd of gewijzigd.
-
-## Production deployment
-
-`.github/workflows/deploy-production.yml` blijft verantwoordelijk voor pushes
-naar `main` en veilige handmatige runs op `main`. Production gebruikt:
-
-- GitHub Environment `production`;
-- Firebaseproject `mtgbattlearena` en expliciet Hosting-target `production`;
-- Wrangler zonder `--env`;
-- Workers `mtg-battle-mode-import` en `mtg-battle-mode-online`;
-- routes `api.mtgbattlearena.nl` en `ws.mtgbattlearena.nl`;
-- de bestaande Production service binding en Durable Object-namespaces.
-
-De Productieworkflow is verder niet inhoudelijk gewijzigd. De concurrencygroep
-`production`, validation-before-deploy en veilige Worker-volgorde blijven
-behouden.
-
-Ook de handmatige npm-scripts zijn target-safe: `npm run deploy:firebase`
-gebruikt alleen `hosting:production`; `npm run
-deploy:firebase:hosting:staging` gebruikt alleen `hosting:staging`.
-
-## GitHub Environments
-
-### `production`
-
-De bestaande Environment behoudt:
-
-| Secret                                    | Inhoud                                                                              |
-| ----------------------------------------- | ----------------------------------------------------------------------------------- |
-| `FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA` | Volledige JSON-key voor de Hosting service account van het gedeelde Firebaseproject |
-| `CLOUDFLARE_API_TOKEN`                    | Beperkte Cloudflare deploytoken                                                     |
-| `CLOUDFLARE_ACCOUNT_ID`                   | Cloudflare-account met de Production Workers                                        |
-
-Beperk deployment branches tot `main`.
-
-### `staging`
-
-Maak **Settings → Environments → staging** en beperk deployment branches tot
-`staging`. Voeg deze Environment secrets toe:
-
-| Secret                                    | Inhoud                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA` | Dezelfde Hosting service-account JSON als voor Production; een tweede account is niet nodig |
-| `CLOUDFLARE_API_TOKEN`                    | Beperkte token voor de twee staging Workers en Beta-routes                                  |
-| `CLOUDFLARE_ACCOUNT_ID`                   | Cloudflare-account met de staging Workers                                                   |
-
-Voeg daarnaast deze Environment variables toe. Dit zijn publieke configuratie-
-waarden, geen private credentials:
-
-| Variable                    | Inhoud                                           |
-| --------------------------- | ------------------------------------------------ |
-| `VITE_FIREBASE_API_KEY`     | Dezelfde Firebase Web App API key als Production |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Dezelfde Firebase Auth domain als Production     |
-| `VITE_FIREBASE_PROJECT_ID`  | `mtgbattlearena`, gelijk aan Production          |
-| `VITE_FIREBASE_APP_ID`      | Dezelfde Firebase Web App ID als Production      |
-
-De workflow stopt vóór deployment wanneer verplichte waarden ontbreken of de
-frontend niet het gedeelde Firebaseproject `mtgbattlearena` gebruikt.
-
-## Externe inrichting
-
-### Firebase Beta
-
-1. Maak binnen Firebaseproject `mtgbattlearena` een tweede Hosting-site met
-   site-ID `mtgbattlearena-beta`. De `.firebaserc`-targetmapping verwacht exact
-   die site-ID.
-2. Koppel `beta.mtgbattlearena.nl` als custom domain aan deze tweede site, niet
-   aan de bestaande Production-site.
-3. Voeg `beta.mtgbattlearena.nl` toe aan Firebase Authentication → Authorized
-   domains. Providers en gebruikers blijven bewust gedeeld met Production.
-4. Kopieer de bestaande publieke Production Web App-config naar de vier staging
-   Environment variables. Een afzonderlijke Firebase Web App is niet vereist.
-5. Kopieer dezelfde service-account JSON naar het gelijknamige secret in de
-   GitHub Environment `staging`. Voor Hosting zijn
-   `roles/firebasehosting.admin` en `roles/serviceusage.apiKeysViewer` voldoende.
-6. Controleer eenmalig met `firebase target:apply hosting staging
-mtgbattlearena-beta --project mtgbattlearena` dat de externe targetmapping
-   overeenkomt met `.firebaserc`; commit nooit credentialbestanden.
-
-### Cloudflare Beta
-
-1. Zorg dat `api.beta.mtgbattlearena.nl` en `ws.beta.mtgbattlearena.nl` in de
-   beheerde zone beschikbaar zijn. Wrangler declareert ze als custom domains;
-   controleer na de eerste deployment de DNS/custom-domainstatus.
-2. Geef de staging API-token Account → Workers Scripts → Edit en voor alleen de
-   relevante zone Zone → Workers Routes → Edit. Gebruik nooit de Global API Key.
-3. De eerste stagingdeployment maakt de nieuwe Worker- en Durable
-   Object-resources aan. Deploy bij een eerste volledige inrichting eerst de
-   Import Worker en daarna de Game Worker; de workflow bewaakt die volgorde.
-4. Controleer na deployment dat `mtg-battle-mode-online-staging` via binding
-   `IMPORT` uitsluitend naar `mtg-battle-mode-import-staging` verwijst.
+Bij een documentatie-only push wordt geen release gepubliceerd. Zodra minstens
+één deployable geraakt is, krijgen Beta en Production na succes hetzelfde
+releasebuildnummer, ook als alleen één Worker wijzigde.
 
 ## Rulesets
 
-Gebruik voor pull requests naar zowel `staging` als `main` dezelfde stabiele
-CI-checks:
+PR’s hoeven alleen naar `main`. Behoud deze vereiste checks:
 
 - `CI / Frontend`
 - `CI / Game Worker`
 - `CI / Import Worker`
 - `CI / Dependency Review`
-- `Analyze (javascript-typescript)` voor de bestaande CodeQL-workflow
+- `Analyze (javascript-typescript)` voor CodeQL
 
-Deze slice maakt of wijzigt geen Rulesets en voegt geen nieuwe quality gates,
-deployment approvals, smoke tests of PR-previewdeployments toe.
+Deze wijziging voegt geen extra quality gates, approvals, smoke tests,
+Playwright-deploymenttests of PR-previewdeployments toe.
+
+## Handmatige inrichting
+
+1. Verwijder `staging` als toegestane deploymentbranch uit de GitHub Environment
+   `staging` en sta `main` toe.
+2. Controleer dat Environment `production` eveneens alleen `main` toestaat.
+3. Plaats de gedeelde Firebasewaarden als Repository Variables en alleen de
+   omgevingsspecifieke runtimewaarden in beide Environments.
+4. Behoud de bestaande Environment secrets; er zijn geen nieuwe secrets nodig.
+5. Controleer dat beide Firebase Hosting-targets en custom domains nog correct
+   gekoppeld zijn.
+6. Controleer na de eerste release in Cloudflare dat beide Workerparen hetzelfde
+   `RELEASE_VERSION` tonen en dat de staging Game Worker uitsluitend aan de
+   staging Import Worker bindt.
+7. De oude workflows `Deploy Beta` en `Deploy Production` verdwijnen. Pas
+   eventuele externe workflow-notificaties aan naar `Deploy Release`.
 
 ## Troubleshooting
 
-- **CI verschijnt niet:** controleer dat de PR-base `staging` of `main` is.
-- **Beta workflow verschijnt niet:** deployment start pas na een push/merge naar
-  `staging`, niet tijdens de PR.
-- **Beta Firebase configuration ontbreekt:** controleer de staging Environment
-  variables en of de Environment branch policy `staging` toestaat.
-- **Firebase permission denied:** controleer de service-accountrollen en of de
-  JSON-key toegang heeft tot project `mtgbattlearena` en beide Hosting-sites.
-- **Verkeerde Firebaseconfig geweigerd:** de stagingvariabele
-  `VITE_FIREBASE_PROJECT_ID` moet bewust `mtgbattlearena` zijn.
-- **Workerroute faalt:** controleer token-zonebereik, custom domains en Workers
-  Routes → Edit.
-- **Service binding faalt:** deploy de staging Import Worker eerst en controleer
-  de exacte Workernaam.
-- **Worker dry-run faalt:** voer lokaal
-  `npm run deploy:cloudflare:check:staging` uit; hiervoor zijn geen credentials
-  nodig.
+- **Production is skipped:** open `Beta / Release complete`; minstens één
+  vereiste Beta-deployment is niet geslaagd.
+- **Runtimeconfig ontbreekt:** controleer zowel de vier Firebase Repository
+  Variables als de vier runtime Environment Variables uit de tabellen. De
+  generator faalt veilig bij een ontbrekende of ongeldige waarde.
+- **Verkeerde endpoint zichtbaar:** controleer `/runtime-config.js` op de
+  betreffende site en de `no-store` responseheader.
+- **Artifact ontbreekt:** controleer `Release / Build frontend artifact`; Beta en
+  Production gebruiken artifactnaam `frontend-release-<run_number>`.
+- **Workerrelease verschilt:** controleer `RELEASE_VERSION` in de Wrangler
+  deploylog en Workerbindings.
+- **Badge loopt achter:** het releaserecord wordt pas gepubliceerd nadat de hele
+  betreffende omgeving succesvol is gepromoveerd; Shields kan kort cachen.
 
-Een echte Beta- of Production-deployment kan lokaal niet veilig worden getest
-zonder de externe projecten, domains en Environment credentials. Gebruik builds
-en beide Wrangler dry-runs om repositoryconfiguratie vóór de eerste deployment
-te verifiëren.
+Een echte deployment kan lokaal niet veilig worden getest zonder Environment
+credentials. Lokale builds, runtimeconfiggeneratie en Wrangler dry-runs
+valideren de repositoryconfiguratie zonder externe wijzigingen.

@@ -30,6 +30,15 @@
           ]
         },
         {
+          "source": "/runtime-config.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            }
+          ]
+        },
+        {
           "source": "/assets/**",
           "headers": [
             {
@@ -66,6 +75,15 @@
             {
               "key": "Cache-Control",
               "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/runtime-config.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
             }
           ]
         },
