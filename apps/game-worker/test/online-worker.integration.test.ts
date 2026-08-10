@@ -6,8 +6,10 @@ import {
   MAX_GAME_COMMAND_MESSAGE_BYTES,
   MAX_COUNTER_TYPES_PER_CARD,
   MAX_SERIALIZED_GAME_STATE_BYTES,
+  MemoryBroadcastBudget,
   MemoryCommandRateLimiter,
 } from "../src/game-security"
+import type { BroadcastBudget } from "../src/game-security"
 import type { OnlineGameSeed } from "../src/game-server-adapter"
 import type { StoredGameRecord } from "../src/game-snapshot-store"
 import type {
@@ -93,6 +95,7 @@ class LocalDurableObjectEnvironment {
   constructor(
     readonly sql = new LocalGameSqlStorage(),
     now: () => number = Date.now,
+    broadcastBudget: BroadcastBudget = new MemoryBroadcastBudget(),
   ) {
     const state: DurableObjectState = {
       storage: {
@@ -114,6 +117,7 @@ class LocalDurableObjectEnvironment {
       undefined,
       new MemoryCommandRateLimiter(),
       now,
+      broadcastBudget,
     )
   }
 
@@ -518,6 +522,36 @@ describe("lokale Durable Object-omgeving met vier Commander-spelers", () => {
     expect(new TextEncoder().encode(runtime.sql.payload!).byteLength).toBe(
       MAX_SERIALIZED_GAME_STATE_BYTES - 1,
     )
+    expect(socket.messages).toHaveLength(0)
+    warning.mockRestore()
+  })
+
+  test("weigert een command atomair wanneer het gamebroadcastbudget op is", async () => {
+    const version = await keepAllOpeningHands()
+    const writeCount = runtime.sql.writeCount
+    runtime = new LocalDurableObjectEnvironment(
+      runtime.sql,
+      Date.now,
+      new MemoryBroadcastBudget(0),
+    )
+    const socket = runtime.connect(playerSession(0))
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined)
+
+    const rejected = await runtime.command(
+      playerSession(0),
+      command("CHANGE_LIFE", version, { delta: -1 }),
+    )
+    expect(rejected).toMatchObject({
+      type: "ERROR",
+      error: {
+        code: "GAME_BROADCAST_RATE_LIMITED",
+        currentVersion: version,
+      },
+    })
+    expect(runtime.sql.writeCount).toBe(writeCount)
+    expect((await runtime.snapshot(playerSession(0))).version).toBe(version)
     expect(socket.messages).toHaveLength(0)
     warning.mockRestore()
   })

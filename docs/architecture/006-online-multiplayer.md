@@ -203,6 +203,32 @@ volledige autorisatieview equivalent is. Hiermee blijft verborgen hand- en
 librarydata strikt per speler gescheiden. Delta/event-synchronisatie blijft een
 latere optimalisatie; H-02 behoudt bewust het bestaande full-snapshotprotocol.
 
+De gecombineerde theoretische fan-out is twaalf playersockets (zes spelers ×
+twee) plus twintig spectators, dus 32 sockets. Een normale game heeft maximaal
+zeven daadwerkelijk verschillende views: zes private spelersviews en één
+publieke spectatorview. Bij de 4-MiB-viewgrens kan één broadcast toch 128 MiB
+uitgaand verkeer veroorzaken. Omdat de commandlimiet per UID geldt, konden zes
+spelers theoretisch 180 commands per tien seconden accepteren: zonder
+gamebudget 22,5 GiB per venster.
+
+Daarom delen commandbroadcasts en initiële snapshots een persistent Game
+Durable Object-budget van 512 MiB per vast venster van tien seconden. Ieder
+geaccepteerd command reserveert vóór persistence de exacte som van
+`serializedViewBytes × ontvangende sockets`; niet alleen het aantal unieke
+serialisaties. Dit laat vier absolute worst-case 128-MiB-broadcasts toe, terwijl
+normale kleinere snapshots tientallen snelle interacties blijven ondersteunen.
+Een overschrijding retourneert
+`GAME_BROADCAST_RATE_LIMITED`, zonder statewijziging, SQLite-snapshotwrite of
+gedeeltelijke broadcast. Het singleton-budget in SQLite blijft correct over
+hibernation en reconstructie en is per Game Durable Object geïsoleerd.
+
+De kandidaatvalidatie retourneert de reeds geserialiseerde, op grootte
+gecontroleerde views. Na budgetreservering en persistence gebruikt broadcast
+exact die strings; er is geen tweede snapshotserialisatieronde meer. Voor de
+defensieve autorisatiegrens worden host/non-hostvarianten apart gecachet, maar
+verschillende player-UID's delen nooit een private view. Alle geldige
+spectators delen uitsluitend de identieke publieke spectatorview.
+
 De volledige speeltafelpresentatie en alle gebruikersacties worden sinds
 [ADR 007](007-shared-battle-runtime.md) door offline en online gedeeld. Alleen
 de lokale Redux-adapter en de persoonlijke-snapshot/commandadapter verschillen.

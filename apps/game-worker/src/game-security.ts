@@ -17,6 +17,8 @@ export const MAX_GAME_GROUPS = 500
 export const MAX_COUNTER_TYPES_PER_CARD = 32
 export const MAX_SERIALIZED_GAME_STATE_BYTES = 4 * 1024 * 1024
 export const MAX_SERIALIZED_PERSONAL_SNAPSHOT_BYTES = 4 * 1024 * 1024
+export const GAME_BROADCAST_BUDGET_BYTES = 512 * 1024 * 1024
+export const GAME_BROADCAST_BUDGET_WINDOW_MS = 10_000
 
 export type ConnectionLimitCode =
   "WEBSOCKET_CONNECTION_LIMIT_REACHED" | "SPECTATOR_CONNECTION_LIMIT_REACHED"
@@ -46,6 +48,11 @@ export const connectionLimitViolation = (
 
 export type CommandRateLimiter = {
   attempt(uid: string, now: number): boolean
+}
+
+export type BroadcastBudget = {
+  allows(byteCount: number, now: number): boolean
+  reserve(byteCount: number, now: number): boolean
 }
 
 type RateRow = { windowStartedAt: number; attempts: number }
@@ -132,6 +139,101 @@ export class MemoryCommandRateLimiter implements CommandRateLimiter {
 
   get size() {
     return this.rates.size
+  }
+}
+
+type BroadcastBudgetRow = { windowStartedAt: number; bytesSent: number }
+
+export class SqliteBroadcastBudget implements BroadcastBudget {
+  private readonly sql: SqlStorage
+
+  constructor(private readonly storage: DurableObjectStorage) {
+    this.sql = storage.sql
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS game_broadcast_budget (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        window_started_at INTEGER NOT NULL,
+        bytes_sent INTEGER NOT NULL
+      );
+    `)
+  }
+
+  allows(byteCount: number, now: number) {
+    const current = this.sql
+      .exec<BroadcastBudgetRow>(
+        `SELECT window_started_at AS windowStartedAt,
+                bytes_sent AS bytesSent
+         FROM game_broadcast_budget WHERE singleton = 1`,
+      )
+      .toArray()[0]
+    const bytesInWindow =
+      current && now - current.windowStartedAt < GAME_BROADCAST_BUDGET_WINDOW_MS
+        ? current.bytesSent
+        : 0
+    return byteCount <= GAME_BROADCAST_BUDGET_BYTES - bytesInWindow
+  }
+
+  reserve(byteCount: number, now: number) {
+    if (byteCount === 0) return true
+    return this.storage.transactionSync(() => {
+      const current = this.sql
+        .exec<BroadcastBudgetRow>(
+          `SELECT window_started_at AS windowStartedAt,
+                  bytes_sent AS bytesSent
+           FROM game_broadcast_budget WHERE singleton = 1`,
+        )
+        .toArray()[0]
+      const bytesInWindow =
+        current &&
+        now - current.windowStartedAt < GAME_BROADCAST_BUDGET_WINDOW_MS
+          ? current.bytesSent
+          : 0
+      if (byteCount > GAME_BROADCAST_BUDGET_BYTES - bytesInWindow) return false
+      this.sql.exec(
+        `INSERT INTO game_broadcast_budget
+          (singleton, window_started_at, bytes_sent) VALUES (1, ?, ?)
+         ON CONFLICT (singleton) DO UPDATE SET
+          window_started_at = CASE WHEN ? - window_started_at >= ?
+            THEN ? ELSE window_started_at END,
+          bytes_sent = CASE WHEN ? - window_started_at >= ?
+            THEN ? ELSE bytes_sent + ? END`,
+        now,
+        byteCount,
+        now,
+        GAME_BROADCAST_BUDGET_WINDOW_MS,
+        now,
+        now,
+        GAME_BROADCAST_BUDGET_WINDOW_MS,
+        byteCount,
+        byteCount,
+      )
+      return true
+    })
+  }
+}
+
+export class MemoryBroadcastBudget implements BroadcastBudget {
+  private windowStartedAt = 0
+  private bytesSent = 0
+
+  constructor(private readonly limit = GAME_BROADCAST_BUDGET_BYTES) {}
+
+  allows(byteCount: number, now: number) {
+    const bytesInWindow =
+      now - this.windowStartedAt >= GAME_BROADCAST_BUDGET_WINDOW_MS
+        ? 0
+        : this.bytesSent
+    return byteCount <= this.limit - bytesInWindow
+  }
+
+  reserve(byteCount: number, now: number) {
+    if (now - this.windowStartedAt >= GAME_BROADCAST_BUDGET_WINDOW_MS) {
+      this.windowStartedAt = now
+      this.bytesSent = 0
+    }
+    if (byteCount > this.limit - this.bytesSent) return false
+    this.bytesSent += byteCount
+    return true
   }
 }
 
@@ -249,17 +351,33 @@ export const validateGameRecordLimits = (
   return { valid: true, serialized, byteLength }
 }
 
+export const personalSnapshotViewKey = (session: GameSession) =>
+  session.role === "spectator"
+    ? `spectator:${session.isHost}`
+    : `player:${session.uid}:${session.playerId}:${session.isHost}`
+
+export type SerializedSnapshotView = {
+  serialized: string
+  byteLength: number
+}
+
+export type ValidatedSnapshotViews =
+  | { valid: true; views: Map<string, SerializedSnapshotView> }
+  | Exclude<ValidatedGameRecord, { valid: true }>
+
 export const validatePersonalSnapshotLimits = (
   game: AuthoritativeGameState,
-): Exclude<ValidatedGameRecord, { valid: true }> | null => {
+): ValidatedSnapshotViews => {
   const sessions: GameSession[] = [
-    ...game.turnOrder.map(playerId => ({
-      gameId: game.gameId,
-      uid: game.playerUids[playerId] ?? "",
-      playerId,
-      role: "player" as const,
-      isHost: false,
-    })),
+    ...game.turnOrder.flatMap(playerId =>
+      [false, true].map(isHost => ({
+        gameId: game.gameId,
+        uid: game.playerUids[playerId] ?? "",
+        playerId,
+        role: "player" as const,
+        isHost,
+      })),
+    ),
     {
       gameId: game.gameId,
       uid: "spectator-size-check",
@@ -267,7 +385,15 @@ export const validatePersonalSnapshotLimits = (
       role: "spectator",
       isHost: false,
     },
+    {
+      gameId: game.gameId,
+      uid: "spectator-size-check",
+      playerId: null,
+      role: "spectator",
+      isHost: true,
+    },
   ]
+  const views = new Map<string, SerializedSnapshotView>()
   for (const session of sessions) {
     const serialized = JSON.stringify(serializePersonalSnapshot(game, session))
     const byteLength = new TextEncoder().encode(serialized).byteLength
@@ -279,6 +405,17 @@ export const validatePersonalSnapshotLimits = (
         limit: MAX_SERIALIZED_PERSONAL_SNAPSHOT_BYTES,
       }
     }
+    views.set(personalSnapshotViewKey(session), { serialized, byteLength })
   }
-  return null
+  return { valid: true, views }
 }
+
+export const calculateBroadcastCost = (
+  views: Map<string, SerializedSnapshotView>,
+  sessions: GameSession[],
+) =>
+  sessions.reduce(
+    (total, session) =>
+      total + (views.get(personalSnapshotViewKey(session))?.byteLength ?? 0),
+    0,
+  )

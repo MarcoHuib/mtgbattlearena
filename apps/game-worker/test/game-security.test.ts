@@ -1,11 +1,15 @@
 import {
+  calculateBroadcastCost,
   connectionLimitViolation,
+  GAME_BROADCAST_BUDGET_BYTES,
   GAME_COMMAND_LIMIT,
   GAME_COMMAND_WINDOW_MS,
   MAX_GAME_CARD_INSTANCES,
   MAX_SERIALIZED_GAME_STATE_BYTES,
   MAX_SPECTATOR_WEBSOCKETS,
+  MemoryBroadcastBudget,
   MemoryCommandRateLimiter,
+  personalSnapshotViewKey,
   validateGameRecordLimits,
   validatePersonalSnapshotLimits,
   validateSeedGrowthLimits,
@@ -223,5 +227,33 @@ describe("Game Durable Object abuse limits", () => {
       valid: false,
       violation: "personal-snapshot-bytes",
     })
+  })
+
+  test("berekent en begrenst de volledige 32-socket broadcastfan-out", () => {
+    const sessions = [
+      ...Array.from({ length: 6 }, (_, index) => [
+        playerSession(`player-${index}`),
+        playerSession(`player-${index}`),
+      ]).flat(),
+      ...Array.from({ length: MAX_SPECTATOR_WEBSOCKETS }, (_, index) =>
+        spectatorSession(`spectator-${index}`),
+      ),
+    ]
+    const views = new Map(
+      sessions.map(session => [
+        personalSnapshotViewKey(session),
+        { serialized: "", byteLength: MAX_SERIALIZED_GAME_STATE_BYTES },
+      ]),
+    )
+    const cost = calculateBroadcastCost(views, sessions)
+    expect(sessions).toHaveLength(32)
+    expect(cost).toBe(128 * 1024 * 1024)
+
+    const budget = new MemoryBroadcastBudget()
+    for (let broadcast = 0; broadcast < 4; broadcast += 1) {
+      expect(budget.reserve(cost, 1_000)).toBe(true)
+    }
+    expect(4 * cost).toBe(GAME_BROADCAST_BUDGET_BYTES)
+    expect(budget.reserve(cost, 1_000)).toBe(false)
   })
 })
