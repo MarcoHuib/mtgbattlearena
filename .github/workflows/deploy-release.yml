@@ -206,15 +206,9 @@ jobs:
       - name: Install dependencies
         if: needs.changes.outputs.import_worker == 'true'
         run: npm ci
-      - name: Lint Import Worker
+      - name: Validate Import Worker
         if: needs.changes.outputs.import_worker == 'true'
-        run: npx --no-install eslint apps/import-worker
-      - name: Bundle Beta Import Worker
-        if: needs.changes.outputs.import_worker == 'true'
-        run: npm run deploy:cloudflare:check:staging:import
-      - name: Bundle Production Import Worker
-        if: needs.changes.outputs.import_worker == 'true'
-        run: npm run deploy:cloudflare:check:import
+        run: npm run validate:import-worker
 
   build-complete:
     name: Build / Complete

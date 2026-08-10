@@ -37,6 +37,7 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "lint:fix": "eslint --fix .",
+    "lint:import-worker": "eslint apps/import-worker/src/**/*.js",
     "lint": "eslint .",
     "test:e2e": "playwright test --config apps/web/playwright.config.ts",
     "worker:type-check": "tsc -p apps/game-worker/tsconfig.json --noEmit",
@@ -47,7 +48,8 @@
     "test:web": "vitest --run --config apps/web/vite.config.ts",
     "test:worker": "vitest --run --config apps/game-worker/vitest.config.ts",
     "test:integration": "vitest --run --config apps/game-worker/vitest.config.ts test/online-worker.integration.test.ts test/lobby-worker.integration.test.ts test/worker-online.test.ts && vitest --run --config apps/web/vite.config.ts src/features/online/realtime.test.ts src/features/online/OnlineScreen.test.tsx",
-    "type-check": "tsc -b --noEmit"
+    "type-check": "tsc -b --noEmit",
+    "validate:import-worker": "npm run lint:import-worker && npm run deploy:cloudflare:check:staging:import && npm run deploy:cloudflare:check:import"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -22,7 +22,6 @@ const eslintConfig = config(
       "**/playwright-report/",
       "**/test-results/",
       "apps/web/public/runtime-config.js",
-      "apps/import-worker/src/index.js",
     ],
   },
   {
@@ -114,6 +113,14 @@ const eslintConfig = config(
     files: ["apps/game-worker/src/types.ts"],
     rules: {
       "@typescript-eslint/no-unnecessary-type-parameters": [0],
+    },
+  },
+  {
+    name: "import-worker-javascript",
+    files: ["apps/import-worker/src/**/*.js"],
+    extends: [configs.disableTypeChecked],
+    languageOptions: {
+      globals: globals.serviceworker,
     },
   },
 
