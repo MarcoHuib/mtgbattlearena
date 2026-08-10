@@ -1,9 +1,8 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@mtg/game-core/*": ["packages/game-core/src/*"],
-      "@mtg/game-protocol": ["packages/game-protocol/src/index.ts"]
+      "@mtg/game-core/*": ["./packages/game-core/src/*"],
+      "@mtg/game-protocol": ["./packages/game-protocol/src/index.ts"]
     }
   }
 }

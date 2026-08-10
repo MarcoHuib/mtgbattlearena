@@ -268,13 +268,13 @@ runtime-gevalideerde protocol.
 
 [![Beta build][beta-build-shield]][beta-url]
 
-**Test environment**
+**Beta**
 
 `main` release
 
 🌐 **beta.mtgbattlearena.nl**
 
-<sub>Firebase Hosting · Cloudflare Staging · Isolated Durable Objects</sub>
+<sub>Firebase Hosting · Cloudflare Beta · Isolated Durable Objects</sub>
 
 </td>
 
@@ -292,7 +292,7 @@ runtime-gevalideerde protocol.
 
 [![Production build][production-build-shield]][production-url]
 
-**Live environment**
+**Production**
 
 `main`
 
@@ -313,6 +313,8 @@ runtime-gevalideerde protocol.
 **Release** `main`
 &nbsp;&nbsp;→&nbsp;&nbsp;
 **Beta**
+&nbsp;&nbsp;→&nbsp;&nbsp;
+**Approval**
 &nbsp;&nbsp;→&nbsp;&nbsp;
 **Production**
 
@@ -432,13 +434,25 @@ feature/* → PR naar main → CI
                     merge naar main
                            │
                            ▼
-                    Release Build #X
-                           │
-                           ▼
-                  🧪 Beta · Build #X
-                           │ success required
-                           ▼
-             🚀 Production · Build #X
+BUILD · Release #X
+├── Frontend
+├── Game Worker
+└── Import Worker
+       │
+       ▼
+BETA · Release #X
+├── Frontend
+├── Game Worker
+└── Import Worker
+       │
+       ▼
+APPROVAL · GitHub Environment production
+       │
+       ▼
+PRODUCTION · Release #X
+├── Frontend
+├── Game Worker
+└── Import Worker
 ```
 
 De ene releaseworkflow is **change-aware**:
@@ -456,6 +470,8 @@ De ene releaseworkflow is **change-aware**:
   uit Repository Variables en endpoints uit de actieve GitHub Environment,
   waardoor de generator geen kennis van omgevingsnamen of domeinen bevat;
 - Production heeft een harde dependency op de volledige Beta-promotie.
+- Production wacht daarna op de Required reviewers van GitHub Environment
+  `production`; de workflow bevat geen eigen approvalcode.
 
 ### Beta
 
@@ -466,7 +482,8 @@ Beta gebruikt:
 - Cloudflare Wrangler `--env staging`;
 - `api.beta.mtgbattlearena.nl`;
 - `ws.beta.mtgbattlearena.nl`;
-- afzonderlijke staging Workers en Durable Objects.
+- afzonderlijke Beta Workers en Durable Objects via Wrangler environment
+  `staging`.
 
 Firebase Authentication wordt bewust gedeeld met Production.
 
