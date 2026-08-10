@@ -1,163 +1,222 @@
 <a id="readme-top"></a>
 
+<div align="center">
+
+<img
+  src="docs/assets/mtg-battle-arena-banner.png"
+  alt="MTG Battle Arena — een fantasy battlefield tussen licht en duisternis"
+  width="100%"
+/>
+
+<br />
+
+# ⚔️ MTG Battle Mode
+
+### Een local-first digitale tafel voor Magic: The Gathering
+
+**Speel volledig offline of ga online met 2–6 spelers — zonder van de browser een automatische rules engine te maken.**
+
+<br />
+
+[![CI][ci-shield]][ci-url]
+[![Deploy Production][deploy-shield]][deploy-url]
+
 [![Issues][issues-shield]][issues-url]
 [![Stars][stars-shield]][stars-url]
 [![Last Commit][last-commit-shield]][commits-url]
 [![TypeScript][typescript-shield]][typescript-url]
 
-<div align="center">
-  <h1 align="center">MTG Battle Mode</h1>
-  <p align="center">
-    Een local-first digitale tafel voor Magic: The Gathering.
-    <br />
-    Speel volledig offline of gebruik de optionele online multiplayerlaag voor 2–6 spelers.
-    <br />
-    <br />
-    <a href="docs/architecture/"><strong>Bekijk de architectuur »</strong></a>
-    <br />
-    <br />
-    <a href="#quick-start">Quick Start</a>
-    &middot;
-    <a href="#status">Status</a>
-    &middot;
-    <a href="#roadmap">Roadmap</a>
-  </p>
+<br />
+
+[**🚀 Quick Start**](#-quick-start)
+&nbsp;&nbsp;•&nbsp;&nbsp;
+[**🏗️ Architectuur**](#️-architectuur)
+&nbsp;&nbsp;•&nbsp;&nbsp;
+[**🔄 CI/CD**](#-cicd)
+&nbsp;&nbsp;•&nbsp;&nbsp;
+[**🗺️ Roadmap**](#️-roadmap)
+&nbsp;&nbsp;•&nbsp;&nbsp;
+[**📚 Docs**](#-documentatie)
+
 </div>
 
+---
+
 > [!NOTE]
-> Dit is een onafhankelijk, onofficieel fanproject en een handmatige digitale
-> tafel. Het is geen automatische Magic-regelsimulator en geen officiële
-> Archidekt-, Scryfall- of Wizards-applicatie.
+> **MTG Battle Mode is een handmatige digitale tafel, geen Magic rules engine.**
+> Spelers voeren zelf acties uit zoals kaarten verplaatsen, tappen, leven aanpassen,
+> counters beheren, mulligans uitvoeren en beurten doorlopen.
+
+## ✨ Waarom MTG Battle Mode?
+
+| | |
+|---|---|
+| 📴 **Local-first** | Start en hervat battles zonder account of backend. |
+| 🃏 **Archidekt import** | Importeer openbare decks en werk met lokale snapshots. |
+| 💾 **Autosave & recovery** | Game-state, undo/redo en deckdata blijven lokaal beschikbaar. |
+| 📦 **Offline ready** | PWA + expliciete offlinepakketten met kaartdata en afbeeldingen. |
+| 👥 **2–6 spelers** | Commander-ready multiplayer met vier spelers als belangrijke use-case. |
+| 🔐 **Privacy by design** | Online spelers ontvangen alleen de state die zij mogen zien. |
+| ☁️ **Server authoritative** | Firebase verzorgt identiteit; Cloudflare beheert de officiële online game-state. |
+| 🎮 **Digitale tafel** | Geen automatische mana-, combat-, trigger- of kaartregelvalidatie. |
+
+---
+
+## 📊 Projectstatus
+
+### Legenda
+
+| Status | Betekenis |
+|---|---|
+| 🟢 **Ready** | Beschikbaar en onderdeel van de huidige applicatie |
+| 🟡 **In progress** | Actieve uitbreidingsrichting |
+| 🔵 **Automated** | Geautomatiseerd via GitHub Actions |
+| ⚪ **Planned** | Bewust later gepland |
+
+| Onderdeel | Status |
+|---|---|
+| Offline battle voor 2–6 spelers | 🟢 **Ready** |
+| Archidekt-import | 🟢 **Ready** |
+| Autosave, hervatten en undo/redo | 🟢 **Ready** |
+| Offlinepakket en PWA | 🟢 **Ready** |
+| Commander-zones en statustracking | 🟢 **Ready** |
+| Online lobby & multiplayerbasis | 🟢 **Ready** |
+| Server-authoritative game-core | 🟢 **Ready** |
+| CI-validatie op pull requests | 🔵 **Automated** |
+| Production deployment vanaf `main` | 🔵 **Automated** |
+| Verdere online game-acties | 🟡 **In progress** |
 
 <details>
-  <summary>Inhoudsopgave</summary>
-  <ol>
-    <li><a href="#over-het-project">Over het project</a></li>
-    <li><a href="#status">Status</a></li>
-    <li><a href="#quick-start">Quick Start</a></li>
-    <li><a href="#architectuur">Architectuur</a></li>
-    <li><a href="#ontwikkeling">Ontwikkeling</a></li>
-    <li><a href="#externe-diensten-en-databronnen">Externe diensten en databronnen</a></li>
-    <li><a href="#documentatie">Documentatie</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#juridische-documenten">Juridische documenten</a></li>
-    <li><a href="#disclaimer">Disclaimer</a></li>
-  </ol>
+<summary><strong>Wat kan de online game-core momenteel?</strong></summary>
+
+<br />
+
+De online architectuur gebruikt versioned commands en persoonlijke serverviews.
+De server bewaart de officiële game-state en stuurt tegenstanders nooit verborgen
+hand- of librarymetadata.
+
+De huidige richting ondersteunt onder andere:
+
+- kaarten trekken en verplaatsen;
+- leven en poison aanpassen;
+- millen en schudden;
+- beurtwissels;
+- persoonlijke openingshanden en mulligans;
+- lobby-, seat- en reconnectflows;
+- gescheiden views voor spelers en spectators.
+
+De applicatie blijft bewust een **handmatige tafel** en automatiseert geen volledige
+Magic-regels.
+
 </details>
 
-## Over het project
-
-MTG Battle Mode importeert openbare decklijsten vanuit Archidekt en verandert de
-browser in een digitale Commander-tafel. De applicatie beheert kaarten, zones,
-leven, poison, counters, commanderstatus en beurten, terwijl spelers alle
-spelacties zelf uitvoeren.
-
-De Archidekt-integratie gebruikt publiek bereikbare deckgegevens om decklijsten,
-categorieën, gekozen printings en bijbehorende kaartinformatie te importeren.
-Deze integratie is onofficieel en vormt geen samenwerking, goedkeuring of
-ondersteuning door Archidekt.
-
-De belangrijkste uitgangspunten:
-
-- **Local-first:** offline spelen vereist geen account of backend.
-- **Veilige autosave:** games, undo/redo en deck snapshots blijven lokaal
-  beschikbaar.
-- **Expliciete offlinepakketten:** kaartdata en afbeeldingen kunnen bewust voor
-  offline gebruik worden gedownload.
-- **Optioneel online:** Firebase verzorgt identiteit; Cloudflare Durable Objects
-  beheren de authoritative multiplayerstate.
-- **Dezelfde digitale tafel:** een online duel gebruikt dezelfde ruimtelijke
-  tegenover-elkaar-opstelling als offline. Iedere speler kiest eerst privé een
-  openingshand of mulligan; spelen begint pas wanneer iedereen de hand houdt.
-- **Persoonlijke decklijst:** online geïmporteerde decks worden lokaal per
-  Firebase-gebruiker geïndexeerd. Identieke imports worden hergebruikt en decks
-  kunnen met bevestiging uit de eigen lijst worden verwijderd.
-- **Geen rules engine:** de app automatiseert geen mana, combat, triggers of
-  kaartregels.
-
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
-## Status
+---
 
-| Onderdeel                         | Status                       |
-| --------------------------------- | ---------------------------- |
-| Offline battle voor 2–6 spelers   | ✅ Speelbaar                 |
-| Archidekt-import                  | ✅ Openbare decks            |
-| Autosave, hervatten en undo/redo  | ✅ Beschikbaar               |
-| Offlinepakket en PWA              | ✅ Beschikbaar               |
-| Commander-zones en statustracking | ✅ Beschikbaar               |
-| Online UI en vier-spelersmock     | ✅ Speelbaar                 |
-| Authoritative online game-core    | ✅ Geïmplementeerd en getest |
-| Firebase SDK-bootstrap            | 🚧 Nog te configureren       |
-| Cloudflare-productiedeployment    | 🚧 Nog niet uitgevoerd       |
+## 🚀 Quick Start
 
-Online ondersteunt momenteel authoritative commands voor trekken, kaarten
-verplaatsen, leven en poison aanpassen, millen, schudden en de beurt doorgeven.
-Tegenstanders ontvangen nooit verborgen hand- of librarymetadata.
-De hoofdbalk toont op iedere route één centrale arenastatus, gebaseerd op de
-echte Worker-healthcheck. Bij serveruitval wordt de online lobbyflow vervangen
-door een retry- en offline-melding; lokale battles blijven beschikbaar.
-In een wachtkamer kiest of importeert iedere speler zijn eigen lokale
-decksnapshot. Alleen de decknaam en gereedstatus zijn zichtbaar; zodra alle
-seats en decks gereed zijn kan de geverifieerde host de authoritative battle
-starten.
-
-<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
-
-## Quick Start
-
-Vereisten: een actuele Node.js-versie en npm.
+**Vereisten:** Node.js 22+ en npm.
 
 ```sh
 git clone https://github.com/MarcoHuib/mtgbattlearena.git
 cd mtgbattlearena
-npm install
+
+npm ci
 npm run dev
 ```
 
-Open daarna de URL die Vite in de terminal toont. Zonder online configuratie
-werkt de volledige offline flow en gebruikt het online scherm realistische
-mocks.
+Open daarna de URL die Vite in de terminal toont.
+
+> [!TIP]
+> De offline flow werkt zonder productie-secrets, Firebase-login of actieve
+> Cloudflare-backend.
 
 <details>
-  <summary>Belangrijkste bediening</summary>
+<summary><strong>🎮 Belangrijkste bediening</strong></summary>
+
+<br />
 
 - Sleep kaarten tussen hand, battlefield en andere zones.
 - Dubbelklik een battlefieldkaart om deze te tappen of untappen.
 - Gebruik rechtermuisklik of `Shift+F10` voor het toegankelijke kaartmenu.
 - Gebruik Ctrl/⌘-klik of tik om meerdere kaarten te selecteren.
 - Open het librarymenu voor draw X, mill X, zoeken en schudden.
-- Open lege battlefieldruimte voor tafelacties en bekende tokens.
+- Gebruik contextacties voor zones, tokens en aanvullende kaartacties.
 
 </details>
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
-## Architectuur
+---
 
-De repository is een npm-workspace met afzonderlijke deploybare applicaties en
-gedeelde TypeScript-packages:
+## 🏗️ Architectuur
+
+<div align="center">
+
+**Offline waar het kan. Server-authoritative waar het moet.**
+
+</div>
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                         React Web                            │
+│                Vite · Redux Toolkit · PWA                   │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+          ┌─────────────┴─────────────┐
+          │                           │
+          ▼                           ▼
+┌─────────────────────┐     ┌─────────────────────────────┐
+│   OFFLINE RUNTIME   │     │       ONLINE RUNTIME        │
+│                     │     │                             │
+│ Redux / game-core   │     │ Firebase Authentication     │
+│ IndexedDB           │     │ Cloudflare Game Worker      │
+│ PWA / asset cache   │     │ Durable Objects + SQLite    │
+└─────────────────────┘     └──────────────┬──────────────┘
+                                          │
+                                          ▼
+                              ┌─────────────────────────┐
+                              │ Personal server views   │
+                              │ Versioned commands      │
+                              │ WebSocket reconnect     │
+                              └─────────────────────────┘
+```
+
+<details>
+<summary><strong>📁 Repositorystructuur</strong></summary>
+
+<br />
 
 ```text
 apps/
-  web/              React, Redux, IndexedDB, PWA en Playwright
-  game-worker/      Firebase-validatie en SQLite Durable Objects
-  import-worker/    Afgeschermde proxy voor openbare Archidekt-deckdata
+├── web/             React, Redux, IndexedDB, PWA en Playwright
+├── game-worker/     Firebase-validatie, WebSockets en Durable Objects
+└── import-worker/   Afgeschermde Archidekt importproxy
 
 packages/
-  game-core/        Pure game-state en state-overgangen
-  game-protocol/    Zod-commands, snapshots, events en errors
+├── game-core/       Pure game-state en domeinlogica
+└── game-protocol/   Zod-commands, snapshots, events en errors
 
 docs/
-  architecture/     Architecture Decision Records
-  legal/            Privacy, voorwaarden en externe vermeldingen
+├── architecture/    Architecture Decision Records
+├── legal/           Privacy, voorwaarden en third-party notices
+└── reference/       Visuele referenties
 ```
 
-De webapp en game-worker delen dezelfde pure game-core en hetzelfde
-runtime-gevalideerde protocol. Offline Redux blijft lokaal authoritative;
-online Redux bevat uitsluitend de persoonlijke serverview.
+De webapp en Game Worker delen dezelfde pure `game-core` en hetzelfde
+runtime-gevalideerde protocol.
 
-Meer achtergrond:
+- **Offline:** Redux is authoritative.
+- **Online:** de server is authoritative en Redux bevat alleen de persoonlijke clientview.
+- **Import:** externe Archidekt-data loopt via een begrensde Worker/BFF.
+
+</details>
+
+<details>
+<summary><strong>📐 Architecture Decision Records</strong></summary>
+
+<br />
 
 - [Local-first grenzen](docs/architecture/001-local-first-boundaries.md)
 - [Game actions](docs/architecture/002-phase-two-game-actions.md)
@@ -167,204 +226,284 @@ Meer achtergrond:
 - [Online multiplayer](docs/architecture/006-online-multiplayer.md)
 - [Gedeelde offline/online speeltafel](docs/architecture/007-shared-battle-runtime.md)
 
+</details>
+
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
-## Ontwikkeling
+---
 
-### Scripts
+## 🔄 CI/CD
 
-| Command                           | Doel                                           |
-| --------------------------------- | ---------------------------------------------- |
-| `npm run dev`                     | Start de webapp met Vite                       |
-| `npm run dev:worker:game`         | Start de online Worker lokaal                  |
-| `npm run dev:worker:import`       | Start de Archidekt Import Worker lokaal        |
-| `npm run build`                   | Typecheck en bouw de productie-PWA             |
-| `npm run preview`                 | Bekijk de productiebuild lokaal                |
-| `npm run format`                  | Formatteer met Prettier                        |
-| `npm run lint`                    | Controleer met ESLint                          |
-| `npm run type-check`              | Typecheck alle workspaces                      |
-| `npm run worker:type-check`       | Typecheck de online Worker                     |
-| `npm test`                        | Draai package-, web- en Workertests            |
-| `npm run test:integration`        | Draai de online integratiesuite                |
-| `npm run test:e2e`                | Draai de kritieke Playwright-offlineflow       |
-| `npm run cloudflare:login`        | Log Wrangler in bij Cloudflare                 |
-| `npm run cloudflare:status`       | Toon het actieve Cloudflare-account            |
-| `npm run deploy:cloudflare:check` | Bouw en controleer beide Workers zonder upload |
-| `npm run deploy:cloudflare`       | Deploy beide Workers naar Cloudflare           |
-| `npm run firebase:status`         | Toon de Firebase-login en het actieve project  |
-| `npm run dev:firebase:hosting`    | Bouw en serveer Firebase Hosting lokaal        |
-| `npm run deploy:firebase`         | Bouw en deploy de webapp naar Firebase Hosting |
-| `npm run deploy:all`              | Deploy Cloudflare Workers en Firebase Hosting  |
+<div align="center">
+
+### Build & deployment health
+
+[![CI][ci-shield]][ci-url]
+[![Deploy Production][deploy-shield]][deploy-url]
+
+</div>
+
+| Workflow | Trigger | Doel |
+|---|---|---|
+| **CI** | Pull request → `main` | Alleen geraakte onderdelen linten, typechecken, testen en bouwen |
+| **Deploy Production** | Push/merge → `main` | Opnieuw valideren en alleen gewijzigde deployables publiceren |
+
+> [!IMPORTANT]
+> Een groene **CI**-badge betekent dat de laatste workflowrun is geslaagd.
+> Een groene **Deploy Production**-badge betekent dat de laatste production-workflow is geslaagd.
+> Klik op een badge om direct de bijbehorende GitHub Actions-runs te openen.
 
 <details>
-  <summary>Online Worker lokaal starten</summary>
+<summary><strong>✅ CI pipeline bekijken</strong></summary>
 
-De Worker gebruikt Firebase uitsluitend voor identiteit. Kopieer eerst de
-frontendomgeving:
+<br />
+
+```text
+Pull request → main
+        │
+        ▼
+┌──────────────────────┐
+│ Detect changed scope │
+└──────────┬───────────┘
+           │
+     ┌─────┼───────────────┐
+     │     │               │
+     ▼     ▼               ▼
+ Frontend  Game Worker     Import Worker
+     │     │               │
+     ├─ lint               ├─ lint
+     ├─ typecheck          └─ Wrangler dry-run
+     ├─ tests
+     └─ PWA build
+           │
+           ▼
+    Dependency Review
+      high severity
+         blocking
+```
+
+### Frontend
+
+- ESLint
+- TypeScript voor frontend en shared packages
+- package tests
+- web tests
+- production PWA build
+
+### Game Worker
+
+- ESLint
+- Worker typecheck
+- Worker tests
+- Cloudflare bundle/dry-run
+
+### Import Worker
+
+- ESLint
+- Cloudflare bundle/dry-run
+
+### Dependency Review
+
+Nieuwe dependencywijzigingen met een kwetsbaarheid van **high severity** of hoger
+laten de pull request-validatie falen.
+
+</details>
+
+<details>
+<summary><strong>🚀 Production deployment pipeline bekijken</strong></summary>
+
+<br />
+
+```text
+Push / merge → main
+        │
+        ▼
+┌───────────────────────────┐
+│ Detect changed deployables│
+└─────────────┬─────────────┘
+              │
+              ▼
+     Production / Validate
+              │
+      ┌───────┼───────────────┐
+      │       │               │
+      ▼       ▼               ▼
+ Firebase   Import Worker   Game Worker
+ Hosting    Cloudflare      Cloudflare
+      │       │               ▲
+      │       └───────────────┘
+      │        waits when both
+      │        Workers changed
+      ▼
+   Production
+```
+
+De deployment is **change-aware**:
+
+- frontendwijzigingen → **Firebase Hosting**;
+- importwijzigingen → **Cloudflare Import Worker**;
+- gamewijzigingen → **Cloudflare Game Worker**;
+- gedeelde packagewijzigingen kunnen meerdere deployables raken;
+- wanneer beide Workers wijzigen, wacht de Game Worker op een succesvolle
+  Import Worker-deployment.
+
+Alle production jobs gebruiken de GitHub Environment `production`.
+
+Voor de volledige technische uitleg:
+**[`docs/ci-cd.md`](docs/ci-cd.md)**
+
+</details>
+
+<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+
+---
+
+## 🛠️ Ontwikkeling
+
+<details>
+<summary><strong>⌨️ Development scripts</strong></summary>
+
+<br />
+
+| Command | Doel |
+|---|---|
+| `npm run dev` | Start de webapp met Vite |
+| `npm run dev:worker:game` | Start de Game Worker lokaal |
+| `npm run dev:worker:import` | Start de Import Worker lokaal |
+| `npm run build` | Bouw de productie-PWA |
+| `npm run preview` | Preview de productiebuild |
+| `npm run format` | Format met Prettier |
+| `npm run lint` | Controleer met ESLint |
+| `npm run type-check` | Typecheck alle workspaces |
+| `npm test` | Package-, web- en Workertests |
+| `npm run test:integration` | Online integratietests |
+| `npm run test:e2e` | Kritieke Playwright-flow |
+| `npm run deploy:cloudflare:check` | Cloudflare dry-run |
+| `npm run deploy:cloudflare` | Deploy beide Workers |
+| `npm run deploy:firebase` | Deploy Firebase Hosting |
+| `npm run deploy:all` | Deploy Cloudflare + Firebase |
+
+</details>
+
+<details>
+<summary><strong>🔥 Firebase lokaal / handmatig gebruiken</strong></summary>
+
+<br />
+
+Firebase Authentication verzorgt uitsluitend de online identiteit.
+De lokale offline battle is hier niet van afhankelijk.
 
 ```sh
 cp apps/web/.env.example apps/web/.env.local
-```
-
-Start de online Worker. De niet-geheime Firebase-project-ID en lokale origin
-staan in `apps/game-worker/wrangler.toml`:
-
-```sh
-npm run dev:worker:game
-```
-
-Zet daarna `VITE_ONLINE_API_URL` en `VITE_ONLINE_SOCKET_URL` in
-`apps/web/.env.local`. Een Firebase-private key of serviceaccount hoort niet in
-deze repository.
-
-</details>
-
-De productiebuild gebruikt `apps/web/.env.production` met
-`https://api.mtgbattlearena.nl` voor REST en imports, en
-`https://ws.mtgbattlearena.nl` voor de WebSocket-upgrade. De online Worker is
-de publieke API-gateway en roept de begrensde import-Worker intern aan via een
-Cloudflare service binding. Lokale ontwikkeling houdt dezelfde
-`/api/import/archidekt`-routes via de Vite-proxy.
-
-<details>
-  <summary>Firebase Hosting handmatig deployen</summary>
-
-Firebase Authentication wordt in de Firebase Console geconfigureerd en heeft
-geen afzonderlijke code-deployment. De statische React-webapp wordt wel via
-Firebase Hosting gedeployed.
-
-Controleer eerst de actieve Firebase-login en projectkoppeling:
-
-```sh
 npm run firebase:status
-```
-
-Bouw en serveer de Hosting-configuratie lokaal:
-
-```sh
 npm run dev:firebase:hosting
 ```
 
-Deploy daarna uitsluitend de webapp:
-
-```sh
-npm run deploy:firebase
-```
-
-Deploy Cloudflare en Firebase samen alleen wanneer beide wijzigingen
-productieklaar zijn:
-
-```sh
-npm run deploy:all
-```
-
-Firebase Hosting gebruikt project `mtgbattlearena` en publiceert standaard op
-`https://mtgbattlearena.web.app`. De Firebase CLI moet lokaal geïnstalleerd en
-ingelogd zijn; hij blijft buiten de npm-dependencies om de applicatieaudit
-schoon te houden.
-
-Een nieuw frontenddomein moet zowel bij **Firebase Authentication → Authorized
-domains** als in `ALLOWED_ORIGIN` in `apps/game-worker/wrangler.toml` worden
-toegevoegd. Zonder de Worker-origin levert de browser bij online API-calls een
-CORS-fout op die doorgaans als `Failed to fetch` zichtbaar wordt.
+Een Firebase private key of service-account hoort nooit in frontendcode of in
+de repository.
 
 </details>
 
 <details>
-  <summary>Archidekt Import Worker starten</summary>
+<summary><strong>☁️ Cloudflare Workers lokaal / handmatig gebruiken</strong></summary>
 
-```sh
-npm run dev:worker:import
-```
-
-De Worker accepteert uitsluitend afgeschermde routes voor openbare
-Archidekt-deckgegevens en de bijbehorende externe kaartafbeeldingen. Het is geen
-generieke fetchproxy.
-
-</details>
-
-<details>
-  <summary>Cloudflare Workers handmatig deployen</summary>
-
-Controleer eerst het actieve Cloudflare-account en voer een dry-run uit:
+<br />
 
 ```sh
 npm run cloudflare:status
 npm run deploy:cloudflare:check
 ```
 
-Deploy daarna beide Workers:
+Workers afzonderlijk deployen:
 
 ```sh
-npm run deploy:cloudflare
-```
-
-Je kunt ze ook afzonderlijk deployen:
-
-```sh
-npm run deploy:cloudflare:game
 npm run deploy:cloudflare:import
+npm run deploy:cloudflare:game
 ```
 
-Deze commando's deployen geen frontend. Een centraal web-deployscript wordt
-toegevoegd zodra Firebase Hosting of een andere frontendhost is geconfigureerd.
+De Import Worker is bewust geen generieke fetchproxy en accepteert alleen de
+afgeschermde routes die nodig zijn voor openbare Archidekt-deckdata en assets.
 
 </details>
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
-## Externe diensten en databronnen
+---
 
-MTG Battle Mode gebruikt of kan gebruikmaken van diensten van externe partijen:
+## 🔌 Externe diensten
 
-- **Archidekt:** openbare decklijsten worden via een onofficiële,
-  read-only-integratie geïmporteerd. Archidekt kan endpoints, gegevensformaten
-  of toegang zonder aankondiging wijzigen.
-- **Scryfall:** kaartmetadata en kaartafbeeldingen kunnen via Scryfall-URL's of
-  Scryfall-diensten worden geladen. Afbeeldingen moeten ongewijzigd en met
-  zichtbare artiesten- en copyrightinformatie worden weergegeven.
-- **Firebase:** verzorgt authenticatie en gebruikersidentiteit voor de optionele
-  online multiplayerlaag.
-- **Cloudflare:** verzorgt Workers, Durable Objects en infrastructuur voor de
-  optionele online multiplayer- en importlaag.
+<details>
+<summary><strong>Bekijk integraties en verantwoordelijkheden</strong></summary>
+
+<br />
+
+| Dienst | Gebruik |
+|---|---|
+| **Archidekt** | Openbare decklijsten importeren |
+| **Scryfall** | Kaartmetadata en kaartafbeeldingen |
+| **Firebase** | Authenticatie en gebruikersidentiteit |
+| **Cloudflare** | Workers, WebSockets en Durable Objects |
+| **GitHub Actions** | CI, security checks en production deployment |
 
 Archidekt, Scryfall, Firebase, Cloudflare en Wizards of the Coast zijn geen
 sponsors van dit project en hebben het project niet beoordeeld of goedgekeurd.
+
 Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
-<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+</details>
 
-## Documentatie
+---
 
-- [Alle architectuurbesluiten](docs/architecture/)
-- [Offline implementatieprompt](FIRST_IMPLEMENTATION_PROMPT.md)
-- [Online implementatieprompt](ONLINE_MULTIPLAYER_PROMPT.md)
-- [Coding-agentregels](AGENTS.md)
-- [Visuele tafelreferentie](docs/reference/mtg-duelist-layout.png)
+## 🗺️ Roadmap
 
-<p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
+<details>
+<summary><strong>Bekijk gerealiseerde en geplande onderdelen</strong></summary>
 
-## Roadmap
+<br />
+
+### ✅ Gerealiseerd
 
 - [x] Openbare Archidekt-decks importeren en normaliseren
 - [x] Local-first battle met autosave en hervatten
 - [x] Undo/redo, Commander-zones, counters, tokens en statustracking
 - [x] Expliciete offlinepakketten en PWA-app-shell
-- [x] Hoofdmenu, online lobby-UI en persoonlijke online Redux-view
+- [x] Hoofdmenu en online lobby-UI
 - [x] SQLite-backed Lobby en Game Durable Objects
 - [x] Authoritative online basiscommands en privacytests
-- [x] Persoonlijke online openingshand, mulligan en volledige tafelweergave
-- [ ] Firebase Web SDK en accountproviders configureren
-- [ ] Per deelnemer een immutable online decksnapshot registreren
-- [ ] Expliciete host-startflow met echte backend configureren
-- [ ] Cloudflare staging- en productiedeployment
-- [ ] Overige online acties zoals tokens, counters en commander damage
-- [ ] Privacyverzoeken, bewaartermijnen en accountverwijdering technisch
-      implementeren
+- [x] Persoonlijke online openingshand en mulligan
+- [x] GitHub Actions CI met change detection
+- [x] Geautomatiseerde production deployment vanaf `main`
+
+### 🚧 Volgende uitbreidingen
+
+- [ ] Verdere online kaart- en tafelacties
+- [ ] Commander damage en aanvullende multiplayerstatus volledig online
+- [ ] Verdere hardening van reconnect- en recoveryflows
+- [ ] Privacyverzoeken en bewaartermijnen technisch afronden
+
+</details>
 
 <p align="right">(<a href="#readme-top">terug naar boven</a>)</p>
 
-## Disclaimer
+---
+
+## 📚 Documentatie
+
+| Document | Doel |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | Architectuur, scope, kwaliteit en regels voor coding agents |
+| [`docs/architecture/`](docs/architecture/) | Architecture Decision Records |
+| [`docs/ci-cd.md`](docs/ci-cd.md) | CI/CD, security checks en deployments |
+| [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md) | Context voor de online multiplayeruitbreiding |
+| [`FIRST_IMPLEMENTATION_PROMPT.md`](FIRST_IMPLEMENTATION_PROMPT.md) | Context van de oorspronkelijke offline implementatie |
+| [`docs/legal/`](docs/legal/) | Privacy, voorwaarden en third-party notices |
+
+---
+
+<details>
+<summary><strong>⚖️ Disclaimer & fan content</strong></summary>
+
+<br />
 
 MTG Battle Mode is onafhankelijk en onofficieel fancontent onder de Wizards of
 the Coast Fan Content Policy. Wizards heeft het project niet goedgekeurd of
@@ -379,13 +518,34 @@ De namen Archidekt en Scryfall en de bijbehorende diensten en handelsmerken
 behoren toe aan hun respectieve eigenaren. De integraties zijn onofficieel en
 houden geen samenwerking, sponsoring of goedkeuring in.
 
+</details>
+
+<br />
+
+<div align="center">
+
+**Built as a digital table — not a digital judge.**
+
+[⬆ Terug naar boven](#readme-top)
+
+</div>
+
 <!-- MARKDOWN LINKS & IMAGES -->
+
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/ci.yml?style=for-the-badge&label=CI&logo=githubactions&logoColor=white
+[ci-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/ci.yml
+
+[deploy-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-production.yml?branch=main&style=for-the-badge&label=Production&logo=githubactions&logoColor=white
+[deploy-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-production.yml
 
 [issues-shield]: https://img.shields.io/github/issues/MarcoHuib/mtgbattlearena?style=for-the-badge
 [issues-url]: https://github.com/MarcoHuib/mtgbattlearena/issues
+
 [stars-shield]: https://img.shields.io/github/stars/MarcoHuib/mtgbattlearena?style=for-the-badge
 [stars-url]: https://github.com/MarcoHuib/mtgbattlearena/stargazers
+
 [last-commit-shield]: https://img.shields.io/github/last-commit/MarcoHuib/mtgbattlearena?style=for-the-badge
 [commits-url]: https://github.com/MarcoHuib/mtgbattlearena/commits
+
 [typescript-shield]: https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white
 [typescript-url]: https://www.typescriptlang.org/
