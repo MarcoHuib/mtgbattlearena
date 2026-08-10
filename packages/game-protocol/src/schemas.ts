@@ -732,6 +732,8 @@ export const protocolErrorSchema = z
       "TICKET_EXPIRED",
       "TICKET_USED",
       "RATE_LIMITED",
+      "GAME_COMMAND_RATE_LIMITED",
+      "GAME_STATE_LIMIT_REACHED",
       "NOT_READY",
       "INTERNAL_ERROR",
     ]),

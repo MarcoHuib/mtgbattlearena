@@ -146,6 +146,63 @@ UID/game begrensd op twee nog geldige tickets en tien uitgiftepogingen per
 minuut. De quota- en rate-limitcontrole en het opslaan van een nieuw ticket
 gebeuren samen atomair.
 
+### Game Durable Object-abusegrenzen
+
+Het eenmalige H-03-ticket wordt door het Lobby Durable Object gevalideerd en
+verwijderd voordat de interne WebSocket-upgrade het Game Durable Object
+bereikt. Het Game Durable Object telt daarna de door Cloudflare beheerde
+hibernation-WebSockets via hun geserialiseerde sessieattachments. Per UID/game
+zijn maximaal twee actieve sockets toegestaan; daarnaast zijn maximaal twintig
+spectatorsockets per game toegestaan. Een afwijzing verbruikt het ticket dus
+definitief en sluit geen bestaande socket. Omdat tellingen uit
+`getWebSockets()` worden afgeleid, zijn geen driftgevoelige persistente
+connectietellers nodig na close, netwerkverlies, hibernation of reconstructie.
+
+Iedere verbonden UID krijgt per Game Durable Object maximaal dertig
+commandachtige applicatieberichten per tien seconden. De kleine SQLite-tabel
+heeft één rij per UID, een index op het vensterbegin en opportunistische
+cleanup. Na attachmentvalidatie wordt eerst de ruwe grootte bepaald: strings
+als UTF-8 en binaryframes rechtstreeks via `byteLength`. De applicatiegrens is
+16 KiB (16.384 bytes). Daarna telt dezelfde limiter de poging, gevolgd door de
+16-KiB-afwijzing, playerrolcontrole, binarydecodering, `JSON.parse`, Zod en
+domeinvalidatie. Spectator-, malformed- en oversized commandspam is daardoor
+niet gratis, terwijl te grote binaryframes nooit eerst naar tekst worden
+gedecodeerd. Dertig acties laten snelle menselijke interactie toe, terwijl
+machine-speed snapshot-, persist- en broadcastamplificatie wordt begrensd. Een
+afzonderlijk weighted model is niet gebruikt: groeicommands worden daarnaast
+door onderstaande harde stategrenzen beperkt.
+
+De centrale Game Durable Object-limieten zijn:
+
+- 2.500 kaartinstanties per game, ruim boven zes normale Commander-decks plus
+  ongeveer 1.900 tokens;
+- 1.000 kaart-/tokendefinities per game;
+- 500 kaartgroepen;
+- 32 verschillende counternamen per kaartinstantie;
+- 4 MiB voor de daadwerkelijk als UTF-8 JSON gepersisteerde volledige
+  `StoredGameRecord`;
+- 4 MiB UTF-8 per geserialiseerde persoonlijke of spectator-WebSocketsnapshot.
+
+Deckhoeveelheden, definities en de UTF-8-grootte van de seed worden vóór
+stateconstructie gecontroleerd.
+Ieder command bouwt daarna eerst een kandidaatstate. Instance-, map-,
+persisted-JSON- en alle mogelijke persoonlijke snapshotgrenzen worden vóór
+SQLite-persistence en broadcasts gevalideerd. De aparte snapshotgrens is nodig
+omdat een view gedeelde kaartdefinitievelden per zichtbare kaartinstantie kan
+herhalen en dus groter kan zijn dan de genormaliseerde `StoredGameRecord`. Een
+afwijzing behoudt daardoor de vorige in-memory state, snapshotversie en
+databasepayload en verstuurt geen kandidaatstate. Een extra check direct vóór
+`WebSocket.send()` beschermt ook bij een eventueel legacy snapshot boven de
+nieuwe grens; zo'n frame wordt nooit gedeeltelijk door de applicatie verstuurd.
+
+Bij broadcasts wordt een persoonlijke snapshot eenmaal per equivalente
+sessieview (`role`, UID, player-ID en hoststatus) gegenereerd en als dezelfde
+JSON naar de maximaal twee sockets van die gebruiker gestuurd. Verschillende
+spelers houden afzonderlijke cachesleutels; spectators delen alleen wanneer hun
+volledige autorisatieview equivalent is. Hiermee blijft verborgen hand- en
+librarydata strikt per speler gescheiden. Delta/event-synchronisatie blijft een
+latere optimalisatie; H-02 behoudt bewust het bestaande full-snapshotprotocol.
+
 De volledige speeltafelpresentatie en alle gebruikersacties worden sinds
 [ADR 007](007-shared-battle-runtime.md) door offline en online gedeeld. Alleen
 de lokale Redux-adapter en de persoonlijke-snapshot/commandadapter verschillen.

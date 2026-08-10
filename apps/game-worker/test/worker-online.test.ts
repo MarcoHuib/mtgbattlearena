@@ -205,3 +205,50 @@ test("custom domains scheiden REST, imports en WebSockets", async () => {
   )
   expect(restOnSocket.status).toBe(404)
 })
+
+test("socketlimiet-afwijzing maakt een verbruikt ticket niet herbruikbaar", async () => {
+  const session = {
+    gameId: "limited-game",
+    uid: "verified-user",
+    playerId: "player",
+    role: "player" as const,
+    isHost: false,
+  }
+  let available = true
+  const gameFetch = vi.fn(() =>
+    Promise.resolve(
+      Response.json(
+        { code: "WEBSOCKET_CONNECTION_LIMIT_REACHED" },
+        { status: 429 },
+      ),
+    ),
+  )
+  const env = {
+    LOBBY: {
+      getByName: () => ({
+        consumeSocketTicket: () => {
+          if (!available) return Promise.resolve(null)
+          available = false
+          return Promise.resolve(session)
+        },
+      }),
+    },
+    GAMES: { getByName: () => ({ fetch: gameFetch }) },
+  } as unknown as Env
+
+  const first = await worker.fetch(
+    new Request(
+      "https://ws.mtgbattlearena.nl/api/online/socket?ticket=single-use-ticket",
+    ),
+    env,
+  )
+  expect(first.status).toBe(429)
+  const second = await worker.fetch(
+    new Request(
+      "https://ws.mtgbattlearena.nl/api/online/socket?ticket=single-use-ticket",
+    ),
+    env,
+  )
+  expect(second.status).toBe(401)
+  expect(gameFetch).toHaveBeenCalledOnce()
+})

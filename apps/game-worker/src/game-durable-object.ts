@@ -16,6 +16,16 @@ import {
   type GameSnapshotStore,
   type StoredGameRecord,
 } from "./game-snapshot-store"
+import {
+  connectionLimitViolation,
+  MAX_GAME_COMMAND_MESSAGE_BYTES,
+  MAX_SERIALIZED_PERSONAL_SNAPSHOT_BYTES,
+  SqliteCommandRateLimiter,
+  validateGameRecordLimits,
+  validatePersonalSnapshotLimits,
+  validateSeedGrowthLimits,
+  type CommandRateLimiter,
+} from "./game-security"
 import type {
   CommandResult,
   DurableObjectState,
@@ -49,6 +59,8 @@ const errorEvent = (
     | "INVALID_COMMAND"
     | "VERSION_CONFLICT"
     | "NOT_READY"
+    | "GAME_COMMAND_RATE_LIMITED"
+    | "GAME_STATE_LIMIT_REACHED"
     | "INTERNAL_ERROR",
   message: string,
   options?: {
@@ -63,7 +75,10 @@ const errorEvent = (
   error: {
     code,
     message,
-    retryable: code === "VERSION_CONFLICT" || code === "NOT_READY",
+    retryable:
+      code === "VERSION_CONFLICT" ||
+      code === "NOT_READY" ||
+      code === "GAME_COMMAND_RATE_LIMITED",
     currentVersion: options?.currentVersion,
   },
   snapshot: options?.snapshot,
@@ -92,6 +107,10 @@ export class GameDurableObject extends DurableObject<Env> {
     private readonly state: DurableObjectState,
     private readonly env: Env,
     snapshotStore?: GameSnapshotStore,
+    private readonly commandRateLimiter: CommandRateLimiter = new SqliteCommandRateLimiter(
+      state.storage,
+    ),
+    private readonly now: () => number = Date.now,
   ) {
     super(state, env)
     this.snapshotStore =
@@ -152,9 +171,46 @@ export class GameDurableObject extends DurableObject<Env> {
     if (this.record) {
       return this.personalSnapshotResult(session)
     }
+    const seedLimit = validateSeedGrowthLimits(seed)
+    if (seedLimit) {
+      this.logStateLimit(session, seedLimit)
+      return {
+        ok: true,
+        value: errorEvent(
+          session.gameId,
+          "GAME_STATE_LIMIT_REACHED",
+          "De game bevat te veel kaarten of definities om veilig te starten.",
+        ),
+      }
+    }
     try {
       const game = createAuthoritativeGame(seed)
-      this.persist({ game, processedCommands: {} })
+      const initialRecord = { game, processedCommands: {} }
+      const validated = validateGameRecordLimits(initialRecord)
+      if (!validated.valid) {
+        this.logStateLimit(session, validated)
+        return {
+          ok: true,
+          value: errorEvent(
+            session.gameId,
+            "GAME_STATE_LIMIT_REACHED",
+            "De game is te groot om veilig te initialiseren.",
+          ),
+        }
+      }
+      const snapshotLimit = validatePersonalSnapshotLimits(game)
+      if (snapshotLimit) {
+        this.logStateLimit(session, snapshotLimit)
+        return {
+          ok: true,
+          value: errorEvent(
+            session.gameId,
+            "GAME_STATE_LIMIT_REACHED",
+            "De persoonlijke gameweergave is te groot om veilig te versturen.",
+          ),
+        }
+      }
+      this.persist(initialRecord, validated.serialized)
       this.broadcastPersonalViews("INITIALIZE_GAME", -1)
       return {
         ok: true,
@@ -235,18 +291,18 @@ export class GameDurableObject extends DurableObject<Env> {
       socket.close(1008, "Session missing")
       return
     }
-    const text =
-      typeof message === "string"
-        ? message
-        : new TextDecoder().decode(new Uint8Array(message))
     const previousVersion = this.record?.game.version ?? -1
-    const result = this.handleCommand(session, text)
+    const result = this.handleCommand(session, message)
     try {
       socket.send(JSON.stringify(result.event))
     } catch {
       this.closeSocket(socket, 1011, "Acknowledgement failed")
     }
     if (result.accepted) {
+      const text =
+        typeof message === "string"
+          ? message
+          : new TextDecoder().decode(new Uint8Array(message))
       const commandType = this.readCommandType(text)
       this.broadcastPersonalViews(commandType, previousVersion)
     }
@@ -284,12 +340,55 @@ export class GameDurableObject extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("WebSocket upgrade required", { status: 426 })
     }
-    if (this.record) {
-      try {
-        serializePersonalSnapshot(this.record.game, session)
-      } catch {
-        return new Response("Forbidden", { status: 403 })
-      }
+    let initialMessage: string
+    try {
+      initialMessage = this.record
+        ? this.serializeBoundedSnapshot(this.record.game, session)
+        : JSON.stringify(
+            errorEvent(
+              session.gameId,
+              "NOT_READY",
+              "De host heeft de online game nog niet geïnitialiseerd.",
+            ),
+          )
+    } catch {
+      return new Response("Forbidden", { status: 403 })
+    }
+    if (!initialMessage) {
+      this.logOutboundSnapshotLimit(session)
+      return Response.json(
+        {
+          code: "GAME_STATE_LIMIT_REACHED",
+          message: "De persoonlijke gameweergave is te groot.",
+        },
+        { status: 503 },
+      )
+    }
+    const activeSessions = this.state
+      .getWebSockets()
+      .map(socket => this.readSocketAttachment(socket))
+      .filter((attachment): attachment is GameSocketAttachment =>
+        Boolean(attachment),
+      )
+    const connectionLimit = connectionLimitViolation(activeSessions, session)
+    if (connectionLimit) {
+      console.warn("WebSocket connection limit exceeded.", {
+        event:
+          connectionLimit === "SPECTATOR_CONNECTION_LIMIT_REACHED"
+            ? "spectator_connection_limit_exceeded"
+            : "websocket_uid_connection_limit_exceeded",
+        code: connectionLimit,
+        gameId: session.gameId,
+        uid: session.uid,
+        role: session.role,
+      })
+      return Response.json(
+        {
+          code: connectionLimit,
+          message: "De WebSocket-verbindingslimiet voor deze game is bereikt.",
+        },
+        { status: 429 },
+      )
     }
     const WebSocketPair = (
       globalThis as typeof globalThis & {
@@ -310,26 +409,35 @@ export class GameDurableObject extends DurableObject<Env> {
     }
     server.serializeAttachment(attachment)
     this.state.acceptWebSocket(server)
-    server.send(
-      JSON.stringify(
-        this.record
-          ? serializePersonalSnapshot(this.record.game, session)
-          : errorEvent(
-              session.gameId,
-              "NOT_READY",
-              "De host heeft de online game nog niet geïnitialiseerd.",
-            ),
-      ),
-    )
+    server.send(initialMessage)
     const UpgradeResponse = Response as unknown as UpgradeResponseConstructor
     return new UpgradeResponse(null, { status: 101, webSocket: client })
   }
 
   private handleCommand(
     session: GameSession,
-    serializedCommand: string,
+    rawMessage: string | ArrayBuffer,
   ): CommandResult {
-    if (new TextEncoder().encode(serializedCommand).byteLength > 16_384) {
+    const byteLength =
+      typeof rawMessage === "string"
+        ? new TextEncoder().encode(rawMessage).byteLength
+        : rawMessage.byteLength
+    if (!this.commandRateLimiter.attempt(session.uid, this.now())) {
+      console.warn("Game command rate limit exceeded.", {
+        event: "game_command_rate_limit_exceeded",
+        gameId: session.gameId,
+        uid: session.uid,
+      })
+      return {
+        accepted: false,
+        event: errorEvent(
+          session.gameId,
+          "GAME_COMMAND_RATE_LIMITED",
+          "Te veel gamecommands. Probeer het over enkele seconden opnieuw.",
+        ),
+      }
+    }
+    if (byteLength > MAX_GAME_COMMAND_MESSAGE_BYTES) {
       return {
         accepted: false,
         event: errorEvent(
@@ -349,6 +457,10 @@ export class GameDurableObject extends DurableObject<Env> {
         ),
       }
     }
+    const serializedCommand =
+      typeof rawMessage === "string"
+        ? rawMessage
+        : new TextDecoder().decode(new Uint8Array(rawMessage))
     let command: GameCommand
     try {
       command = parseGameCommand(JSON.parse(serializedCommand))
@@ -432,7 +544,39 @@ export class GameDurableObject extends DurableObject<Env> {
         [command.commandId]: game.version + 1,
       }),
     }
-    this.persist(nextRecord)
+    const validated = validateGameRecordLimits(nextRecord)
+    if (!validated.valid) {
+      this.logStateLimit(session, validated)
+      return {
+        accepted: false,
+        event: errorEvent(
+          session.gameId,
+          "GAME_STATE_LIMIT_REACHED",
+          "Deze actie zou de veilige limiet voor de gamestate overschrijden.",
+          {
+            commandId: command.commandId,
+            currentVersion: game.version,
+          },
+        ),
+      }
+    }
+    const snapshotLimit = validatePersonalSnapshotLimits(nextRecord.game)
+    if (snapshotLimit) {
+      this.logStateLimit(session, snapshotLimit)
+      return {
+        accepted: false,
+        event: errorEvent(
+          session.gameId,
+          "GAME_STATE_LIMIT_REACHED",
+          "Deze actie zou een te grote persoonlijke gameweergave maken.",
+          {
+            commandId: command.commandId,
+            currentVersion: game.version,
+          },
+        ),
+      }
+    }
+    this.persist(nextRecord, validated.serialized)
     return {
       accepted: true,
       event: acceptedEvent(
@@ -443,9 +587,9 @@ export class GameDurableObject extends DurableObject<Env> {
     }
   }
 
-  private persist(record: StoredGameRecord) {
+  private persist(record: StoredGameRecord, serialized?: string) {
+    this.snapshotStore.save(record, serialized)
     this.record = record
-    this.snapshotStore.save(record)
   }
 
   private broadcastPersonalViews(
@@ -453,6 +597,7 @@ export class GameDurableObject extends DurableObject<Env> {
     previousVersion: number,
   ) {
     if (!this.record) return
+    const serializedViews = new Map<string, string>()
     let sentSocketCount = 0
     const recipients: {
       connectionId: string
@@ -467,11 +612,24 @@ export class GameDurableObject extends DurableObject<Env> {
         continue
       }
       try {
-        socket.send(
-          JSON.stringify(
-            serializePersonalSnapshot(this.record.game, attachment),
-          ),
-        )
+        const viewKey =
+          attachment.role === "spectator"
+            ? `spectator:${attachment.isHost}`
+            : `player:${attachment.uid}:${attachment.playerId}:${attachment.isHost}`
+        let serializedView = serializedViews.get(viewKey)
+        if (!serializedView) {
+          serializedView = this.serializeBoundedSnapshot(
+            this.record.game,
+            attachment,
+          )
+          if (!serializedView) {
+            this.logOutboundSnapshotLimit(attachment)
+            this.closeSocket(socket, 1009, "Snapshot too large")
+            continue
+          }
+          serializedViews.set(viewKey, serializedView)
+        }
+        socket.send(serializedView)
         sentSocketCount += 1
         recipients.push({
           connectionId: attachment.connectionId,
@@ -539,6 +697,55 @@ export class GameDurableObject extends DurableObject<Env> {
     } catch {
       // A disconnected hibernated socket can already be gone.
     }
+  }
+
+  webSocketClose() {
+    // Cloudflare verwijdert de socket uit getWebSockets(); er is geen teller.
+  }
+
+  webSocketError(socket: WorkerWebSocket) {
+    this.closeSocket(socket, 1011, "WebSocket error")
+  }
+
+  private logStateLimit(
+    session: GameSession,
+    violation: Exclude<
+      ReturnType<typeof validateGameRecordLimits>,
+      { valid: true }
+    >,
+  ) {
+    console.warn("Game state resource limit exceeded.", {
+      event:
+        violation.violation === "serialized-bytes" ||
+        violation.violation === "personal-snapshot-bytes"
+          ? "game_state_size_limit_exceeded"
+          : "game_state_instance_limit_exceeded",
+      gameId: session.gameId,
+      uid: session.uid,
+      resource: violation.violation,
+      actual: violation.actual,
+      limit: violation.limit,
+    })
+  }
+
+  private serializeBoundedSnapshot(
+    game: StoredGameRecord["game"],
+    session: GameSession,
+  ) {
+    const serialized = JSON.stringify(serializePersonalSnapshot(game, session))
+    return new TextEncoder().encode(serialized).byteLength <=
+      MAX_SERIALIZED_PERSONAL_SNAPSHOT_BYTES
+      ? serialized
+      : ""
+  }
+
+  private logOutboundSnapshotLimit(session: GameSession) {
+    console.warn("Outbound personal snapshot limit exceeded.", {
+      event: "outbound_snapshot_size_limit_exceeded",
+      gameId: session.gameId,
+      uid: session.uid,
+      limit: MAX_SERIALIZED_PERSONAL_SNAPSHOT_BYTES,
+    })
   }
 
   private readSession(request: Request): GameSession | null {
