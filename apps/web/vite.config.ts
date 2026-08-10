@@ -3,7 +3,10 @@ import * as path from "node:path"
 import { VitePWA } from "vite-plugin-pwa"
 import { defineConfig } from "vitest/config"
 import packageJson from "./package.json" with { type: "json" }
-import { oauthPopupSecurityHeaders } from "./src/securityHeaders"
+import {
+  firebaseReservedNavigationDenylist,
+  oauthPopupSecurityHeaders,
+} from "./src/securityHeaders"
 
 export default defineConfig({
   root: import.meta.dirname,
@@ -50,6 +53,7 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: false,
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: firebaseReservedNavigationDenylist,
         globIgnores: ["**/runtime-config.js"],
         runtimeCaching: [
           {

@@ -1,5 +1,8 @@
 import hostingConfig from "../../../firebase.json"
-import { oauthPopupSecurityHeaders } from "./securityHeaders"
+import {
+  firebaseReservedNavigationDenylist,
+  oauthPopupSecurityHeaders,
+} from "./securityHeaders"
 
 test("production en staging staan veilige OAuth-popups toe via COOP", () => {
   expect(oauthPopupSecurityHeaders).toEqual({
@@ -22,4 +25,14 @@ test("production en staging staan veilige OAuth-popups toe via COOP", () => {
       ]),
     )
   }
+})
+
+test("de PWA-fallback onderschept geen gereserveerde Firebase-routes", () => {
+  const isDenied = (path: string) =>
+    firebaseReservedNavigationDenylist.some(pattern => pattern.test(path))
+
+  expect(isDenied("/__/auth/handler")).toBe(true)
+  expect(isDenied("/__/auth/iframe")).toBe(true)
+  expect(isDenied("/__/firebase/init.json")).toBe(true)
+  expect(isDenied("/online")).toBe(false)
 })

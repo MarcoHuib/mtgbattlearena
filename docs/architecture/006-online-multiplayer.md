@@ -45,6 +45,10 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
   slaagt, behandelen we deze Chromium-consolemelding daarom als niet-functionele
   browser/SDK-diagnostiek. We verlagen securityheaders niet en voegen geen
   popup-workaround toe om alleen deze melding te verbergen.
+- De PWA-navigation fallback sluit het volledige door Firebase Hosting
+  gereserveerde `/__/`-namespace uit. Daardoor bereiken custom-domain
+  OAuth-popups altijd de echte `/__/auth/handler` en worden ze niet door een
+  actieve service worker vervangen met de gecachte React-appshell.
 - Cloudflare Access en Cloudflare RBAC worden niet voor spelers gebruikt.
 - Een Cloudflare Worker in TypeScript beheert de publieke HTTPS-API,
   Firebase-tokenvalidatie en WebSocket-upgrades.
