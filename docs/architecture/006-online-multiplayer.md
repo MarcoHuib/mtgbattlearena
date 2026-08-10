@@ -248,3 +248,11 @@ nieuwe namespaces herhaald; de Production migrations en bestaande state worden
 niet gewijzigd. Beta en Production valideren ID-tokens bewust tegen hetzelfde
 Firebaseproject en delen Firebase Authentication. Alleen Hosting-sites en de
 Cloudflare game-state zijn per omgeving gescheiden.
+
+Beide omgevingen worden vanuit één release op `main` gepromoveerd. De frontend
+wordt eenmaal gebouwd en leest omgevingendpoints uit een niet-gecachete
+`runtime-config.js`; Beta en Production gebruiken daardoor identieke
+JavaScript-/CSS-bundles. Het releasebuildnummer wordt als runtimewaarde en als
+Wrangler `RELEASE_VERSION` doorgegeven. De releaseworkflow deployt altijd eerst
+de volledig gescheiden Beta-resources en start Production uitsluitend nadat
+alle vereiste Beta-deployments zijn geslaagd.

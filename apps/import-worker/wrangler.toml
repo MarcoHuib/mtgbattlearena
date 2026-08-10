@@ -4,6 +4,7 @@ compatibility_date = "2026-07-01"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [vars]
+RELEASE_VERSION = "local"
 ALLOWED_ORIGIN = "http://localhost:5173,https://mtgbattlearena.nl,https://www.mtgbattlearena.nl,https://mtgbattlearena.web.app"
 
 [observability]
@@ -25,4 +26,5 @@ head_sampling_rate = 1
 name = "mtg-battle-mode-import-staging"
 
 [env.staging.vars]
+RELEASE_VERSION = "local"
 ALLOWED_ORIGIN = "http://localhost:5173,https://beta.mtgbattlearena.nl,https://mtgbattlearena-beta.web.app,https://mtgbattlearena-beta.firebaseapp.com"

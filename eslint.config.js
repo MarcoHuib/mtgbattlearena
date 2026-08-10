@@ -21,6 +21,7 @@ const eslintConfig = config(
       "**/coverage/",
       "**/playwright-report/",
       "**/test-results/",
+      "apps/web/public/runtime-config.js",
       "apps/import-worker/src/index.js",
     ],
   },

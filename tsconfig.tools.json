@@ -21,6 +21,7 @@
   },
   "include": [
     "eslint.config.js",
+    "scripts/**/*.mjs",
     "apps/game-worker/vitest.config.ts",
     "packages/vitest.config.ts"
   ]

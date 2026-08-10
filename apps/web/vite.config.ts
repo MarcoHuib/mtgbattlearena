@@ -49,6 +49,7 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: false,
         navigateFallback: "/index.html",
+        globIgnores: ["**/runtime-config.js"],
         runtimeCaching: [
           {
             urlPattern:

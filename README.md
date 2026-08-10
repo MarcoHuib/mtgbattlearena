@@ -69,19 +69,18 @@
 | 🔵 **Automated**   | Geautomatiseerd via GitHub Actions                 |
 | ⚪ **Planned**     | Bewust later gepland                               |
 
-| Onderdeel                          | Status             |
-| ---------------------------------- | ------------------ |
-| Offline battle voor 2–6 spelers    | 🟢 **Ready**       |
-| Archidekt-import                   | 🟢 **Ready**       |
-| Autosave, hervatten en undo/redo   | 🟢 **Ready**       |
-| Offlinepakket en PWA               | 🟢 **Ready**       |
-| Commander-zones en statustracking  | 🟢 **Ready**       |
-| Online lobby & multiplayerbasis    | 🟢 **Ready**       |
-| Server-authoritative game-core     | 🟢 **Ready**       |
-| CI-validatie op pull requests      | 🔵 **Automated**   |
-| Beta deployment vanaf `staging`    | 🔵 **Automated**   |
-| Production deployment vanaf `main` | 🔵 **Automated**   |
-| Verdere online game-acties         | 🟡 **In progress** |
+| Onderdeel                         | Status             |
+| --------------------------------- | ------------------ |
+| Offline battle voor 2–6 spelers   | 🟢 **Ready**       |
+| Archidekt-import                  | 🟢 **Ready**       |
+| Autosave, hervatten en undo/redo  | 🟢 **Ready**       |
+| Offlinepakket en PWA              | 🟢 **Ready**       |
+| Commander-zones en statustracking | 🟢 **Ready**       |
+| Online lobby & multiplayerbasis   | 🟢 **Ready**       |
+| Server-authoritative game-core    | 🟢 **Ready**       |
+| CI-validatie op pull requests     | 🔵 **Automated**   |
+| Release promotion vanaf `main`    | 🔵 **Automated**   |
+| Verdere online game-acties        | 🟡 **In progress** |
 
 <details>
 <summary><strong>Wat kan de online game-core momenteel?</strong></summary>
@@ -249,7 +248,7 @@ runtime-gevalideerde protocol.
 
 ⬇
 
-`staging` / `main`
+`main`
 
 <sub>Lint · Typecheck · Tests · Build · Security</sub>
 
@@ -271,7 +270,7 @@ runtime-gevalideerde protocol.
 
 **Test environment**
 
-`staging`
+`main` release
 
 🌐 **beta.mtgbattlearena.nl**
 
@@ -309,20 +308,22 @@ runtime-gevalideerde protocol.
 
 **Development** `local`
 &nbsp;&nbsp;→&nbsp;&nbsp;
-**Validation** `pull request`
+**Validation** `pull request → main`
 &nbsp;&nbsp;→&nbsp;&nbsp;
-**Test** `staging`
+**Release** `main`
 &nbsp;&nbsp;→&nbsp;&nbsp;
-**Production** `main`
+**Beta**
+&nbsp;&nbsp;→&nbsp;&nbsp;
+**Production**
 
 </div>
 
 > [!IMPORTANT]
 > De workflowstatussen hierboven zijn live GitHub Actions-badges.
-> De buildbadges lezen het `run_number` van de nieuwste succesvolle deploymentrun;
-> een mislukte run vervangt het laatst succesvolle buildnummer dus niet.
-> Een pull request valideert alleen; deployment begint pas na een push/merge naar
-> `staging` of `main`.
+> De buildbadges tonen het release-`run_number` dat per omgeving pas na een
+> succesvolle deployment wordt gepubliceerd. Faalt Production na een geslaagde
+> Beta-promotie, dan loopt alleen de Beta-badge door. Pull requests valideren
+> uitsluitend; promotion begint pas na een push/merge naar `main`.
 
 ### Omgevingen
 
@@ -338,12 +339,12 @@ runtime-gevalideerde protocol.
 </tr>
 <tr>
 <td>🧪 <strong>Beta</strong></td>
-<td><code>staging</code></td>
+<td><code>main</code></td>
 <td><code>beta.mtgbattlearena.nl</code></td>
 <td><code>api.beta.mtgbattlearena.nl</code></td>
 <td><code>ws.beta.mtgbattlearena.nl</code></td>
-<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-beta.yml"><img src="https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-beta.yml?branch=staging&label=beta&logo=githubactions" alt="Beta deployment"></a></td>
-<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-beta.yml"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Factions%2Fworkflows%2Fdeploy-beta.yml%2Fruns%3Fbranch%3Dstaging%26status%3Dsuccess%26per_page%3D1&query=%24.workflow_runs%5B0%5D.run_number&prefix=%23&label=Build&color=informational" alt="Laatste succesvolle Beta build"></a></td>
+<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&label=beta+promotion&logo=githubactions" alt="Beta promotion"></a></td>
+<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Fdeployments%3Fenvironment%3Dstaging%26task%3Drelease-metadata%26per_page%3D1&query=%24%5B0%5D.description&label=Beta&color=informational" alt="Laatste succesvolle Beta release"></a></td>
 </tr>
 <tr>
 <td>🚀 <strong>Production</strong></td>
@@ -351,18 +352,17 @@ runtime-gevalideerde protocol.
 <td><code>mtgbattlearena.nl</code></td>
 <td><code>api.mtgbattlearena.nl</code></td>
 <td><code>ws.mtgbattlearena.nl</code></td>
-<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-production.yml"><img src="https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-production.yml?branch=main&label=production&logo=githubactions" alt="Production deployment"></a></td>
-<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-production.yml"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Factions%2Fworkflows%2Fdeploy-production.yml%2Fruns%3Fbranch%3Dmain%26status%3Dsuccess%26per_page%3D1&query=%24.workflow_runs%5B0%5D.run_number&prefix=%23&label=Build&color=informational" alt="Laatste succesvolle Production build"></a></td>
+<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&label=production+promotion&logo=githubactions" alt="Production promotion"></a></td>
+<td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Fdeployments%3Fenvironment%3Dproduction%26task%3Drelease-metadata%26per_page%3D1&query=%24%5B0%5D.description&label=Production&color=informational" alt="Laatste succesvolle Production release"></a></td>
 </tr>
 </table>
 
 ### Workflowoverzicht
 
-| Workflow              | Trigger                            | Doel                                                                  |
-| --------------------- | ---------------------------------- | --------------------------------------------------------------------- |
-| **CI**                | Pull request → `staging` of `main` | Alleen geraakte onderdelen linten, typechecken, testen en bouwen      |
-| **Deploy Beta**       | Push/merge → `staging`             | Valideren en alleen gewijzigde deployables naar Beta publiceren       |
-| **Deploy Production** | Push/merge → `main`                | Valideren en alleen gewijzigde deployables naar Production publiceren |
+| Workflow           | Trigger               | Doel                                                                          |
+| ------------------ | --------------------- | ----------------------------------------------------------------------------- |
+| **CI**             | Pull request → `main` | Alleen geraakte onderdelen linten, typechecken, testen en bouwen              |
+| **Deploy Release** | Push/merge → `main`   | Eén release bouwen, eerst Beta en daarna dezelfde release Production deployen |
 
 <details>
 <summary><strong>✅ CI pipeline bekijken</strong></summary>
@@ -370,7 +370,7 @@ runtime-gevalideerde protocol.
 <br />
 
 ```text
-Pull request → staging of main
+Pull request → main
         │
         ▼
 ┌──────────────────────┐
@@ -426,28 +426,22 @@ laten de pull request-validatie falen.
 <br />
 
 ```text
-                 ┌──────────────────────┐
-                 │     FEATURE / PR     │
-                 │   validate only      │
-                 └──────────┬───────────┘
-                            │
-                            ▼
-                 ┌──────────────────────┐
-                 │       STAGING        │
-                 │       🧪 BETA        │
-                 │ beta.mtgbattlearena  │
-                 └──────────┬───────────┘
-                            │
-                            │ promote / merge
-                            ▼
-                 ┌──────────────────────┐
-                 │        MAIN          │
-                 │    🚀 PRODUCTION     │
-                 │   mtgbattlearena.nl  │
-                 └──────────────────────┘
+feature/* → PR naar main → CI
+                           │
+                           ▼
+                    merge naar main
+                           │
+                           ▼
+                    Release Build #X
+                           │
+                           ▼
+                  🧪 Beta · Build #X
+                           │ success required
+                           ▼
+             🚀 Production · Build #X
 ```
 
-Beide deploymentworkflows zijn **change-aware**:
+De ene releaseworkflow is **change-aware**:
 
 - frontendwijzigingen → **Firebase Hosting**;
 - importwijzigingen → **Cloudflare Import Worker**;
@@ -455,6 +449,13 @@ Beide deploymentworkflows zijn **change-aware**:
 - gedeelde packagewijzigingen kunnen meerdere deployables raken;
 - wanneer beide Workers wijzigen, wacht de Game Worker op een succesvolle
   Import Worker-deployment.
+- de frontend wordt één keer gebouwd en als immutable artifact door Beta en
+  Production gebruikt;
+- runtimeconfiguratie bepaalt per Hosting-site de API- en WebSocket-endpoints;
+  deploymentwaarden komen uit GitHub Variables: gedeelde Firebaseconfiguratie
+  uit Repository Variables en endpoints uit de actieve GitHub Environment,
+  waardoor de generator geen kennis van omgevingsnamen of domeinen bevat;
+- Production heeft een harde dependency op de volledige Beta-promotie.
 
 ### Beta
 
@@ -478,6 +479,10 @@ Production gebruikt:
 - productieconfiguratie van beide Cloudflare Workers;
 - Production Durable Objects.
 
+Beide omgevingen worden vanuit dezelfde `main`-commit en hetzelfde
+`github.run_number` gedeployed. Alleen wanneer Production faalt kan de Beta
+releasebadge tijdelijk één build voorlopen.
+
 Voor de volledige technische uitleg:
 **[`docs/ci-cd.md`](docs/ci-cd.md)**
 
@@ -494,26 +499,26 @@ Voor de volledige technische uitleg:
 
 <br />
 
-| Command                                   | Doel                                   |
-| ----------------------------------------- | -------------------------------------- |
-| `npm run dev`                             | Start de webapp met Vite               |
-| `npm run dev:worker:game`                 | Start de Game Worker lokaal            |
-| `npm run dev:worker:import`               | Start de Import Worker lokaal          |
-| `npm run build`                           | Bouw de productie-PWA                  |
-| `npm run build:staging`                   | Bouw de Beta-PWA met staging-endpoints |
-| `npm run preview`                         | Preview de productiebuild              |
-| `npm run format`                          | Format met Prettier                    |
-| `npm run lint`                            | Controleer met ESLint                  |
-| `npm run type-check`                      | Typecheck alle workspaces              |
-| `npm test`                                | Package-, web- en Workertests          |
-| `npm run test:integration`                | Online integratietests                 |
-| `npm run test:e2e`                        | Kritieke Playwright-flow               |
-| `npm run deploy:cloudflare:check`         | Cloudflare dry-run                     |
-| `npm run deploy:cloudflare:check:staging` | Cloudflare staging dry-run             |
-| `npm run deploy:cloudflare`               | Deploy beide Workers                   |
-| `npm run deploy:firebase`                 | Deploy Firebase Hosting                |
-| `npm run deploy:firebase:hosting:staging` | Deploy uitsluitend de vaste Beta-site  |
-| `npm run deploy:all`                      | Deploy Cloudflare + Firebase           |
+| Command                                   | Doel                                  |
+| ----------------------------------------- | ------------------------------------- |
+| `npm run dev`                             | Start de webapp met Vite              |
+| `npm run dev:worker:game`                 | Start de Game Worker lokaal           |
+| `npm run dev:worker:import`               | Start de Import Worker lokaal         |
+| `npm run build`                           | Bouw de environment-neutrale PWA      |
+| `npm run build:staging`                   | Compatibele alias voor dezelfde PWA   |
+| `npm run preview`                         | Preview de productiebuild             |
+| `npm run format`                          | Format met Prettier                   |
+| `npm run lint`                            | Controleer met ESLint                 |
+| `npm run type-check`                      | Typecheck alle workspaces             |
+| `npm test`                                | Package-, web- en Workertests         |
+| `npm run test:integration`                | Online integratietests                |
+| `npm run test:e2e`                        | Kritieke Playwright-flow              |
+| `npm run deploy:cloudflare:check`         | Cloudflare dry-run                    |
+| `npm run deploy:cloudflare:check:staging` | Cloudflare staging dry-run            |
+| `npm run deploy:cloudflare`               | Deploy beide Workers                  |
+| `npm run deploy:firebase`                 | Deploy Firebase Hosting               |
+| `npm run deploy:firebase:hosting:staging` | Deploy uitsluitend de vaste Beta-site |
+| `npm run deploy:all`                      | Deploy Cloudflare + Firebase          |
 
 </details>
 
@@ -604,8 +609,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 - [x] Authoritative online basiscommands en privacytests
 - [x] Persoonlijke online openingshand en mulligan
 - [x] GitHub Actions CI met change detection
-- [x] Geautomatiseerde Beta deployment vanaf `staging`
-- [x] Geautomatiseerde Production deployment vanaf `main`
+- [x] Geautomatiseerde release promotion vanaf `main`: Beta → Production
 
 ### 🚧 Volgende uitbreidingen
 
@@ -667,12 +671,12 @@ houden geen samenwerking, sponsoring of goedkeuring in.
 
 [ci-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/ci.yml?style=for-the-badge&label=CI&logo=githubactions&logoColor=white
 [ci-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/ci.yml
-[beta-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-beta.yml?branch=staging&style=for-the-badge&label=Beta&logo=githubactions&logoColor=white
-[beta-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-beta.yml
-[production-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-production.yml?branch=main&style=for-the-badge&label=Production&logo=githubactions&logoColor=white
-[production-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-production.yml
+[beta-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&style=for-the-badge&label=Beta&logo=githubactions&logoColor=white
+[beta-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml
+[production-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&style=for-the-badge&label=Production&logo=githubactions&logoColor=white
+[production-url]: https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml
 [ci-large-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/ci.yml?style=for-the-badge&label=CI%20%7C%20PR&logo=githubactions&logoColor=white
-[beta-large-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-beta.yml?branch=staging&style=for-the-badge&label=Deploy%20Beta&logo=githubactions&logoColor=white
-[beta-build-shield]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Factions%2Fworkflows%2Fdeploy-beta.yml%2Fruns%3Fbranch%3Dstaging%26status%3Dsuccess%26per_page%3D1&query=%24.workflow_runs%5B0%5D.run_number&prefix=%23&label=Build&color=informational&style=for-the-badge
-[production-large-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-production.yml?branch=main&style=for-the-badge&label=Deploy%20Production&logo=githubactions&logoColor=white
-[production-build-shield]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Factions%2Fworkflows%2Fdeploy-production.yml%2Fruns%3Fbranch%3Dmain%26status%3Dsuccess%26per_page%3D1&query=%24.workflow_runs%5B0%5D.run_number&prefix=%23&label=Build&color=informational&style=for-the-badge
+[beta-large-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&style=for-the-badge&label=Deploy%20Beta&logo=githubactions&logoColor=white
+[beta-build-shield]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Fdeployments%3Fenvironment%3Dstaging%26task%3Drelease-metadata%26per_page%3D1&query=%24%5B0%5D.description&label=Beta&color=informational&style=for-the-badge
+[production-large-shield]: https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&style=for-the-badge&label=Deploy%20Production&logo=githubactions&logoColor=white
+[production-build-shield]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Fdeployments%3Fenvironment%3Dproduction%26task%3Drelease-metadata%26per_page%3D1&query=%24%5B0%5D.description&label=Production&color=informational&style=for-the-badge
