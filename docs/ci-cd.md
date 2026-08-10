@@ -15,13 +15,16 @@ feature/* → PR naar main → CI → merge naar main
                              Beta · Build #X
                                       │ success required
                                       ▼
+                              Production approval
+                                      │
+                                      ▼
                          Production · Build #X
 ```
 
 | Omgeving    | GitHub Environment | Bron                        | Frontend                         | API / WebSocket                                                            |
 | ----------- | ------------------ | --------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
 | Development | geen               | lokaal                      | Vite dev server                  | lokale Workers/proxy                                                       |
-| Test/Beta   | `staging`          | release uit `main`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` |
+| Beta        | `staging`          | release uit `main`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` |
 | Production  | `production`       | dezelfde release uit `main` | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           |
 
 De branch `staging` is niet meer nodig voor CI/CD. De naam `staging` blijft
@@ -55,20 +58,24 @@ zodat releases niet racen of een lopende promotie onderbreken.
 Handmatig starten: **Actions → Deploy Release → Run workflow → main**. Zo'n run
 selecteert bewust alle deployables en doorloopt opnieuw Beta vóór Production.
 
-De jobs zijn:
+De workflow heeft drie symmetrische componentlijnen:
 
-1. `Release / Detect changes`
-2. `Release / Validate`
-3. `Release / Build frontend artifact` wanneer de frontend geraakt is
-4. Beta-deployments voor geraakte deployables
-5. `Beta / Release complete`
-6. Production-deployments voor dezelfde geraakte deployables
-7. `Production / Release complete`
+| Fase       | Frontend                | Game Worker                | Import Worker                |
+| ---------- | ----------------------- | -------------------------- | ---------------------------- |
+| Build      | `Build / Frontend`      | `Build / Game Worker`      | `Build / Import Worker`      |
+| Beta       | `Beta / Frontend`       | `Beta / Game Worker`       | `Beta / Import Worker`       |
+| Production | `Production / Frontend` | `Production / Game Worker` | `Production / Import Worker` |
 
-Iedere Production-job vereist een succesvolle `Beta / Release complete`. Die
-aggregatiejob controleert expliciet dat iedere geraakte Beta-deployment is
-geslaagd. Een mislukte Firebase-, Import Worker- of Game Worker-deployment laat
-de aggregatie falen en slaat Production volledig over.
+`Build / Complete` vereist alle drie buildresultaten. Iedere Production-job
+vereist vervolgens een succesvolle `Beta / Complete`. Die aggregatiejob
+controleert expliciet dat iedere geraakte Beta-deployment is geslaagd. Een
+mislukte Frontend-, Import Worker- of Game Worker-deployment laat de aggregatie
+falen en voorkomt dat Production beschikbaar wordt.
+
+Alle drie Production-releasejobs zijn gekoppeld aan GitHub Environment
+`production`. Met Required reviewers geconfigureerd toont GitHub na succesvolle
+Beta-promotie de ingebouwde wachtstatus voor approval. Er staat bewust geen
+zelfgebouwd approvalmechanisme in YAML of scripts.
 
 Wanneer beide Workers geraakt zijn, wordt binnen iedere omgeving eerst de
 Import Worker en daarna de Game Worker gedeployed. Hiermee blijft de bestaande
@@ -76,9 +83,15 @@ service-bindingvolgorde behouden.
 
 ## Build once, deploy many
 
-Vite bouwt één environment-neutrale PWA. De job uploadt `apps/web/dist` als
-artifact `frontend-release-<run_number>`. Zowel Beta als Production downloaden
-exact dit artifact; de JavaScript- en CSS-bundles worden niet opnieuw gebouwd.
+Vite bouwt in `Build / Frontend` één environment-neutrale PWA. De job uploadt
+`apps/web/dist` als artifact `frontend-release-<run_number>`. Zowel Beta als
+Production downloaden exact dit artifact; de JavaScript- en CSS-bundles worden
+niet opnieuw gebouwd.
+
+De Worker-buildjobs voeren lint, typecheck/tests waar beschikbaar en Wrangler
+dry-runs voor Beta en Production uit. Wrangler bundelt tijdens de daadwerkelijke
+deployment opnieuw; hiervoor wordt bewust geen complex Workerartifact gebouwd.
+Broncommit en `RELEASE_VERSION` blijven wel identiek voor iedere fase.
 
 Omgevingswaarden staan in `/runtime-config.js`, buiten de Vite-bundle. De
 generator kent geen namen, URLs of Firebaseprojecten: hij leest en valideert
@@ -206,35 +219,38 @@ PR’s hoeven alleen naar `main`. Behoud deze vereiste checks:
 - `CI / Dependency Review`
 - `Analyze (javascript-typescript)` voor CodeQL
 
-Deze wijziging voegt geen extra quality gates, approvals, smoke tests,
-Playwright-deploymenttests of PR-previewdeployments toe.
+Deze wijziging voegt geen extra quality gates, smoke tests,
+Playwright-deploymenttests of PR-previewdeployments toe. Productionapproval
+gebruikt uitsluitend de bestaande GitHub Environment-protection.
 
 ## Handmatige inrichting
 
 1. Verwijder `staging` als toegestane deploymentbranch uit de GitHub Environment
    `staging` en sta `main` toe.
 2. Controleer dat Environment `production` eveneens alleen `main` toestaat.
-3. Plaats de gedeelde Firebasewaarden als Repository Variables en alleen de
+3. Configureer onder Environment `production` bij **Deployment protection
+   rules** één of meer **Required reviewers**.
+4. Plaats de gedeelde Firebasewaarden als Repository Variables en alleen de
    omgevingsspecifieke runtimewaarden in beide Environments.
-4. Behoud de bestaande Environment secrets; er zijn geen nieuwe secrets nodig.
-5. Controleer dat beide Firebase Hosting-targets en custom domains nog correct
+5. Behoud de bestaande Environment secrets; er zijn geen nieuwe secrets nodig.
+6. Controleer dat beide Firebase Hosting-targets en custom domains nog correct
    gekoppeld zijn.
-6. Controleer na de eerste release in Cloudflare dat beide Workerparen hetzelfde
+7. Controleer na de eerste release in Cloudflare dat beide Workerparen hetzelfde
    `RELEASE_VERSION` tonen en dat de staging Game Worker uitsluitend aan de
    staging Import Worker bindt.
-7. De oude workflows `Deploy Beta` en `Deploy Production` verdwijnen. Pas
+8. De oude workflows `Deploy Beta` en `Deploy Production` verdwijnen. Pas
    eventuele externe workflow-notificaties aan naar `Deploy Release`.
 
 ## Troubleshooting
 
-- **Production is skipped:** open `Beta / Release complete`; minstens één
+- **Production is skipped:** open `Beta / Complete`; minstens één
   vereiste Beta-deployment is niet geslaagd.
 - **Runtimeconfig ontbreekt:** controleer zowel de vier Firebase Repository
   Variables als de vier runtime Environment Variables uit de tabellen. De
   generator faalt veilig bij een ontbrekende of ongeldige waarde.
 - **Verkeerde endpoint zichtbaar:** controleer `/runtime-config.js` op de
   betreffende site en de `no-store` responseheader.
-- **Artifact ontbreekt:** controleer `Release / Build frontend artifact`; Beta en
+- **Artifact ontbreekt:** controleer `Build / Frontend`; Beta en
   Production gebruiken artifactnaam `frontend-release-<run_number>`.
 - **Workerrelease verschilt:** controleer `RELEASE_VERSION` in de Wrangler
   deploylog en Workerbindings.
