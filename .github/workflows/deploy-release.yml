@@ -63,6 +63,7 @@ jobs:
                 tsconfig.json|tsconfig.base.json|tsconfig.tools.json|packages/*)
                   frontend=true
                   game_worker=true
+                  import_worker=true
                   ;;
                 apps/web/*|scripts/write-runtime-config.mjs|firebase.json|.firebaserc)
                   frontend=true

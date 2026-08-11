@@ -57,6 +57,14 @@ berekent met dezelfde module zelf de vervangende bronhash (`REFRESHED`). De fron
 autoritatief. Een mislukte of ongeldige refresh overschrijft de geldige cache
 niet en levert een zichtbare importfout op.
 
+De DTO-cache gebruikt een publieke HTTPS-cachekey onder
+`api.mtgbattlearena.nl/__internal-cache/imported-deck/v2/...`. De `v2` voorkomt
+dat oudere raw Archidekt-cachewaarden als `ImportedDeck` worden gelezen; iedere
+cachewaarde wordt bovendien structureel gecontroleerd. Een ongeldige of tijdelijk
+onbereikbare cache wordt gelogd en als miss behandeld, zodat caching nooit een
+autoritatieve import blokkeert. De publieke GraphQL-fout blijft gemaskeerd;
+Workerlogs bevatten alleen fase, interne foutcode, provider, source-ID en release.
+
 ## Offline/online-pariteit
 
 Na import bewaart IndexedDB een onveranderlijke `DeckSnapshot`; offline spelen

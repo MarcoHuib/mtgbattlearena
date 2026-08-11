@@ -207,4 +207,5 @@ export type Env = {
   APP_ENV?: string
   ALLOWED_ORIGIN?: string
   REALTIME_DEBUG?: string
+  RELEASE_VERSION?: string
 }
