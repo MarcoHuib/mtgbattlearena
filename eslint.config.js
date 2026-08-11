@@ -22,6 +22,11 @@ const eslintConfig = config(
       "**/playwright-report/",
       "**/test-results/",
       "apps/web/public/runtime-config.js",
+      "apps/web/src/app/api/generated.ts",
+      "apps/web/src/app/api/graphqlTypes.ts",
+      "apps/web/src/app/api/schemaTypes.ts",
+      "apps/web/src/app/api/persistedOperationIds.generated.ts",
+      "apps/game-worker/src/graphql/persistedOperations.generated.ts",
     ],
   },
   {

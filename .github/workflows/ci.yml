@@ -104,6 +104,9 @@ jobs:
       - name: Lint
         if: needs.changes.outputs.frontend == 'true'
         run: npm run lint
+      - name: Verify generated GraphQL client
+        if: needs.changes.outputs.frontend == 'true'
+        run: npm run graphql:codegen:check
       - name: Type-check frontend and shared packages
         if: needs.changes.outputs.frontend == 'true'
         run: |

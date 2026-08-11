@@ -1,0 +1,70 @@
+query PublicLobbies {
+  publicLobbies {
+    id
+    code
+    title
+    hostDisplayName
+    format
+    visibility
+    status
+    playerCount
+    maxPlayers
+    viewerRole
+  }
+}
+
+query Lobby($id: ID!) {
+  lobby(id: $id) {
+    lobby {
+      code
+      title
+      hostDisplayName
+      status
+      maxPlayers
+      viewerRole
+    }
+    participants {
+      displayName
+      role
+      seatNumber
+      isHost
+      isViewer
+      deckReady
+      deckName
+    }
+  }
+}
+
+mutation CreateLobby($input: CreateLobbyInput!) {
+  createLobby(input: $input) {
+    id
+    status
+  }
+}
+
+mutation JoinLobby($input: JoinLobbyInput!) {
+  joinLobby(input: $input) {
+    gameId
+    lobby {
+      status
+    }
+  }
+}
+
+mutation DeleteLobby($id: ID!) {
+  deleteLobby(id: $id)
+}
+mutation AbortGame($gameId: ID!) {
+  abortGame(gameId: $gameId)
+}
+mutation RegisterDeck($gameId: ID!, $deck: RegisterDeckInput!) {
+  registerDeck(gameId: $gameId, deck: $deck)
+}
+mutation StartGame($gameId: ID!) {
+  startGame(gameId: $gameId)
+}
+mutation CreateSocketTicket($gameId: ID!) {
+  createSocketTicket(gameId: $gameId) {
+    ticket
+  }
+}

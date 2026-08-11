@@ -276,6 +276,92 @@ test("preflight staat alleen vereiste securityheaders toe", async () => {
   )
 })
 
+const graphqlRequest = (query: string) =>
+  new Request("https://api.mtgbattlearena.nl/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  })
+
+const graphqlEnv = {
+  FIREBASE_PROJECT_ID: "battle-project",
+  APP_CHECK_ENFORCEMENT: "off",
+  LOBBY: {
+    getByName: () => ({
+      listPublicLobbies: () => [],
+    }),
+  },
+} as unknown as Env
+
+test("GraphQL health en publieke lobbyselecties gebruiken POST", async () => {
+  const response = await worker.fetch(
+    graphqlRequest(
+      "query Health { health { status firebaseConfigured } publicLobbies { id title } }",
+    ),
+    graphqlEnv,
+  )
+  expect(response.status).toBe(200)
+  await expect(response.json()).resolves.toEqual({
+    data: {
+      health: { status: "ok", firebaseConfigured: true },
+      publicLobbies: [],
+    },
+  })
+
+  const getResponse = await worker.fetch(
+    new Request("https://api.mtgbattlearena.nl/graphql"),
+    graphqlEnv,
+  )
+  expect(getResponse.status).toBe(405)
+})
+
+test("GraphQL beschermt lobbydetails en blokkeert aliasmisbruik", async () => {
+  const unauthenticated = await worker.fetch(
+    graphqlRequest('query Lobby { lobby(id: "private") { lobby { id } } }'),
+    graphqlEnv,
+  )
+  await expect(unauthenticated.json()).resolves.toMatchObject({
+    errors: [{ extensions: { code: "UNAUTHENTICATED" } }],
+  })
+
+  const aliases = Array.from(
+    { length: 14 },
+    (_, index) => `a${index}: health { status }`,
+  ).join(" ")
+  const excessive = await worker.fetch(
+    graphqlRequest(`query Excessive { ${aliases} }`),
+    graphqlEnv,
+  )
+  const body = (await excessive.json()) as { errors?: { message: string }[] }
+  expect(body.errors?.some(item => item.message.includes("aliassen"))).toBe(
+    true,
+  )
+})
+
+test("GraphQL geeft stabiele fouten voor ongeldige Auth en App Check", async () => {
+  const invalidAuthRequest = graphqlRequest("query PublicLobbies { publicLobbies { id } }")
+  invalidAuthRequest.headers.set("Authorization", "Bearer malformed")
+  const invalidAuth = await worker.fetch(invalidAuthRequest, graphqlEnv)
+  expect(invalidAuth.status).toBe(401)
+  await expect(invalidAuth.json()).resolves.toMatchObject({
+    errors: [{ extensions: { code: "UNAUTHENTICATED" } }],
+  })
+
+  const invalidAppCheck = await worker.fetch(
+    graphqlRequest("query PublicLobbies { publicLobbies { id } }"),
+    {
+      ...graphqlEnv,
+      APP_CHECK_ENFORCEMENT: "enforce",
+      FIREBASE_PROJECT_NUMBER: "445284154827",
+      FIREBASE_ALLOWED_APP_IDS: "1:445284154827:web:production",
+    },
+  )
+  expect(invalidAppCheck.status).toBe(403)
+  await expect(invalidAppCheck.json()).resolves.toMatchObject({
+    errors: [{ extensions: { code: "FORBIDDEN" } }],
+  })
+})
+
 test("socket-ticket controleert Auth vóór App Check", async () => {
   const response = await worker.fetch(
     new Request("https://api.mtgbattlearena.nl/api/online/socket-ticket", {
@@ -290,7 +376,9 @@ test("socket-ticket controleert Auth vóór App Check", async () => {
     } as unknown as Env,
   )
   expect(response.status).toBe(401)
-  await expect(response.json()).resolves.toMatchObject({ code: "AUTH_REQUIRED" })
+  await expect(response.json()).resolves.toMatchObject({
+    code: "AUTH_REQUIRED",
+  })
 })
 
 test("socketlimiet-afwijzing maakt een verbruikt ticket niet herbruikbaar", async () => {

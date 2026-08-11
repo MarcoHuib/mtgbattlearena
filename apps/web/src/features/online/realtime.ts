@@ -1,7 +1,7 @@
 import { parseServerEvent, type GameCommand } from "@mtg/game-protocol"
 import type { OnlineConnectionUpdate, OnlineGameConnection } from "./types"
 
-type TicketFactory = () => Promise<{ ticket: string; expiresAt: string }>
+type TicketFactory = () => Promise<{ ticket: string }>
 type SocketFactory = (url: string) => WebSocket
 
 export class CloudflareWebSocketConnection implements OnlineGameConnection {

@@ -2,6 +2,8 @@ import { z } from "zod"
 import {
   onlineDeckSubmissionSchema,
   parseGameCommand,
+  type PersonalGameSnapshot,
+  type ServerEvent,
 } from "@mtg/game-protocol"
 import { FirebaseTokenVerifier, readBearerToken } from "./auth"
 import {
@@ -11,6 +13,9 @@ import {
 } from "./app-check"
 import { GameDurableObject } from "./game-durable-object"
 import { LobbyDurableObject } from "./lobby-durable-object"
+import { GraphQLError } from "graphql"
+import { createGraphQLYoga } from "./graphql/yoga"
+import { resolveGraphQLRequest } from "./graphql/security"
 import type {
   Env,
   GameSession,
@@ -43,8 +48,7 @@ const ticketRequestSchema = z
 
 let verifier: { projectId: string; instance: FirebaseTokenVerifier } | undefined
 let appCheckVerifier:
-  | { configuration: string; instance: FirebaseAppCheckVerifier }
-  | undefined
+  { configuration: string; instance: FirebaseAppCheckVerifier } | undefined
 
 const getVerifier = (env: Env) => {
   if (!env.FIREBASE_PROJECT_ID) throw new Error("AUTH_NOT_CONFIGURED")
@@ -219,6 +223,176 @@ const findSession = async (
   return { ok: true, value: session }
 }
 
+const personalSnapshot = async (
+  env: Env,
+  gameId: string,
+  identity: VerifiedIdentity,
+) => {
+  const session = resultValue(await findSession(env, gameId, identity))
+  return gameSnapshotValue(
+    await env.GAMES.getByName(gameId).getPersonalSnapshot(session),
+  )
+}
+
+const startRegisteredGame = async (
+  env: Env,
+  gameId: string,
+  identity: VerifiedIdentity,
+) => {
+  const lobby = env.LOBBY.getByName("global")
+  const prepared = resultValue(
+    await lobby.prepareRegisteredGame(gameId, identity),
+  )
+  let initialized: GameSnapshotResult
+  try {
+    initialized = await env.GAMES.getByName(gameId).initializeGame(
+      prepared.seed,
+      prepared.session,
+    )
+  } catch (caught) {
+    await lobby.releaseGameStart(gameId, identity)
+    throw caught
+  }
+  if (initialized.ok && initialized.value.type === "PERSONAL_SNAPSHOT") {
+    await lobby.markGameActive(gameId, identity)
+  } else {
+    await lobby.releaseGameStart(gameId, identity)
+  }
+  return gameSnapshotValue(initialized)
+}
+
+const abortRegisteredGame = async (
+  env: Env,
+  gameId: string,
+  identity: VerifiedIdentity,
+) => {
+  const lobby = env.LOBBY.getByName("global")
+  const session = await lobby.getSession(gameId, identity.uid)
+  if (!session?.isHost) {
+    throw new GraphQLError(
+      "Alleen de geverifieerde host kan de game afbreken.",
+      { extensions: { code: "FORBIDDEN" } },
+    )
+  }
+  resultValue(await env.GAMES.getByName(gameId).abortGame(session))
+  resultValue(await lobby.markGameFinished(gameId, identity))
+}
+
+const resultValue = <T>(result: RpcResult<T>): T => {
+  if (result.ok) return result.value
+  throw new GraphQLError(result.message, {
+    extensions: {
+      code:
+        result.status === 403
+          ? "FORBIDDEN"
+          : result.status === 404
+            ? "NOT_FOUND"
+            : result.status === 409
+              ? "CONFLICT"
+              : result.status === 429
+                ? "RATE_LIMITED"
+                : "VALIDATION_ERROR",
+      httpStatus: result.status,
+    },
+  })
+}
+
+const gameSnapshotValue = (
+  result: GameSnapshotResult,
+): PersonalGameSnapshot | ServerEvent => {
+  if (!result.ok) return resultValue<never>(result)
+  if (result.value.type === "ERROR") {
+    throw new GraphQLError(result.value.error.message, {
+      extensions: { code: result.value.error.code },
+    })
+  }
+  return result.value
+}
+
+const graphqlRequest = async (request: Request, env: Env) => {
+  if (request.method !== "POST") {
+    return error(405, "METHOD_NOT_ALLOWED", "Gebruik POST voor GraphQL.")
+  }
+  const length = Number(request.headers.get("Content-Length") ?? 0)
+  if (length > 65_536) throw new Error("PAYLOAD_TOO_LARGE")
+  const encodedBody = new TextEncoder().encode(await request.clone().text())
+  if (encodedBody.byteLength > 65_536) throw new Error("PAYLOAD_TOO_LARGE")
+  let resolvedRequest: Request
+  try {
+    resolvedRequest = await resolveGraphQLRequest(request, env)
+  } catch (caught) {
+    if (caught instanceof GraphQLError) {
+      return json(
+        {
+          errors: [
+            {
+              message: caught.message,
+              extensions: { code: caught.extensions.code },
+            },
+          ],
+        },
+        400,
+      )
+    }
+    throw caught
+  }
+  try {
+    await requireAppCheck(request, env)
+  } catch (caught) {
+    if (
+      caught instanceof Error &&
+      ["APP_CHECK_REQUIRED", "APP_CHECK_NOT_CONFIGURED"].includes(
+        caught.message,
+      )
+    ) {
+      return json(
+        {
+          errors: [
+            {
+              message: "De app-integriteit kon niet worden gevalideerd.",
+              extensions: { code: "FORBIDDEN" },
+            },
+          ],
+        },
+        403,
+      )
+    }
+    throw caught
+  }
+  let identity: VerifiedIdentity | null = null
+  if (request.headers.has("Authorization")) {
+    try {
+      identity = await authenticate(request, env)
+    } catch {
+      return json(
+        {
+          errors: [
+            {
+              message: "Authenticatie kon niet worden gevalideerd.",
+              extensions: { code: "UNAUTHENTICATED" },
+            },
+          ],
+        },
+        401,
+      )
+    }
+  }
+  const lobby = env.LOBBY.getByName("global")
+  const yoga = createGraphQLYoga({
+    request: resolvedRequest,
+    env,
+    identity,
+    lobby,
+    personalSnapshot: (gameId, verifiedIdentity) =>
+      personalSnapshot(env, gameId, verifiedIdentity),
+    startGame: (gameId, verifiedIdentity) =>
+      startRegisteredGame(env, gameId, verifiedIdentity),
+    abortGame: (gameId, verifiedIdentity) =>
+      abortRegisteredGame(env, gameId, verifiedIdentity),
+  })
+  return yoga.fetch(resolvedRequest)
+}
+
 const routeRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url)
   const isApiCustomDomain = url.hostname === "api.mtgbattlearena.nl"
@@ -247,6 +421,10 @@ const routeRequest = async (request: Request, env: Env) => {
       status: "ok",
       firebaseConfigured: Boolean(env.FIREBASE_PROJECT_ID),
     })
+  }
+
+  if (url.pathname === "/graphql") {
+    return graphqlRequest(request, env)
   }
 
   const lobby = env.LOBBY.getByName("global")
@@ -297,24 +475,21 @@ const routeRequest = async (request: Request, env: Env) => {
       )
     }
     if (lobbyActionRoute[2] === "start" && request.method === "POST") {
-      const prepared = await lobby.prepareRegisteredGame(gameId, identity)
-      if (!prepared.ok) return resultResponse(prepared)
-      let initialized: GameSnapshotResult
       try {
-        initialized = await env.GAMES.getByName(gameId).initializeGame(
-          prepared.value.seed,
-          prepared.value.session,
-        )
+        return json(await startRegisteredGame(env, gameId, identity), 201)
       } catch (caught) {
-        await lobby.releaseGameStart(gameId, identity)
+        if (
+          caught instanceof GraphQLError &&
+          typeof caught.extensions.httpStatus === "number"
+        ) {
+          return error(
+            caught.extensions.httpStatus,
+            String(caught.extensions.code),
+            caught.message,
+          )
+        }
         throw caught
       }
-      if (initialized.ok && initialized.value.type === "PERSONAL_SNAPSHOT") {
-        await lobby.markGameActive(gameId, identity)
-      } else {
-        await lobby.releaseGameStart(gameId, identity)
-      }
-      return gameResultResponse(initialized, 201)
     }
   }
 
@@ -325,17 +500,15 @@ const routeRequest = async (request: Request, env: Env) => {
     const identity = await authenticate(request, env)
     await requireAppCheck(request, env)
     const gameId = decodeURIComponent(abortGameRoute[1])
-    const session = await lobby.getSession(gameId, identity.uid)
-    if (!session?.isHost) {
-      return error(
-        403,
-        "FORBIDDEN",
-        "Alleen de geverifieerde host kan de game afbreken.",
-      )
+    try {
+      await abortRegisteredGame(env, gameId, identity)
+      return json(null)
+    } catch (caught) {
+      if (caught instanceof GraphQLError) {
+        return error(403, String(caught.extensions.code), caught.message)
+      }
+      throw caught
     }
-    const aborted = await env.GAMES.getByName(gameId).abortGame(session)
-    if (!aborted.ok) return resultResponse(aborted)
-    return resultResponse(await lobby.markGameFinished(gameId, identity))
   }
 
   const lobbyRoomRoute = /^\/api\/online\/lobbies\/([^/]+)$/.exec(url.pathname)

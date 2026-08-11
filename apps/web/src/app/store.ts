@@ -56,6 +56,10 @@ import { uiSlice } from "../features/ui/uiSlice"
 import { setSaveError, setSaved, setSaving } from "../features/ui/uiSlice"
 import type { PersistedGame } from "@mtg/game-core/types"
 import { repositories } from "../persistence/database"
+import { graphqlApi } from "./api/graphqlApi"
+import { setupListeners } from "@reduxjs/toolkit/query"
+import { receiveOnlineEvent } from "../features/online/onlineSlice"
+import { graphQLTagsForServerEvent } from "./api/realtimeCache"
 
 const rootReducer = combineSlices(
   setupSlice,
@@ -63,6 +67,7 @@ const rootReducer = combineSlices(
   offlineSlice,
   onlineSlice,
   uiSlice,
+  graphqlApi,
 )
 export type RootState = ReturnType<typeof rootReducer>
 
@@ -142,15 +147,30 @@ autosaveListener.startListening({
   },
 })
 
+autosaveListener.startListening({
+  actionCreator: receiveOnlineEvent,
+  effect: (action, listenerApi) => {
+    const previousState = listenerApi.getOriginalState() as RootState
+    const tags = graphQLTagsForServerEvent(
+      action.payload,
+      previousState.online.view !== null,
+    )
+    if (tags.length) listenerApi.dispatch(graphqlApi.util.invalidateTags(tags))
+  },
+})
+
 export const makeStore = (preloadedState?: Partial<RootState>) =>
   configureStore({
     reducer: rootReducer,
     middleware: getDefaultMiddleware =>
-      getDefaultMiddleware().prepend(autosaveListener.middleware),
+      getDefaultMiddleware()
+        .prepend(autosaveListener.middleware)
+        .concat(graphqlApi.middleware),
     preloadedState,
   })
 
 export const store = makeStore()
+setupListeners(store.dispatch)
 export type AppStore = typeof store
 export type AppDispatch = AppStore["dispatch"]
 export type AppThunk<ThunkReturnType = void> = ThunkAction<

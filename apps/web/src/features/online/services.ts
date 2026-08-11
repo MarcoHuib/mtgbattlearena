@@ -1,8 +1,5 @@
 import {
   onlineDeckSubmissionSchema,
-  parsePersonalSnapshot,
-  parseServerEvent,
-  type GameCommand,
   type OnlineDeckSubmission,
 } from "@mtg/game-protocol"
 import type { DeckSnapshot } from "@mtg/game-core/types"
@@ -28,6 +25,16 @@ import {
 } from "../../firebaseAppCheck"
 import { MockRealtimeConnection } from "./mockRealtime"
 import { CloudflareWebSocketConnection } from "./realtime"
+import { store } from "../../app/store"
+import { remoteGraphqlApi } from "../../app/api/remoteGraphqlApi"
+import {
+  setGraphQLAuthTokenProvider,
+  setGraphQLBaseUrl,
+} from "../../app/api/graphqlBaseQuery"
+import type { LobbyVisibility as GraphQLLobbyVisibility } from "../../app/api/schemaTypes"
+
+const normalizeGraphQLVisibility = (value: unknown) =>
+  value === "invite_only" ? "invite-only" : value
 
 const wait = (duration = 120) =>
   new Promise<void>(resolve => {
@@ -358,7 +365,7 @@ export class MockOnlineGameService implements OnlineGameService {
     }
     lobby.playerCount += 1
     lobby.viewerRole = "player"
-    return { lobby, gameId: lobby.id, role: "player" }
+    return { gameId: lobby.id, status: lobby.status }
   }
 
   async getLobbyRoom(gameId: string, signal?: AbortSignal) {
@@ -436,23 +443,6 @@ export class MockOnlineGameService implements OnlineGameService {
     })
   }
 
-  sendCommand(_gameId: string, command: GameCommand) {
-    return Promise.resolve(
-      parseServerEvent({
-        type: "COMMAND_ACCEPTED",
-        gameId: _gameId,
-        commandId: command.commandId,
-        version: command.expectedVersion + 1,
-      }),
-    )
-  }
-
-  getPersonalSnapshot() {
-    return Promise.reject(
-      new Error("De mocklobby heeft nog geen gestarte wedstrijdsnapshot."),
-    )
-  }
-
   connectGame(gameId: string) {
     const requestedPlayerId =
       typeof localStorage === "undefined"
@@ -477,7 +467,10 @@ export class CloudflareOnlineGameService implements OnlineGameService {
     private readonly baseUrl: string,
     private readonly auth: AuthService,
     private readonly socketBaseUrl = baseUrl,
-  ) {}
+  ) {
+    setGraphQLAuthTokenProvider(() => this.auth.getIdToken())
+    setGraphQLBaseUrl(this.baseUrl)
+  }
 
   async checkHealth(signal?: AbortSignal) {
     return arenaHealthSchema.parse(
@@ -486,121 +479,119 @@ export class CloudflareOnlineGameService implements OnlineGameService {
   }
 
   async listPublicLobbies(signal?: AbortSignal) {
+    const request = store.dispatch(
+      remoteGraphqlApi.endpoints.PublicLobbies.initiate(undefined, {
+        subscribe: false,
+        forceRefetch: true,
+      }),
+    )
+    signal?.addEventListener(
+      "abort",
+      () => {
+        request.abort()
+      },
+      { once: true },
+    )
+    const result = await request.unwrap()
     return lobbyListSchema.parse(
-      await this.request("/api/online/lobbies", { signal }, "optional"),
+      result.publicLobbies.map(lobby => ({
+        ...lobby,
+        visibility: normalizeGraphQLVisibility(lobby.visibility),
+      })),
     )
   }
 
   async createLobby(input: CreateLobbyInput) {
-    return onlineLobbySchema.parse(
-      await this.request("/api/online/lobbies", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    )
+    const result = await store
+      .dispatch(
+        remoteGraphqlApi.endpoints.CreateLobby.initiate({
+          input: {
+            ...input,
+            visibility: input.visibility.replace(
+              "invite-only",
+              "invite_only",
+            ) as GraphQLLobbyVisibility,
+          },
+        }),
+      )
+      .unwrap()
+    return result.createLobby
   }
 
   async joinByCode(code: string) {
-    const result = await this.request("/api/online/lobbies/join", {
-      method: "POST",
-      body: JSON.stringify({ code }),
-    })
-    if (
-      typeof result !== "object" ||
-      result === null ||
-      !("lobby" in result) ||
-      !("gameId" in result) ||
-      !("role" in result)
-    ) {
-      throw new Error("De server gaf een ongeldig joinantwoord.")
-    }
+    const result = (
+      await store
+        .dispatch(
+          remoteGraphqlApi.endpoints.JoinLobby.initiate({ input: { code } }),
+        )
+        .unwrap()
+    ).joinLobby
     return {
-      lobby: onlineLobbySchema.parse(result.lobby),
-      gameId: String(result.gameId),
-      role: result.role === "spectator" ? "spectator" : "player",
+      gameId: result.gameId,
+      status: result.lobby.status,
     } satisfies JoinLobbyResult
   }
 
   async getLobbyRoom(gameId: string, signal?: AbortSignal) {
-    return lobbyRoomSchema.parse(
-      await this.request(`/api/online/lobbies/${encodeURIComponent(gameId)}`, {
-        signal,
-      }),
+    const request = store.dispatch(
+      remoteGraphqlApi.endpoints.Lobby.initiate(
+        { id: gameId },
+        { subscribe: false, forceRefetch: true },
+      ),
     )
+    signal?.addEventListener(
+      "abort",
+      () => {
+        request.abort()
+      },
+      { once: true },
+    )
+    const result = (await request.unwrap()).lobby
+    return lobbyRoomSchema.parse({
+      ...result,
+    })
   }
 
   async deleteLobby(gameId: string) {
-    await this.request(`/api/online/lobbies/${encodeURIComponent(gameId)}`, {
-      method: "DELETE",
-    })
+    await store
+      .dispatch(remoteGraphqlApi.endpoints.DeleteLobby.initiate({ id: gameId }))
+      .unwrap()
   }
 
   async abortGame(gameId: string) {
-    await this.request(
-      `/api/online/lobbies/${encodeURIComponent(gameId)}/abort`,
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      },
-    )
+    await store
+      .dispatch(remoteGraphqlApi.endpoints.AbortGame.initiate({ gameId }))
+      .unwrap()
   }
 
   async registerDeck(gameId: string, deck: DeckSnapshot) {
-    await this.request(
-      `/api/online/lobbies/${encodeURIComponent(gameId)}/deck`,
-      {
-        method: "PUT",
-        body: JSON.stringify(createOnlineDeckSubmission(deck)),
-      },
-    )
+    await store
+      .dispatch(
+        remoteGraphqlApi.endpoints.RegisterDeck.initiate({
+          gameId,
+          deck: createOnlineDeckSubmission(deck),
+        }),
+      )
+      .unwrap()
   }
 
   async startGame(gameId: string) {
-    parsePersonalSnapshot(
-      await this.request(
-        `/api/online/lobbies/${encodeURIComponent(gameId)}/start`,
-        { method: "POST", body: JSON.stringify({}) },
-      ),
-    )
+    await store
+      .dispatch(remoteGraphqlApi.endpoints.StartGame.initiate({ gameId }))
+      .unwrap()
   }
 
   async createSocketTicket(gameId: string) {
-    const result = await this.request("/api/online/socket-ticket", {
-      method: "POST",
-      body: JSON.stringify({ gameId }),
-    })
-    if (
-      typeof result !== "object" ||
-      result === null ||
-      !("ticket" in result) ||
-      !("expiresAt" in result)
-    ) {
-      throw new Error("De server gaf een ongeldig socket-ticket.")
-    }
+    const result = (
+      await store
+        .dispatch(
+          remoteGraphqlApi.endpoints.CreateSocketTicket.initiate({ gameId }),
+        )
+        .unwrap()
+    ).createSocketTicket
     return {
-      ticket: String(result.ticket),
-      expiresAt: String(result.expiresAt),
+      ticket: result.ticket,
     }
-  }
-
-  async sendCommand(gameId: string, command: GameCommand) {
-    return parseServerEvent(
-      await this.request(
-        `/api/online/games/${encodeURIComponent(gameId)}/commands`,
-        {
-          method: "POST",
-          body: JSON.stringify(command),
-        },
-      ),
-    )
-  }
-
-  async getPersonalSnapshot(gameId: string) {
-    return parsePersonalSnapshot(
-      await this.request(
-        `/api/online/games/${encodeURIComponent(gameId)}/snapshot`,
-      ),
-    )
   }
 
   connectGame(gameId: string) {
@@ -673,9 +664,7 @@ export const createApplicationServices = (): ApplicationServices => {
     const appCheckSiteKey =
       runtimeConfig.firebaseAppCheckRecaptchaEnterpriseSiteKey.trim()
     if (!firebaseConfig.configured) {
-      const missingConfiguration = [
-        ...firebaseConfig.missing,
-      ]
+      const missingConfiguration = [...firebaseConfig.missing]
       const auth = new UnavailableAuthService(
         `Firebase-configuratie ontbreekt (${missingConfiguration.join(", ")}). Offline spelen blijft beschikbaar.`,
       )
@@ -713,6 +702,7 @@ export const createApplicationServices = (): ApplicationServices => {
     const auth = new FirebaseAuthService(
       createFirebaseAuthPort(firebaseConfig.options),
     )
+    setGraphQLAuthTokenProvider(() => auth.getIdToken())
     return {
       auth,
       onlineGames: new CloudflareOnlineGameService(

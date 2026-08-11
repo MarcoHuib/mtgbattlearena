@@ -1,9 +1,5 @@
 import { z } from "zod"
-import type {
-  GameCommand,
-  PersonalGameSnapshot,
-  ServerEvent,
-} from "@mtg/game-protocol"
+import type { GameCommand, ServerEvent } from "@mtg/game-protocol"
 import type { DeckSnapshot } from "@mtg/game-core/types"
 
 export type ConnectionRole = "player" | "spectator"
@@ -35,9 +31,11 @@ export const onlineLobbySchema = z
   })
   .strict()
 
-export const lobbyListSchema = z.array(onlineLobbySchema)
-
 export type OnlineLobby = z.infer<typeof onlineLobbySchema>
+
+export const publicLobbySchema = onlineLobbySchema.omit({ createdAt: true })
+export const lobbyListSchema = z.array(publicLobbySchema)
+export type PublicLobby = z.infer<typeof publicLobbySchema>
 
 export const lobbyParticipantSchema = z
   .object({
@@ -53,7 +51,14 @@ export const lobbyParticipantSchema = z
 
 export const lobbyRoomSchema = z
   .object({
-    lobby: onlineLobbySchema,
+    lobby: z.object({
+      code: z.string().min(4).max(12),
+      title: z.string().min(1).max(100),
+      hostDisplayName: z.string().min(1).max(80),
+      status: z.enum(["waiting", "starting", "active", "finished"]),
+      maxPlayers: z.number().int().min(2).max(6),
+      viewerRole: z.enum(["host", "player", "spectator"]).nullable(),
+    }),
     participants: z.array(lobbyParticipantSchema),
   })
   .strict()
@@ -91,10 +96,11 @@ export type CreateLobbyInput = {
 }
 
 export type JoinLobbyResult = {
-  lobby: OnlineLobby
   gameId: string
-  role: ConnectionRole
+  status: LobbyStatus
 }
+
+export type CreateLobbyResult = { id: string; status: LobbyStatus }
 
 export type OnlineConnectionStatus =
   "connecting" | "connected" | "reconnecting" | "disconnected" | "error"
@@ -113,8 +119,8 @@ export type OnlineGameConnection = {
 export type OnlineGameService = {
   readonly kind: "mock" | "cloudflare"
   checkHealth(signal?: AbortSignal): Promise<ArenaHealth>
-  listPublicLobbies(signal?: AbortSignal): Promise<OnlineLobby[]>
-  createLobby(input: CreateLobbyInput): Promise<OnlineLobby>
+  listPublicLobbies(signal?: AbortSignal): Promise<PublicLobby[]>
+  createLobby(input: CreateLobbyInput): Promise<CreateLobbyResult>
   joinByCode(code: string): Promise<JoinLobbyResult>
   getLobbyRoom(gameId: string, signal?: AbortSignal): Promise<LobbyRoom>
   deleteLobby(gameId: string): Promise<void>
@@ -123,9 +129,6 @@ export type OnlineGameService = {
   startGame(gameId: string): Promise<void>
   createSocketTicket(gameId: string): Promise<{
     ticket: string
-    expiresAt: string
   }>
-  sendCommand(gameId: string, command: GameCommand): Promise<ServerEvent>
-  getPersonalSnapshot(gameId: string): Promise<PersonalGameSnapshot>
   connectGame(gameId: string): Promise<OnlineGameConnection>
 }

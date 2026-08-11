@@ -9,6 +9,8 @@ import { createImportedDeckSnapshot } from "../decks/deckSnapshots"
 import { repositories } from "../../persistence/database"
 import { deviceDeckOwnerId } from "../../persistence/database"
 import type { LobbyRoom, OnlineGameService } from "./types"
+import { lobbyRoomSchema } from "./types"
+import { useLobbyQuery } from "../../app/api/remoteGraphqlApi"
 
 type LobbyRoomScreenProps = {
   gameId: string
@@ -25,7 +27,16 @@ export const LobbyRoomScreen = ({
   onEnterGame,
   onLeave,
 }: LobbyRoomScreenProps) => {
-  const [room, setRoom] = useState<LobbyRoom | null>(null)
+  const usesGraphQLQuery = onlineGames.kind === "cloudflare"
+  const lobbyQuery = useLobbyQuery(
+    { id: gameId },
+    {
+      skip: !usesGraphQLQuery,
+      pollingInterval: 10_000,
+      refetchOnFocus: true,
+    },
+  )
+  const [legacyRoom, setLegacyRoom] = useState<LobbyRoom | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const [message, setMessage] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -42,7 +53,7 @@ export const LobbyRoomScreen = ({
     async (signal?: AbortSignal) => {
       try {
         const nextRoom = await onlineGames.getLobbyRoom(gameId, signal)
-        setRoom(nextRoom)
+        setLegacyRoom(nextRoom)
         setStatus("ready")
         setMessage(null)
         if (nextRoom.lobby.status === "active") onEnterGame(gameId)
@@ -60,6 +71,7 @@ export const LobbyRoomScreen = ({
   )
 
   useEffect(() => {
+    if (usesGraphQLQuery) return
     const controller = new AbortController()
     let disposed = false
     let timeout: number | undefined
@@ -89,7 +101,35 @@ export const LobbyRoomScreen = ({
       if (timeout !== undefined) window.clearTimeout(timeout)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [loadRoom])
+  }, [loadRoom, usesGraphQLQuery])
+
+  const room = usesGraphQLQuery
+    ? lobbyQuery.data
+      ? lobbyRoomSchema.parse(lobbyQuery.data.lobby)
+      : null
+    : legacyRoom
+  const effectiveStatus = usesGraphQLQuery
+    ? lobbyQuery.isError
+      ? "error"
+      : room
+        ? "ready"
+        : "loading"
+    : status
+  const effectiveMessage = usesGraphQLQuery
+    ? lobbyQuery.error &&
+      "data" in lobbyQuery.error &&
+      typeof lobbyQuery.error.data === "object" &&
+      lobbyQuery.error.data !== null &&
+      "message" in lobbyQuery.error.data
+      ? lobbyQuery.error.data.message
+      : lobbyQuery.isError
+        ? "De lobby kon niet worden geladen."
+        : message
+    : message
+
+  useEffect(() => {
+    if (room?.lobby.status === "active") onEnterGame(gameId)
+  }, [gameId, onEnterGame, room?.lobby.status])
 
   useEffect(() => {
     let disposed = false
@@ -227,7 +267,7 @@ export const LobbyRoomScreen = ({
     }
   }
 
-  if (status === "loading" && !room) {
+  if (effectiveStatus === "loading" && !room) {
     return (
       <AppShell activeRoute="/online">
         <section className="lobby-room-page">
@@ -248,7 +288,7 @@ export const LobbyRoomScreen = ({
           <div className="lobby-room-error" role="alert">
             <span className="eyebrow">Lobby niet beschikbaar</span>
             <h1>Deze tafel kon niet worden geopend.</h1>
-            <p>{message}</p>
+            <p>{effectiveMessage}</p>
             <button
               className="button button--primary"
               type="button"
