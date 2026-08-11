@@ -49,9 +49,12 @@ alleen lokaal bestaat, blijft de keuze in IndexedDB. Een expliciete herimport
 vervangt alleen de ownerkoppeling van de gebruiker die importeert; andere owners
 blijven hun eerdere revision zien.
 
-IndexedDB-versie 5 behandelt bestaande deckrecords als initiële revisions en
-maakt per owner/source één selectie. Wanneer oude duplicaten verschillende
-`sourceHash`-waarden hebben, blijven het afzonderlijke revisions. Bij meerdere
+IndexedDB-versie 5 behandelt bestaande deckrecords als initiële revisions.
+Versie 6 maakt de ownerrelatie expliciet als
+`(ownerId, deckSourceId) -> revisionId` en herstelt eventuele oudere dubbele
+owner/source-rijen idempotent. Wanneer oude duplicaten verschillende
+`sourceHash`-waarden hebben, blijven het afzonderlijke revisionrecords; alleen
+de zichtbare ownerselectie wordt teruggebracht tot één revision. Bij meerdere
 selecties voor dezelfde owner/source wint de recentste `importedAt`. Bestaande
 games en offlinepakketten worden niet herschreven of verwijderd.
 

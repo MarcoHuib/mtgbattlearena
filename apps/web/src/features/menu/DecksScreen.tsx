@@ -74,14 +74,12 @@ export const DecksScreen = ({ auth }: DecksScreenProps) => {
     try {
       await repositories.decks.save(deck, ownerId)
       await repositories.decks.delete(deck.id, deviceDeckOwnerId)
-      setDeviceDecks(current =>
-        current.filter(candidate => candidate.id !== deck.id),
-      )
-      setDecks(current =>
-        [deck, ...current.filter(candidate => candidate.id !== deck.id)].sort(
-          (a, b) => b.importedAt.localeCompare(a.importedAt),
-        ),
-      )
+      const [nextDecks, nextDeviceDecks] = await Promise.all([
+        repositories.decks.list(ownerId),
+        repositories.decks.list(deviceDeckOwnerId),
+      ])
+      setDecks(nextDecks)
+      setDeviceDecks(nextDeviceDecks)
       setMessage(`${deck.name} is aan jouw account gekoppeld.`)
     } catch {
       setMessage(`${deck.name} kon niet aan jouw account worden gekoppeld.`)

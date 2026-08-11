@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import type { DeckSnapshot } from "@mtg/game-core/types"
 import { App } from "../../App"
+import * as importDeckApi from "../../app/api/importDeck"
 import { repositories } from "../../persistence/database"
 import { renderWithProviders } from "../../utils/test-utils"
 import {
@@ -560,4 +561,65 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   expect(
     await screen.findByRole("heading", { name: "Online spelen" }),
   ).toBeInTheDocument()
+})
+
+test("toont na herimport slechts de geselecteerde revision in de lobby-dropdown", async () => {
+  const sourceId = "24765444"
+  const deckSourceId = "source-primal-stampede"
+  await repositories.decks.save(
+    {
+      id: "revision-primal-a",
+      revisionId: "revision-primal-a",
+      deckSourceId,
+      schemaVersion: 1,
+      source: "archidekt",
+      sourceId,
+      sourceUrl: `https://archidekt.com/decks/${sourceId}/primal_stampede`,
+      sourceHash: "hash-a",
+      name: "Primal Stampede",
+      importedAt: "2026-08-10T10:00:00.000Z",
+      cards: [{ definitionId: "card-a", quantity: 100, isCommander: false }],
+      definitions: [],
+    },
+    "signed-out",
+  )
+  const importSpy = vi
+    .spyOn(importDeckApi, "importDeckFromUrl")
+    .mockResolvedValue({
+      id: deckSourceId,
+      revisionId: "revision-primal-b",
+      source: "archidekt",
+      sourceId,
+      sourceUrl: `https://archidekt.com/decks/${sourceId}/primal_stampede`,
+      sourceHash: "hash-b",
+      name: "Primal Stampede",
+      importedAt: "2026-08-11T10:00:00.000Z",
+      cards: [{ definitionId: "card-b", quantity: 100, isCommander: false }],
+      definitions: [],
+    })
+  window.history.replaceState({}, "", "/online/lobby/ready-lobby")
+  const { user } = renderWithProviders(
+    <App
+      services={{
+        auth: new MockAuthService(),
+        onlineGames: new ReadyLobbyOnlineGameService(),
+      }}
+    />,
+  )
+  const select = await screen.findByLabelText("Lokaal deck")
+  await user.selectOptions(select, "")
+  await user.type(
+    screen.getByLabelText("Openbare Archidekt-URL"),
+    `https://archidekt.com/decks/${sourceId}/primal_stampede`,
+  )
+  await user.click(screen.getByRole("button", { name: "Importeren" }))
+  await waitFor(() => {
+    expect(
+      screen.getAllByRole("option", {
+        name: "Primal Stampede · 100 kaarten",
+      }),
+    ).toHaveLength(1)
+  })
+  expect(select).toHaveValue("revision-primal-b")
+  importSpy.mockRestore()
 })
