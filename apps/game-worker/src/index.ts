@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { ImportedDeck } from "@mtg/game-core/types"
 import {
   onlineDeckSubmissionSchema,
   parseGameCommand,
@@ -378,11 +379,37 @@ const graphqlRequest = async (request: Request, env: Env) => {
     }
   }
   const lobby = env.LOBBY.getByName("global")
+  const importDeck = async (url: string, sourceHash?: string) => {
+    const response = await env.IMPORT.fetch(
+      new Request("https://import.internal/internal/deck-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, sourceHash }),
+      }),
+    )
+    const body = (await response.json()) as {
+      cacheStatus?: "HIT" | "MISS" | "REFRESHED"
+      deck?: ImportedDeck
+      error?: { code?: string; message?: string }
+    }
+    if (!response.ok || !body.deck || !body.cacheStatus) {
+      throw new GraphQLError(
+        body.error?.message ?? "Het deck kon niet worden geïmporteerd.",
+        {
+          extensions: {
+            code: body.error?.code ?? "DECK_IMPORT_FAILED",
+          },
+        },
+      )
+    }
+    return { cacheStatus: body.cacheStatus, deck: body.deck }
+  }
   const yoga = createGraphQLYoga({
     request: resolvedRequest,
     env,
     identity,
     lobby,
+    importDeck,
     personalSnapshot: (gameId, verifiedIdentity) =>
       personalSnapshot(env, gameId, verifiedIdentity),
     startGame: (gameId, verifiedIdentity) =>

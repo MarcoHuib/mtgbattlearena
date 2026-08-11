@@ -42,6 +42,14 @@ export const typeDefs = /* GraphQL */ `
     player
     spectator
   }
+  enum DeckSource {
+    archidekt
+  }
+  enum DeckCacheStatus {
+    HIT
+    MISS
+    REFRESHED
+  }
 
   type Health {
     status: String!
@@ -81,6 +89,58 @@ export const typeDefs = /* GraphQL */ `
   type SocketTicket {
     ticket: String!
     expiresAt: String!
+  }
+  type ImportedCardFace {
+    name: String!
+    typeLine: String
+    oracleText: String
+    imageUrl: String
+  }
+  type ImportedImageRef {
+    assetKey: String!
+    faceIndex: Int!
+    variant: String!
+    url: String!
+  }
+  type ImportedToken {
+    kind: String!
+    name: String!
+    power: Int
+    toughness: Int
+    source: String
+  }
+  type ImportedCardDefinition {
+    id: ID!
+    name: String!
+    scryfallId: String
+    oracleId: String
+    layout: String
+    faces: [ImportedCardFace!]!
+    imageRefs: [ImportedImageRef!]!
+    oracleText: String
+    typeLine: String
+    manaValue: Float
+    token: ImportedToken
+  }
+  type ImportedDeckCard {
+    definitionId: ID!
+    quantity: Int!
+    isCommander: Boolean!
+  }
+  type ImportedDeck {
+    source: DeckSource!
+    sourceId: ID!
+    sourceUrl: String!
+    sourceHash: String!
+    name: String!
+    format: String
+    importedAt: String!
+    cards: [ImportedDeckCard!]!
+    definitions: [ImportedCardDefinition!]!
+  }
+  type ImportedDeckResult {
+    cacheStatus: DeckCacheStatus!
+    deck: ImportedDeck!
   }
 
   input CreateLobbyInput {
@@ -131,6 +191,7 @@ export const typeDefs = /* GraphQL */ `
     publicLobbies: [Lobby!]!
     lobby(id: ID!): LobbyRoom!
     personalGameSnapshot(gameId: ID!): JSON!
+    deckFromUrl(url: String!, sourceHash: String): ImportedDeckResult!
   }
   type Mutation {
     createLobby(input: CreateLobbyInput!): Lobby!
@@ -175,6 +236,11 @@ export const schema = createSchema<GraphQLContext>({
         ),
       personalGameSnapshot: async (_root, args: { gameId: string }, context) =>
         context.personalSnapshot(args.gameId, requireIdentity(context)),
+      deckFromUrl: async (
+        _root,
+        args: { url: string; sourceHash?: string },
+        context,
+      ) => context.importDeck(args.url, args.sourceHash),
     },
     Mutation: {
       createLobby: async (

@@ -176,7 +176,9 @@ test("biedt Google en Microsoft als normale SSO-knoppen aan", async () => {
 
   await user.click(microsoft)
   expect(
-    await screen.findByRole("heading", { name: /Ingelogd als microsoft-player/ }),
+    await screen.findByRole("heading", {
+      name: /Ingelogd als microsoft-player/,
+    }),
   ).toBeInTheDocument()
 })
 
@@ -368,7 +370,9 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
     id: "local-ready-deck",
     schemaVersion: 1,
     source: "archidekt",
-    sourceDeckId: "123",
+    sourceId: "123",
+    sourceUrl: "https://archidekt.com/decks/123",
+    sourceHash: "hash-123",
     name: "Lokaal duel-deck",
     importedAt: "2026-07-29T18:00:00.000Z",
     cards: [
@@ -403,7 +407,9 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
     {
       ...localDeck,
       id: "local-backup-deck",
-      sourceDeckId: "456",
+      sourceId: "456",
+      sourceUrl: "https://archidekt.com/decks/456",
+      sourceHash: "hash-456",
       name: "Tweede lokaal deck",
       importedAt: "2026-07-29T17:00:00.000Z",
     },

@@ -21,3 +21,4 @@ export type {
   ServerEvent,
   VisibleOnlineCard,
 } from "./schemas"
+export { createOnlineDeckSubmission } from "./decks"

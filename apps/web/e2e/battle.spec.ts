@@ -1,8 +1,5 @@
 import { expect, test } from "@playwright/test"
-import {
-  archidektFixture,
-  archidektTokenFixture,
-} from "../src/archidekt/fixtures"
+import { importedDeckFixture } from "../src/utils/importedDeckFixture"
 
 const pixel = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/4cWQGQAAAABJRU5ErkJggg==",
@@ -13,36 +10,31 @@ test("herstelt een gedownloade battle volledig offline", async ({
   page,
   context,
 }) => {
-  await page.route("**/api/import/archidekt/**", async route => {
-    const url = new URL(route.request().url())
-    if (url.pathname.includes("/image/")) {
-      await route.fulfill({ contentType: "image/png", body: pixel })
-      return
+  await page.route("**/graphql", async route => {
+    const body = route.request().postDataJSON() as {
+      variables?: { url?: string }
     }
-    if (url.pathname.endsWith("/tokens")) {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify(archidektTokenFixture),
-      })
-      return
-    }
-    const deckId = url.pathname.split("/").at(-1)
-    const fixture = structuredClone(archidektFixture)
+    const deckId =
+      /\/decks\/(\d+)/.exec(body.variables?.url ?? "")?.[1] ?? "unknown"
+    const fixture = importedDeckFixture(
+      deckId,
+      deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
+    )
     if (deckId === "222") {
-      const background = fixture.cards[1]
-      if (background) {
-        background.categories = [{ name: "Commander" }]
-        background.card.name = "Folk Hero"
-        background.card.imageUri = "https://cards.test/folk-hero.jpg"
-        background.card.oracleCard.typeLine =
-          "Legendary Enchantment — Background"
+      fixture.cards[1]!.isCommander = true
+      fixture.definitions[1] = {
+        id: "card-1",
+        name: "Folk Hero",
+        faces: [
+          { name: "Folk Hero", typeLine: "Legendary Enchantment — Background" },
+        ],
+        imageRefs: [],
       }
     }
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        ...fixture,
-        name: deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
+        data: { deckFromUrl: { cacheStatus: "MISS", deck: fixture } },
       }),
     })
   })

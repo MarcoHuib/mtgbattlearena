@@ -73,10 +73,15 @@ export type DeckCard = {
   isCommander: boolean
 }
 
+export type DeckSource = "archidekt"
+
 export type ImportedDeck = {
-  source: "archidekt"
-  sourceDeckId: string
+  source: DeckSource
+  sourceId: string
+  sourceUrl: string
+  sourceHash: string
   name: string
+  format?: string
   importedAt: string
   cards: DeckCard[]
   definitions: CardDefinition[]

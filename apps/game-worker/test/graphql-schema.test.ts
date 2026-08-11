@@ -17,6 +17,7 @@ const contextWith = (
     env: { FIREBASE_PROJECT_ID: "project" } as Env,
     identity,
     lobby,
+    importDeck: vi.fn() as GraphQLContext["importDeck"],
     personalSnapshot: vi.fn(() =>
       Promise.resolve(snapshot),
     ) as GraphQLContext["personalSnapshot"],
@@ -133,4 +134,40 @@ test("GraphQL en Zod weigeren ongeldige lobby-invoer", async () => {
   )
   expect(result.errors).toHaveLength(1)
   expect(result.errors?.[0]?.extensions?.code).toBe("VALIDATION_ERROR")
+})
+
+test("deckFromUrl retourneert uitsluitend het provider-neutrale importcontract", async () => {
+  const context = contextWith()
+  context.importDeck = vi.fn().mockResolvedValue({
+    cacheStatus: "MISS",
+    deck: {
+      source: "archidekt",
+      sourceId: "42",
+      sourceUrl: "https://archidekt.com/decks/42",
+      sourceHash: "abc",
+      name: "Deck",
+      importedAt: "2026-01-01T00:00:00.000Z",
+      cards: [{ definitionId: "card", quantity: 1, isCommander: false }],
+      definitions: [
+        { id: "card", name: "Card", faces: [{ name: "Card" }], imageRefs: [] },
+      ],
+    },
+  })
+  // Vitest replaces this context method with a standalone spy.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const importDeck = context.importDeck
+  const result = await execute(
+    context,
+    `query { deckFromUrl(url: "https://archidekt.com/decks/42") { cacheStatus deck { source sourceId sourceHash name cards { definitionId quantity isCommander } } } }`,
+  )
+  expect(result.errors).toBeUndefined()
+  expect(result.data?.deckFromUrl).toMatchObject({
+    cacheStatus: "MISS",
+    deck: { sourceId: "42", name: "Deck" },
+  })
+  expect(importDeck).toHaveBeenCalledWith(
+    "https://archidekt.com/decks/42",
+    undefined,
+  )
+  expect(JSON.stringify(result.data)).not.toContain("categories")
 })

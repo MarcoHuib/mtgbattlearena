@@ -29,6 +29,12 @@ export type CreateLobbyInput = {
   visibility: LobbyVisibility;
 };
 
+export enum DeckCacheStatus {
+  Hit = 'HIT',
+  Miss = 'MISS',
+  Refreshed = 'REFRESHED'
+}
+
 export type DeckCardInput = {
   definitionId: Scalars['ID']['input'];
   faces?: InputMaybe<Array<CardFaceInput>>;
@@ -39,6 +45,10 @@ export type DeckCardInput = {
   scryfallId?: InputMaybe<Scalars['String']['input']>;
   typeLine?: InputMaybe<Scalars['String']['input']>;
 };
+
+export enum DeckSource {
+  Archidekt = 'archidekt'
+}
 
 export type DeckTokenInput = {
   definitionId: Scalars['ID']['input'];
@@ -55,6 +65,72 @@ export type Health = {
   __typename?: 'Health';
   firebaseConfigured: Scalars['Boolean']['output'];
   status: Scalars['String']['output'];
+};
+
+export type ImportedCardDefinition = {
+  __typename?: 'ImportedCardDefinition';
+  faces: Array<ImportedCardFace>;
+  id: Scalars['ID']['output'];
+  imageRefs: Array<ImportedImageRef>;
+  layout?: Maybe<Scalars['String']['output']>;
+  manaValue?: Maybe<Scalars['Float']['output']>;
+  name: Scalars['String']['output'];
+  oracleId?: Maybe<Scalars['String']['output']>;
+  oracleText?: Maybe<Scalars['String']['output']>;
+  scryfallId?: Maybe<Scalars['String']['output']>;
+  token?: Maybe<ImportedToken>;
+  typeLine?: Maybe<Scalars['String']['output']>;
+};
+
+export type ImportedCardFace = {
+  __typename?: 'ImportedCardFace';
+  imageUrl?: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  oracleText?: Maybe<Scalars['String']['output']>;
+  typeLine?: Maybe<Scalars['String']['output']>;
+};
+
+export type ImportedDeck = {
+  __typename?: 'ImportedDeck';
+  cards: Array<ImportedDeckCard>;
+  definitions: Array<ImportedCardDefinition>;
+  format?: Maybe<Scalars['String']['output']>;
+  importedAt: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  source: DeckSource;
+  sourceHash: Scalars['String']['output'];
+  sourceId: Scalars['ID']['output'];
+  sourceUrl: Scalars['String']['output'];
+};
+
+export type ImportedDeckCard = {
+  __typename?: 'ImportedDeckCard';
+  definitionId: Scalars['ID']['output'];
+  isCommander: Scalars['Boolean']['output'];
+  quantity: Scalars['Int']['output'];
+};
+
+export type ImportedDeckResult = {
+  __typename?: 'ImportedDeckResult';
+  cacheStatus: DeckCacheStatus;
+  deck: ImportedDeck;
+};
+
+export type ImportedImageRef = {
+  __typename?: 'ImportedImageRef';
+  assetKey: Scalars['String']['output'];
+  faceIndex: Scalars['Int']['output'];
+  url: Scalars['String']['output'];
+  variant: Scalars['String']['output'];
+};
+
+export type ImportedToken = {
+  __typename?: 'ImportedToken';
+  kind: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  power?: Maybe<Scalars['Int']['output']>;
+  source?: Maybe<Scalars['String']['output']>;
+  toughness?: Maybe<Scalars['Int']['output']>;
 };
 
 export type JoinLobbyInput = {
@@ -169,10 +245,17 @@ export type MutationStartGameArgs = {
 
 export type Query = {
   __typename?: 'Query';
+  deckFromUrl: ImportedDeckResult;
   health: Health;
   lobby: LobbyRoom;
   personalGameSnapshot: Scalars['JSON']['output'];
   publicLobbies: Array<Lobby>;
+};
+
+
+export type QueryDeckFromUrlArgs = {
+  sourceHash?: InputMaybe<Scalars['String']['input']>;
+  url: Scalars['String']['input'];
 };
 
 

@@ -46,6 +46,7 @@ export const remoteGraphqlApi = generatedApi.enhanceEndpoints({
 export const {
   usePublicLobbiesQuery,
   useLobbyQuery,
+  useDeckFromUrlQuery,
   useCreateLobbyMutation,
   useJoinLobbyMutation,
   useDeleteLobbyMutation,

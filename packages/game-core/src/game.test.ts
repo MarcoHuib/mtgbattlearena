@@ -50,7 +50,9 @@ import type { CardDefinition, ImportedDeck } from "./types"
 
 const importedDeck: ImportedDeck = {
   source: "archidekt",
-  sourceDeckId: "12345",
+  sourceId: "12345",
+  sourceUrl: "https://archidekt.com/decks/12345",
+  sourceHash: "fixture-hash",
   name: "Verdant Resolve",
   importedAt: "2026-01-01T00:00:00.000Z",
   cards: [

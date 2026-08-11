@@ -12,12 +12,14 @@ const fingerprint = (value: string): string => {
 
 export const createImportedDeckSnapshot = (imported: ImportedDeck) => {
   const content = JSON.stringify({
-    sourceDeckId: imported.sourceDeckId,
+    source: imported.source,
+    sourceId: imported.sourceId,
+    sourceHash: imported.sourceHash,
     cards: imported.cards,
     definitions: imported.definitions,
   })
   return createDeckSnapshot(
     imported,
-    `deck-${imported.sourceDeckId}-${fingerprint(content)}`,
+    `deck-${imported.source}-${imported.sourceId}-${fingerprint(content)}`,
   )
 }

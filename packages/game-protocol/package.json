@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@mtg/game-core": "*",
     "zod": "^4.4.3"
   }
 }

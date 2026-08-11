@@ -1,7 +1,7 @@
 const MAX_RESPONSE_BYTES = 5_000_000
 const UPSTREAM_TIMEOUT_MS = 10_000
 
-const corsHeadersFor = (request, env) => {
+const corsHeadersFor = (request: Request, env: Env): Record<string, string> => {
   const origin = request.headers.get("Origin")
   const allowedOrigins = (env.ALLOWED_ORIGIN ?? "")
     .split(",")
@@ -14,7 +14,10 @@ const corsHeadersFor = (request, env) => {
   }
 }
 
-const withCors = (response, corsHeaders) => {
+const withCors = (
+  response: Response,
+  corsHeaders: Record<string, string>,
+): Response => {
   const headers = new Headers(response.headers)
   Object.entries(corsHeaders).forEach(([name, value]) => {
     headers.set(name, value)
@@ -26,7 +29,12 @@ const withCors = (response, corsHeaders) => {
   })
 }
 
-const jsonError = (status, code, message, corsHeaders = {}) =>
+const jsonError = (
+  status: number,
+  code: string,
+  message: string,
+  corsHeaders: Record<string, string> = {},
+): Response =>
   new Response(JSON.stringify({ error: { code, message } }), {
     status,
     headers: {
@@ -36,7 +44,7 @@ const jsonError = (status, code, message, corsHeaders = {}) =>
   })
 
 export default {
-  async fetch(request, env, context) {
+  async fetch(request: Request, env: Env, context: WorkerContext) {
     const corsHeaders = corsHeadersFor(request, env)
     if (request.method === "OPTIONS") {
       return new Response(null, {
@@ -49,6 +57,50 @@ export default {
         },
       })
     }
+    const url = new URL(request.url)
+    if (request.method === "POST" && url.pathname === "/internal/deck-import") {
+      try {
+        const declaredSize = Number(request.headers.get("Content-Length") ?? 0)
+        if (declaredSize > 16_384)
+          return jsonError(
+            413,
+            "REQUEST_TOO_LARGE",
+            "De importrequest is te groot.",
+            corsHeaders,
+          )
+        const body = (await request.json()) as ImportRequestBody
+        if (
+          !body ||
+          typeof body.url !== "string" ||
+          (body.sourceHash !== undefined && typeof body.sourceHash !== "string")
+        ) {
+          return jsonError(
+            400,
+            "INVALID_DECK_URL",
+            "De importrequest is ongeldig.",
+            corsHeaders,
+          )
+        }
+        const result = await createDeckImportService({
+          cache: (caches as CloudflareCacheStorage).default,
+        }).importFromUrl(body.url, body.sourceHash)
+        return new Response(JSON.stringify(result), {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            ...corsHeaders,
+          },
+        })
+      } catch (error) {
+        if (error instanceof DeckProviderError)
+          return jsonError(error.status, error.code, error.message, corsHeaders)
+        return jsonError(
+          502,
+          "DECK_IMPORT_FAILED",
+          "Het deck kon niet veilig worden geïmporteerd.",
+          corsHeaders,
+        )
+      }
+    }
     if (request.method !== "GET") {
       const response = jsonError(
         405,
@@ -60,7 +112,6 @@ export default {
       return response
     }
 
-    const url = new URL(request.url)
     const isTokenRequest = url.pathname === "/api/import/archidekt/tokens"
     const imageMatch =
       /^\/api\/import\/archidekt\/image\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
@@ -104,13 +155,17 @@ export default {
       return jsonError(400, "INVALID_DECK_ID", "Ongeldig deck-ID.", corsHeaders)
     }
 
-    const cache = caches.default
+    const cache = (caches as CloudflareCacheStorage).default
     const cacheKey = new Request(url.toString(), request)
-    const cached = await cache.match(cacheKey)
+    const freshnessProbe =
+      !isImageRequest && url.searchParams.get("fresh") === "1"
+    const cached = freshnessProbe ? undefined : await cache.match(cacheKey)
     if (cached) return withCors(cached, corsHeaders)
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+    const timeout = setTimeout(() => {
+      controller.abort()
+    }, UPSTREAM_TIMEOUT_MS)
     try {
       const upstreamUrl = isTokenRequest
         ? `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`
@@ -166,16 +221,21 @@ export default {
           "Content-Type": isImageRequest
             ? (upstream.headers.get("Content-Type") ?? "image/jpeg")
             : "application/json; charset=utf-8",
-          "Cache-Control": "public, max-age=120, s-maxage=600",
+          "Cache-Control": freshnessProbe
+            ? "no-store"
+            : "public, max-age=120, s-maxage=600",
         },
       })
-      context.waitUntil(cache.put(cacheKey, response.clone()))
+      if (!freshnessProbe)
+        context.waitUntil(cache.put(cacheKey, response.clone()))
       return withCors(response, corsHeaders)
-    } catch (error) {
+    } catch (error: unknown) {
+      const aborted =
+        error instanceof DOMException && error.name === "AbortError"
       return jsonError(
-        error?.name === "AbortError" ? 504 : 502,
-        error?.name === "AbortError" ? "TIMEOUT" : "UPSTREAM_ERROR",
-        error?.name === "AbortError"
+        aborted ? 504 : 502,
+        aborted ? "TIMEOUT" : "UPSTREAM_ERROR",
+        aborted
           ? "Archidekt reageerde niet op tijd."
           : "Archidekt kon niet worden bereikt.",
         corsHeaders,
@@ -185,3 +245,12 @@ export default {
     }
   },
 }
+import {
+  createDeckImportService,
+  DeckProviderError,
+} from "./deck-import-service.ts"
+
+type Env = { ALLOWED_ORIGIN?: string }
+type WorkerContext = { waitUntil(promise: Promise<unknown>): void }
+type CloudflareCacheStorage = CacheStorage & { default: Cache }
+type ImportRequestBody = { url?: unknown; sourceHash?: unknown }

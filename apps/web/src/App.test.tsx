@@ -1,38 +1,24 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, vi } from "vitest"
 import { App } from "./App"
-import { archidektFixture, archidektTokenFixture } from "./archidekt/fixtures"
+import * as importDeckApi from "./app/api/importDeck"
+import { importedDeckFixture } from "./utils/importedDeckFixture"
 import { renderWithProviders } from "./utils/test-utils"
 
 beforeEach(() => {
   window.history.replaceState({}, "", "/")
-  vi.spyOn(globalThis, "fetch").mockImplementation(input => {
-    const url =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url
-    if (url.includes("/api/import/archidekt/tokens")) {
+  vi.spyOn(importDeckApi, "importDeckFromUrl").mockImplementation(
+    (_dispatch, url) => {
+      const deckId = /\/decks\/(\d+)/.exec(url)?.[1] ?? "unknown"
       return Promise.resolve(
-        new Response(JSON.stringify(archidektTokenFixture), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-    }
-    if (url.includes("/api/import/archidekt/")) {
-      const deckId = url.split("/").at(-1)
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            ...archidektFixture,
-            name: deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
+        importedDeckFixture(
+          deckId,
+          deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
         ),
       )
-    }
+    },
+  )
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => {
     return Promise.resolve(new Response(null, { status: 503 }))
   })
 })
@@ -194,7 +180,7 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
     libraryDefinition?.name ?? "",
   )
   expect(
-    within(libraryDialog).getByText(libraryDefinition?.name ?? ""),
+    within(libraryDialog).getAllByText(libraryDefinition?.name ?? "")[0],
   ).toBeInTheDocument()
   const libraryCardView = within(libraryDialog).getByLabelText(
     `${libraryDefinition?.name ?? ""}, Library`,

@@ -3,11 +3,14 @@ import {
   createSlice,
   type PayloadAction,
 } from "@reduxjs/toolkit"
-import { importArchidektDeck } from "../../archidekt/client"
-import { DeckImportError } from "../../archidekt/errors"
 import type { DeckSnapshot, PlayerId } from "@mtg/game-core/types"
 import { createImportedDeckSnapshot } from "../decks/deckSnapshots"
 import { repositories } from "../../persistence/database"
+import {
+  importDeckFromUrl,
+  importedDeckErrorMessage,
+} from "../../app/api/importDeck"
+import type { AppDispatch } from "../../app/store"
 
 export type DeckSlotState = {
   playerId: PlayerId
@@ -48,19 +51,16 @@ export const importDeckForPlayer = createAsyncThunk<
   { rejectValue: { playerId: PlayerId; message: string } }
 >(
   "setup/importDeck",
-  async ({ playerId, url }, { rejectWithValue, signal }) => {
+  async ({ playerId, url }, { dispatch, rejectWithValue }) => {
     try {
-      const imported = await importArchidektDeck(url, signal)
+      const imported = await importDeckFromUrl(dispatch as AppDispatch, url)
       const deck = createImportedDeckSnapshot(imported)
       await repositories.decks.save(deck)
       return { playerId, deck }
     } catch (error) {
       return rejectWithValue({
         playerId,
-        message:
-          error instanceof DeckImportError
-            ? error.message
-            : "Het deck kon niet worden geïmporteerd.",
+        message: importedDeckErrorMessage(error),
       })
     }
   },
