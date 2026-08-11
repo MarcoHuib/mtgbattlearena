@@ -10,12 +10,13 @@ beforeEach(() => {
   vi.spyOn(importDeckApi, "importDeckFromUrl").mockImplementation(
     (_dispatch, url) => {
       const deckId = /\/decks\/(\d+)/.exec(url)?.[1] ?? "unknown"
-      return Promise.resolve(
-        importedDeckFixture(
+      return Promise.resolve({
+        ...importedDeckFixture(
           deckId,
           deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
         ),
-      )
+        id: `00000000-0000-4000-8000-${deckId.padStart(12, "0")}`,
+      })
     },
   )
   vi.spyOn(globalThis, "fetch").mockImplementation(() => {

@@ -79,6 +79,61 @@ class BattleDatabase extends Dexie {
           delete deck.sourceDeckId
         })
       })
+    this.version(4)
+      .stores({
+        games: "id, savedAt",
+        decks: "id, [source+sourceId], importedAt",
+        deckOwners: "key, deckId, ownerId, [ownerId+deckId]",
+        offlinePackages: "id, currentGameId, updatedAt",
+        assets: "assetKey, cacheKind, cachedAt",
+      })
+      .upgrade(async transaction => {
+        const decks = await transaction.table<DeckSnapshot>("decks").toArray()
+        const owners = transaction.table<StoredDeckOwner>("deckOwners")
+        const games = await transaction.table<StoredGame>("games").toArray()
+        const packages = await transaction
+          .table<OfflineBattlePackage>("offlinePackages")
+          .toArray()
+        const groups = new Map<string, DeckSnapshot[]>()
+        for (const deck of decks) {
+          if (!deck.source || !deck.sourceId || deck.source === "local")
+            continue
+          const key = `${deck.source}\u0000${deck.sourceId}`
+          groups.set(key, [...(groups.get(key) ?? []), deck])
+        }
+        for (const duplicates of groups.values()) {
+          if (duplicates.length < 2) continue
+          const [canonical, ...older] = [...duplicates].sort((left, right) =>
+            right.importedAt.localeCompare(left.importedAt),
+          )
+          if (!canonical) continue
+          for (const duplicate of older) {
+            const duplicateOwners = await owners
+              .where("deckId")
+              .equals(duplicate.id)
+              .toArray()
+            await owners.bulkPut(
+              duplicateOwners.map(owner => ({
+                key: deckOwnerKey(canonical.id, owner.ownerId),
+                deckId: canonical.id,
+                ownerId: owner.ownerId,
+              })),
+            )
+            await owners.where("deckId").equals(duplicate.id).delete()
+            const referenced =
+              games.some(record =>
+                record.game.deckSnapshotIds.includes(duplicate.id),
+              ) ||
+              packages.some(record =>
+                record.deckSnapshotIds.includes(duplicate.id),
+              )
+            if (!referenced)
+              await transaction
+                .table<DeckSnapshot>("decks")
+                .delete(duplicate.id)
+          }
+        }
+      })
   }
 }
 
@@ -124,13 +179,47 @@ const createDexieRepositories = (): PersistenceRepositories => {
         "rw",
         database.decks,
         database.deckOwners,
+        database.games,
+        database.offlinePackages,
         async () => {
+          const superseded = await database.decks
+            .where("[source+sourceId]")
+            .equals([deck.source, deck.sourceId])
+            .and(
+              candidate => deck.source !== "local" && candidate.id !== deck.id,
+            )
+            .toArray()
           await database.decks.put(deck)
           await database.deckOwners.put({
             key: deckOwnerKey(deck.id, ownerId),
             deckId: deck.id,
             ownerId,
           })
+          for (const previous of superseded) {
+            const previousOwners = await database.deckOwners
+              .where("deckId")
+              .equals(previous.id)
+              .toArray()
+            await database.deckOwners.bulkPut(
+              previousOwners.map(owner => ({
+                key: deckOwnerKey(deck.id, owner.ownerId),
+                deckId: deck.id,
+                ownerId: owner.ownerId,
+              })),
+            )
+            await database.deckOwners
+              .where("deckId")
+              .equals(previous.id)
+              .delete()
+            const referenced =
+              (await database.games.toArray()).some(record =>
+                record.game.deckSnapshotIds.includes(previous.id),
+              ) ||
+              (await database.offlinePackages.toArray()).some(record =>
+                record.deckSnapshotIds.includes(previous.id),
+              )
+            if (!referenced) await database.decks.delete(previous.id)
+          }
         },
       )
     },
@@ -259,6 +348,30 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
     },
     decks: {
       save(deck, ownerId = deviceDeckOwnerId) {
+        for (const previous of deckRecords.values()) {
+          if (
+            previous.id === deck.id ||
+            deck.source === "local" ||
+            previous.source !== deck.source ||
+            previous.sourceId !== deck.sourceId
+          )
+            continue
+          const previousOwners = deckOwners.get(previous.id)
+          const currentOwners = deckOwners.get(deck.id) ?? new Set<string>()
+          previousOwners?.forEach(previousOwner =>
+            currentOwners.add(previousOwner),
+          )
+          deckOwners.set(deck.id, currentOwners)
+          deckOwners.delete(previous.id)
+          const referenced =
+            [...gameRecords.values()].some(record =>
+              record.game.deckSnapshotIds.includes(previous.id),
+            ) ||
+            [...packageRecords.values()].some(record =>
+              record.deckSnapshotIds.includes(previous.id),
+            )
+          if (!referenced) deckRecords.delete(previous.id)
+        }
         deckRecords.set(deck.id, structuredClone(deck))
         const owners = deckOwners.get(deck.id) ?? new Set<string>()
         owners.add(ownerId)

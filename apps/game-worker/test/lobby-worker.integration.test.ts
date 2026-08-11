@@ -396,6 +396,33 @@ const state: DurableObjectState = {
 }
 
 describe("Lobby Durable Object RPC", () => {
+  test("bewaart één stabiel intern deck-ID per provider en externalId", async () => {
+    const database = new DatabaseSync(":memory:")
+    const storage = sqliteStorage(database)
+    const durableState: DurableObjectState = {
+      ...state,
+      storage,
+    }
+    const lobby = new LobbyDurableObject(durableState, {} as Env)
+    const first = await lobby.resolveDeckId("archidekt", "24765444")
+    expect(first).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
+    expect(await lobby.resolveDeckId("archidekt", "24765444")).toBe(first)
+    const afterCacheEviction = new LobbyDurableObject(durableState, {} as Env)
+    expect(
+      await afterCacheEviction.resolveDeckId("archidekt", "24765444"),
+    ).toBe(first)
+    expect(await lobby.resolveDeckId("archidekt", "other")).not.toBe(first)
+    expect(await lobby.resolveDeckId("moxfield", "24765444")).not.toBe(first)
+    expect(
+      database
+        .prepare("SELECT COUNT(*) AS count FROM deck_source_identities")
+        .get(),
+    ).toEqual({ count: 3 })
+    database.close()
+  })
+
   test("maakt lobby's en registreert rate limits op het pre-H-01 productieschema", () => {
     const database = new DatabaseSync(":memory:")
     database.exec(`

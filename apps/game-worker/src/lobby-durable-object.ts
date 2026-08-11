@@ -145,6 +145,53 @@ export class LobbyDurableObject extends DurableObject<Env> {
       ticketRepository ?? new SqliteSocketTicketRepository(state.storage),
       now,
     )
+    this.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS deck_source_identities (
+        deck_id TEXT NOT NULL UNIQUE,
+        provider TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (provider, external_id)
+      );
+    `)
+  }
+
+  resolveDeckId(provider: string, externalId: string): Promise<string> {
+    const normalizedProvider = provider.trim().toLowerCase()
+    const normalizedExternalId = externalId.trim()
+    if (!normalizedProvider || !normalizedExternalId)
+      throw new Error("INVALID_DECK_SOURCE_IDENTITY")
+    return Promise.resolve(
+      this.storage.transactionSync(() => {
+        const existing = this.storage.sql
+          .exec<{ deckId: string }>(
+            `SELECT deck_id AS deckId FROM deck_source_identities
+           WHERE provider = ? AND external_id = ?`,
+            normalizedProvider,
+            normalizedExternalId,
+          )
+          .toArray()[0]
+        if (existing) return existing.deckId
+        const candidate = crypto.randomUUID()
+        this.storage.sql.exec(
+          `INSERT OR IGNORE INTO deck_source_identities
+         (deck_id, provider, external_id, created_at)
+         VALUES (?, ?, ?, ?)`,
+          candidate,
+          normalizedProvider,
+          normalizedExternalId,
+          new Date(this.now()).toISOString(),
+        )
+        return this.storage.sql
+          .exec<{ deckId: string }>(
+            `SELECT deck_id AS deckId FROM deck_source_identities
+           WHERE provider = ? AND external_id = ?`,
+            normalizedProvider,
+            normalizedExternalId,
+          )
+          .one().deckId
+      }),
+    )
   }
 
   listPublicLobbies(viewerUid?: string): LobbySummary[] {

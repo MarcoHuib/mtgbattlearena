@@ -441,7 +441,18 @@ const graphqlRequest = async (request: Request, env: Env) => {
   }
   const lobby = env.LOBBY.getByName("global")
   const importDeck = (url: string, sourceHash?: string) =>
-    importDeckThroughService(env.IMPORT, url, sourceHash, env.RELEASE_VERSION)
+    importDeckThroughService(
+      env.IMPORT,
+      url,
+      sourceHash,
+      env.RELEASE_VERSION,
+    ).then(async result => ({
+      ...result,
+      deckId: await lobby.resolveDeckId(
+        result.deck.source,
+        result.deck.sourceId,
+      ),
+    }))
   const yoga = createGraphQLYoga({
     request: resolvedRequest,
     env,

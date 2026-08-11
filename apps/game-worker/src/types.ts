@@ -172,6 +172,7 @@ export type LobbyDurableObjectStub = {
     gameId: string,
     identity: VerifiedIdentity,
   ): Promise<RpcResult<null>>
+  resolveDeckId(provider: string, externalId: string): Promise<string>
 }
 
 export type GameDurableObjectStub = {

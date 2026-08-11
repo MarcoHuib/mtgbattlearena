@@ -140,6 +140,7 @@ export const typeDefs = /* GraphQL */ `
   }
   type ImportedDeckResult {
     cacheStatus: DeckCacheStatus!
+    deckId: ID!
     deck: ImportedDeck!
   }
 

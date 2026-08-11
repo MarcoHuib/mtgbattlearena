@@ -18,23 +18,25 @@ const imported: ImportedDeck = {
     },
   ],
 }
+const identified = { ...imported, id: "00000000-0000-4000-8000-000000012345" }
 
 test("geeft een identieke Archidekt-import hetzelfde snapshot-ID", () => {
-  const first = createImportedDeckSnapshot(imported)
+  const first = createImportedDeckSnapshot(identified)
   const duplicate = createImportedDeckSnapshot({
-    ...imported,
+    ...identified,
     importedAt: "2026-07-30T20:00:00.000Z",
   })
 
   expect(duplicate.id).toBe(first.id)
 })
 
-test("maakt bij gewijzigde deckinhoud een nieuw immutable snapshot", () => {
-  const first = createImportedDeckSnapshot(imported)
+test("behoudt het interne deck-ID wanneer providerinhoud wijzigt", () => {
+  const first = createImportedDeckSnapshot(identified)
   const changed = createImportedDeckSnapshot({
-    ...imported,
+    ...identified,
     cards: [{ definitionId: "card", quantity: 2, isCommander: false }],
   })
 
-  expect(changed.id).not.toBe(first.id)
+  expect(changed.id).toBe(first.id)
+  expect(changed.cards[0]?.quantity).toBe(2)
 })

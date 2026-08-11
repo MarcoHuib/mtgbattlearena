@@ -73,7 +73,7 @@ export type DeckCard = {
   isCommander: boolean
 }
 
-export type DeckSource = "archidekt"
+export type DeckSource = "archidekt" | "local"
 
 export type ImportedDeck = {
   source: DeckSource

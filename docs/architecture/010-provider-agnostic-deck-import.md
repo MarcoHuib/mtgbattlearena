@@ -22,6 +22,33 @@ Archidekt-objecten, `cardPackage`, categories en providerresponses verlaten de
 Archidekt-adapter niet. Het DTO is nadrukkelijk geen `GameState`: runtime-ID's,
 zones, shuffle, spelers en counters ontstaan pas tijdens game setup.
 
+## Deckidentiteit
+
+Een opgeslagen deck krijgt een door MTG Battle Arena gegenereerde UUID. De
+globale Lobby Durable Object bewaart de duurzame SQLite-tabel
+`deck_source_identities`, met `PRIMARY KEY (provider, external_id)` en een unieke
+`deck_id`. Daardoor blijft de interne identiteit bestaan wanneer importcachedata
+wordt verwijderd of wanneer de inhoud van een providerdeck verandert.
+
+De begrippen zijn bewust gescheiden:
+
+- intern deck-ID: MTG Battle Arena UUID en sleutel voor lokale upserts;
+- externe bronkey: `(provider, externalId)`, bijvoorbeeld
+  `(archidekt, 24765444)`;
+- `sourceHash`: uitsluitend de actuele inhouds-/versiefingerprint;
+- game snapshot: de volledige, onveranderlijke kaarten en definities die bij het
+  starten in `GameState` worden gekopieerd.
+
+GraphQL retourneert `deckId` naast het provider-neutrale `ImportedDeck`. IndexedDB
+upsert op dat ID. Bij migratie worden oude content-hashduplicaten per bronkey
+samengevoegd naar het recentste record. Records waar bestaande games of
+offlinepakketten naar verwijzen blijven intern beschikbaar, maar hun ownerlink
+wordt naar het canonieke deck verplaatst zodat ze niet dubbel in de decklijst
+verschijnen. Zo worden bestaande snapshots niet herschreven of verwijderd.
+
+Een volgende provider gebruikt dezelfde SQLite-mapping met een eigen
+providerwaarde; dezelfde externe ID onder verschillende providers botst niet.
+
 ## Provider- en securitygrens
 
 De Archidekt-provider herkent uitsluitend `https` op `archidekt.com` en
