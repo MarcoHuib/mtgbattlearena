@@ -19,8 +19,8 @@ export type TokenKind =
 export type TokenDefinition = {
   kind: TokenKind
   name: string
-  power?: number
-  toughness?: number
+  power?: number | null
+  toughness?: number | null
   source?: "deck" | "custom"
 }
 

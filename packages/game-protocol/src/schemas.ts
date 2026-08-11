@@ -4,28 +4,41 @@ export const playerIdSchema = z.string().min(1).max(80)
 export const cardInstanceIdSchema = z.string().min(1).max(120)
 export const gameIdSchema = z.string().min(1).max(120)
 
-const tokenKindSchema = z.enum([
-  "creature",
-  "treasure",
-  "food",
-  "clue",
-  "copy",
-  "emblem",
-  "other",
-])
+const tokenDefinitionFields = {
+  definitionId: z.string().min(1).max(120),
+  name: z.string().min(1).max(300),
+  typeLine: z.string().max(500).optional(),
+  imageUrl: z.url().optional(),
+  scryfallId: z.string().max(120).optional(),
+}
+const tokenStatSchema = z.number().int().min(-1_000).max(1_000)
 
-export const onlineTokenDefinitionSchema = z
-  .object({
-    definitionId: z.string().min(1).max(120),
-    name: z.string().min(1).max(300),
-    typeLine: z.string().max(500).optional(),
-    imageUrl: z.url().optional(),
-    scryfallId: z.string().max(120).optional(),
-    kind: tokenKindSchema,
-    power: z.number().int().min(-1_000).max(1_000).optional(),
-    toughness: z.number().int().min(-1_000).max(1_000).optional(),
-  })
-  .strict()
+export const onlineTokenDefinitionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...tokenDefinitionFields,
+      kind: z.literal("creature"),
+      power: tokenStatSchema,
+      toughness: tokenStatSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...tokenDefinitionFields,
+      kind: z.enum(["treasure", "food", "clue", "emblem"]),
+      power: z.null().optional(),
+      toughness: z.null().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...tokenDefinitionFields,
+      kind: z.enum(["copy", "other"]),
+      power: tokenStatSchema.nullable().optional(),
+      toughness: tokenStatSchema.nullable().optional(),
+    })
+    .strict(),
+])
 
 export const onlineDeckCardSchema = z
   .object({

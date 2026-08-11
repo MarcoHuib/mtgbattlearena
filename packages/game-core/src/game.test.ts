@@ -533,6 +533,19 @@ describe("game-core", () => {
     },
   )
 
+  it("weigert een creature-token zonder numerieke power en toughness", () => {
+    expect(() =>
+      createToken(makeGame(), {
+        playerId: "player-1",
+        kind: "creature",
+        name: "Statless creature",
+        power: null,
+        toughness: null,
+        createId: prefix => `${prefix}-invalid`,
+      }),
+    ).toThrow("Een creature-token vereist numerieke power en toughness.")
+  })
+
   it("maakt een bekend decktoken met dezelfde definitie en afbeelding", () => {
     const definitions = [...importedDeck.definitions, knownTokenDefinition]
     const deck = createDeckSnapshot({ ...importedDeck, definitions }, "tokens")

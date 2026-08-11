@@ -1,8 +1,45 @@
 import {
+  onlineTokenDefinitionSchema,
   gameCommandSchema,
   onlineDeckSubmissionSchema,
   personalGameSnapshotSchema,
 } from "./schemas"
+
+test("valideert creature- en non-creature-tokenstats semantisch", () => {
+  for (const kind of ["food", "treasure"] as const) {
+    expect(
+      onlineTokenDefinitionSchema.parse({
+        definitionId: `${kind}-token`,
+        name: kind,
+        kind,
+        power: null,
+        toughness: null,
+      }),
+    ).toMatchObject({ kind, power: null, toughness: null })
+  }
+  expect(
+    onlineTokenDefinitionSchema.parse({
+      definitionId: "beast-token",
+      name: "Beast",
+      kind: "creature",
+      power: 3,
+      toughness: 3,
+    }),
+  ).toMatchObject({ kind: "creature", power: 3, toughness: 3 })
+  for (const invalid of [
+    { power: null, toughness: null },
+    { power: undefined, toughness: undefined },
+  ]) {
+    expect(() =>
+      onlineTokenDefinitionSchema.parse({
+        definitionId: "invalid-creature",
+        name: "Invalid creature",
+        kind: "creature",
+        ...invalid,
+      }),
+    ).toThrow()
+  }
+})
 
 const visibleCard = {
   instanceId: "instance-public",
@@ -311,11 +348,24 @@ test("persoonlijke snapshots ondersteunen 2–6 spelers en één private view", 
       deckSnapshotId: "deck-p1",
       hand: [visibleCard],
       revealedLibraryCards: [],
-      availableTokens: [],
+      availableTokens: [
+        {
+          definitionId: "food-token",
+          name: "Food",
+          kind: "food",
+          power: null,
+          toughness: null,
+        },
+      ],
     },
   })
   expect(snapshot.turnOrder).toHaveLength(4)
   expect(snapshot.players.p2?.handCount).toBe(7)
+  expect(snapshot.privateView?.availableTokens[0]).toMatchObject({
+    kind: "food",
+    power: null,
+    toughness: null,
+  })
   expect("hand" in (snapshot.players.p2 ?? {})).toBe(false)
 })
 

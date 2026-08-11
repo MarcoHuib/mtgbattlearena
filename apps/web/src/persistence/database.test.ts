@@ -245,3 +245,29 @@ test("lokale decks met dezelfde sourceId blijven onafhankelijke records", async 
   })
   expect(await repositories.decks.list()).toHaveLength(2)
 })
+
+test("bewaart null-stats van een Food-token in een deckrevision", async () => {
+  const repositories = createMemoryRepositories()
+  const revision = {
+    ...deck("food-revision"),
+    definitions: [
+      {
+        id: "food-token",
+        name: "Food",
+        faces: [{ name: "Food" }],
+        imageRefs: [],
+        token: {
+          kind: "food" as const,
+          name: "Food",
+          power: null,
+          toughness: null,
+          source: "deck" as const,
+        },
+      },
+    ],
+  }
+  await repositories.decks.save(revision, "food-owner")
+  expect(
+    (await repositories.decks.list("food-owner"))[0]?.definitions[0]?.token,
+  ).toMatchObject({ kind: "food", power: null, toughness: null })
+})
