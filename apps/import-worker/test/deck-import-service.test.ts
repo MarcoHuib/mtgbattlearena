@@ -286,6 +286,27 @@ test("ongeldige providerdata faalt veilig met diagnostische fase", async () => {
   )
 })
 
+test("providerfetchfouten loggen uitsluitend veilige upstreamdiagnostiek", async () => {
+  const diagnostics: DeckImportDiagnostic[] = []
+  await expect(
+    createDeckImportService({
+      cache: new MemoryCache(),
+      fetcher: vi.fn(() => Promise.reject(new TypeError("network failure"))),
+      onDiagnostic: item => diagnostics.push(item),
+    }).importFromUrl("https://archidekt.com/decks/24765444/primal_stampede"),
+  ).rejects.toMatchObject({ code: "DECK_PROVIDER_UNAVAILABLE" })
+  expect(diagnostics).toContainEqual({
+    code: "PROVIDER_FETCH_FAILED",
+    phase: "provider_fetch",
+    provider: "archidekt",
+    sourceId: "24765444",
+    errorName: "ArchidektHttpError",
+    sanitizedErrorMessage: "Archidekt request failed.",
+    upstreamHostname: "archidekt.com",
+    upstreamPath: "/api/decks/24765444/",
+  })
+})
+
 test("gedeelde bronfingerprint is orde-onafhankelijk en detecteert deckwijzigingen", async () => {
   const base = rawDeck(1)
   const hash = await fingerprintArchidektSource(base, rawTokens)

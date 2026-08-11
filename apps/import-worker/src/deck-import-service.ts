@@ -8,6 +8,12 @@ import {
   archidektTokenIdsForFingerprint,
   fingerprintArchidektSource,
 } from "@mtg/deck-source"
+import {
+  archidektDeckApiUrl,
+  archidektTokensApiUrl,
+  ArchidektHttpError,
+  fetchArchidektJson,
+} from "./providers/archidekt-http.ts"
 
 type DeckCacheStatus = "HIT" | "MISS" | "REFRESHED"
 export type DeckImportResult = {
@@ -37,6 +43,11 @@ export type DeckImportDiagnostic = {
     "cache_read" | "provider_fetch" | "mapping" | "fingerprint" | "cache_write"
   provider: string
   sourceId: string
+  errorName?: string
+  sanitizedErrorMessage?: string
+  upstreamHostname?: string
+  upstreamPath?: string
+  upstreamStatus?: number
 }
 
 const isImportedDeck = (value: unknown): value is ImportedDeck => {
@@ -61,54 +72,31 @@ export const importedDeckCacheKey = (provider: string, sourceId: string) =>
   )
 
 const providers = [archidektProvider]
-const upstreamJson = async (
-  url: string,
-  fetcher: typeof fetch,
-): Promise<unknown> => {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => {
-    controller.abort()
-  }, 10_000)
-  try {
-    const response = await fetcher(url, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "MTGBattleMode/1.0",
-      },
-      redirect: "error",
-      signal: controller.signal,
-    })
-    if (response.status === 404)
-      throw new DeckProviderError("DECK_NOT_FOUND", "Deck niet gevonden.", 404)
-    if (response.status === 429)
-      throw new DeckProviderError(
-        "DECK_PROVIDER_RATE_LIMITED",
-        "De deckprovider beperkt tijdelijk requests.",
-        429,
-      )
-    if (!response.ok)
-      throw new DeckProviderError(
-        "DECK_PROVIDER_UNAVAILABLE",
-        "De deckprovider is tijdelijk niet bereikbaar.",
-      )
-    const bytes = await response.arrayBuffer()
-    if (bytes.byteLength > 5_000_000)
-      throw new DeckProviderError(
-        "INVALID_DECK_DATA",
-        "De providerresponse is te groot.",
-        413,
-      )
-    try {
-      return JSON.parse(new TextDecoder().decode(bytes))
-    } catch {
-      throw new DeckProviderError(
-        "INVALID_DECK_DATA",
-        "De providerresponse bevat geen geldige JSON.",
-      )
-    }
-  } finally {
-    clearTimeout(timeout)
-  }
+
+const providerError = (error: unknown): DeckProviderError => {
+  if (!(error instanceof ArchidektHttpError))
+    return new DeckProviderError(
+      "DECK_PROVIDER_UNAVAILABLE",
+      "De deckprovider is tijdelijk niet bereikbaar.",
+    )
+  if (error.upstreamStatus === 404)
+    return new DeckProviderError("DECK_NOT_FOUND", "Deck niet gevonden.", 404)
+  if (error.upstreamStatus === 429)
+    return new DeckProviderError(
+      "DECK_PROVIDER_RATE_LIMITED",
+      "De deckprovider beperkt tijdelijk requests.",
+      429,
+    )
+  if (error.upstreamStatus === 413)
+    return new DeckProviderError(
+      "INVALID_DECK_DATA",
+      "De providerresponse is te groot.",
+      413,
+    )
+  return new DeckProviderError(
+    "DECK_PROVIDER_UNAVAILABLE",
+    "De deckprovider is tijdelijk niet bereikbaar.",
+  )
 }
 
 export const createDeckImportService = ({
@@ -143,12 +131,14 @@ export const createDeckImportService = ({
     const diagnostic = (
       code: DeckImportDiagnostic["code"],
       phase: DeckImportDiagnostic["phase"],
+      detail: Partial<DeckImportDiagnostic> = {},
     ) => {
       onDiagnostic({
         code,
         phase,
         provider: source.source,
         sourceId: source.sourceId,
+        ...detail,
       })
     }
     const cacheKey = importedDeckCacheKey(source.source, source.sourceId)
@@ -173,26 +163,49 @@ export const createDeckImportService = ({
       return { cacheStatus: "HIT", deck: cached }
     let rawDeck: unknown
     try {
-      rawDeck = await upstreamJson(
-        `https://archidekt.com/api/decks/${source.sourceId}/`,
-        fetcher,
-      )
+      rawDeck = (
+        await fetchArchidektJson(archidektDeckApiUrl(source.sourceId), fetcher)
+      ).data
     } catch (error) {
-      diagnostic("PROVIDER_FETCH_FAILED", "provider_fetch")
-      throw error
+      diagnostic("PROVIDER_FETCH_FAILED", "provider_fetch", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        sanitizedErrorMessage:
+          error instanceof Error ? error.message : "Unknown provider failure.",
+        ...(error instanceof ArchidektHttpError
+          ? {
+              upstreamHostname: error.upstreamHostname,
+              upstreamPath: error.upstreamPath,
+              ...(error.upstreamStatus !== undefined
+                ? { upstreamStatus: error.upstreamStatus }
+                : {}),
+            }
+          : {}),
+      })
+      throw providerError(error)
     }
     const tokenIds = archidektTokenIdsForFingerprint(rawDeck)
     let rawTokens: unknown
     try {
       rawTokens = tokenIds.length
-        ? await upstreamJson(
-            `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`,
-            fetcher,
-          )
+        ? (await fetchArchidektJson(archidektTokensApiUrl(tokenIds), fetcher))
+            .data
         : null
     } catch (error) {
-      diagnostic("PROVIDER_FETCH_FAILED", "provider_fetch")
-      throw error
+      diagnostic("PROVIDER_FETCH_FAILED", "provider_fetch", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        sanitizedErrorMessage:
+          error instanceof Error ? error.message : "Unknown provider failure.",
+        ...(error instanceof ArchidektHttpError
+          ? {
+              upstreamHostname: error.upstreamHostname,
+              upstreamPath: error.upstreamPath,
+              ...(error.upstreamStatus !== undefined
+                ? { upstreamStatus: error.upstreamStatus }
+                : {}),
+            }
+          : {}),
+      })
+      throw providerError(error)
     }
     let deck: ImportedDeck
     try {

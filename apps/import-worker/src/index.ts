@@ -189,13 +189,27 @@ export default {
     }, UPSTREAM_TIMEOUT_MS)
     try {
       const upstreamUrl = isTokenRequest
-        ? `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`
+        ? archidektTokensApiUrl(tokenIds)
         : isImageRequest
           ? `https://card-images.archidekt.com/normal/${imageFace}/${imageId[0]}/${imageId[1]}/${imageId}.jpg?${imageHash}`
-          : `https://archidekt.com/api/decks/${deckId}/`
+          : archidektDeckApiUrl(deckId ?? "")
+      if (!isImageRequest) {
+        const upstream = await fetchArchidektJson(upstreamUrl)
+        const response = new Response(upstream.payload, {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": freshnessProbe
+              ? "no-store"
+              : "public, max-age=120, s-maxage=600",
+          },
+        })
+        if (!freshnessProbe)
+          context.waitUntil(cache.put(cacheKey, response.clone()))
+        return withCors(response, corsHeaders)
+      }
       const upstream = await fetch(upstreamUrl, {
         headers: {
-          Accept: isImageRequest ? "image/*" : "application/json",
+          Accept: "image/*",
           "User-Agent": "MTGBattleMode/1.0",
         },
         signal: controller.signal,
@@ -239,9 +253,7 @@ export default {
       }
       const response = new Response(payload, {
         headers: {
-          "Content-Type": isImageRequest
-            ? (upstream.headers.get("Content-Type") ?? "image/jpeg")
-            : "application/json; charset=utf-8",
+          "Content-Type": upstream.headers.get("Content-Type") ?? "image/jpeg",
           "Cache-Control": freshnessProbe
             ? "no-store"
             : "public, max-age=120, s-maxage=600",
@@ -251,6 +263,33 @@ export default {
         context.waitUntil(cache.put(cacheKey, response.clone()))
       return withCors(response, corsHeaders)
     } catch (error: unknown) {
+      if (error instanceof ArchidektHttpError) {
+        const status = error.upstreamStatus
+        if (status === 404)
+          return jsonError(404, "NOT_FOUND", "Deck niet gevonden.", corsHeaders)
+        if (status === 401 || status === 403)
+          return jsonError(
+            403,
+            "PRIVATE_DECK",
+            "Deck is niet openbaar.",
+            corsHeaders,
+          )
+        if (status === 413)
+          return jsonError(
+            413,
+            "RESPONSE_TOO_LARGE",
+            "Deckresponse is te groot.",
+            corsHeaders,
+          )
+        return jsonError(
+          error.message.includes("timed out") ? 504 : 502,
+          error.message.includes("timed out") ? "TIMEOUT" : "UPSTREAM_ERROR",
+          error.message.includes("timed out")
+            ? "Archidekt reageerde niet op tijd."
+            : "Archidekt kon niet worden bereikt.",
+          corsHeaders,
+        )
+      }
       const aborted =
         error instanceof DOMException && error.name === "AbortError"
       return jsonError(
@@ -270,6 +309,12 @@ import {
   createDeckImportService,
   DeckProviderError,
 } from "./deck-import-service.ts"
+import {
+  archidektDeckApiUrl,
+  archidektTokensApiUrl,
+  ArchidektHttpError,
+  fetchArchidektJson,
+} from "./providers/archidekt-http.ts"
 
 type Env = { ALLOWED_ORIGIN?: string; RELEASE_VERSION?: string }
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void }
