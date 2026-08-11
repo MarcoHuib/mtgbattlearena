@@ -57,6 +57,7 @@ import type {
 } from "@mtg/game-core/types"
 import {
   onlineDeckSubmissionSchema,
+  onlineTokenDefinitionSchema,
   personalGameSnapshotSchema,
   type GameCommand,
   type OnlineDeckSubmission,
@@ -1039,7 +1040,7 @@ const visibleTokenDefinition = (
   definition: CardDefinition,
 ): OnlineTokenDefinition => {
   const firstFace = definition.faces[0]
-  return {
+  return onlineTokenDefinitionSchema.parse({
     definitionId: definition.id,
     name: firstFace?.name ?? definition.name,
     typeLine: firstFace?.typeLine ?? definition.typeLine,
@@ -1050,7 +1051,7 @@ const visibleTokenDefinition = (
     kind: definition.token?.kind ?? "other",
     power: definition.token?.power,
     toughness: definition.token?.toughness,
-  }
+  })
 }
 
 export const serializePersonalSnapshot = (
