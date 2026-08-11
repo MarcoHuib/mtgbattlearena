@@ -1,42 +1,24 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, vi } from "vitest"
 import { App } from "./App"
+import * as importDeckApi from "./app/api/importDeck"
 import { importedDeckFixture } from "./utils/importedDeckFixture"
 import { renderWithProviders } from "./utils/test-utils"
 
-vi.mock("./archidekt/freshness", () => ({
-  currentArchidektSourceHash: vi.fn(() => Promise.resolve("source-hash")),
-}))
-
 beforeEach(() => {
   window.history.replaceState({}, "", "/")
-  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    const url =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url
-    if (url.includes("/graphql")) {
-      const body = JSON.parse(
-        typeof init?.body === "string" ? init.body : "{}",
-      ) as { variables?: { url?: string } }
-      const deckId =
-        /\/decks\/(\d+)/.exec(body.variables?.url ?? "")?.[1] ?? "unknown"
+  vi.spyOn(importDeckApi, "importDeckFromUrl").mockImplementation(
+    (_dispatch, url) => {
+      const deckId = /\/decks\/(\d+)/.exec(url)?.[1] ?? "unknown"
       return Promise.resolve(
-        Response.json({
-          data: {
-            deckFromUrl: {
-              cacheStatus: "MISS",
-              deck: importedDeckFixture(
-                deckId,
-                deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
-              ),
-            },
-          },
-        }),
+        importedDeckFixture(
+          deckId,
+          deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
+        ),
       )
-    }
+    },
+  )
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => {
     return Promise.resolve(new Response(null, { status: 503 }))
   })
 })
