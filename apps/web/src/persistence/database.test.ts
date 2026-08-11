@@ -271,3 +271,34 @@ test("bewaart null-stats van een Food-token in een deckrevision", async () => {
     (await repositories.decks.list("food-owner"))[0]?.definitions[0]?.token,
   ).toMatchObject({ kind: "food", power: null, toughness: null })
 })
+
+test("hydrateert legacy deckrevisions zonder ze te verwijderen", async () => {
+  const repositories = createMemoryRepositories()
+  const forest = "d232fcc2-12f6-401a-b1aa-ddff11cb9378"
+  const legacy = {
+    ...deck("legacy-images"),
+    definitions: [
+      {
+        id: "forest",
+        name: "Forest",
+        faces: [{ name: "Forest" }],
+        imageRefs: [
+          {
+            assetKey: `${forest}:0:normal`,
+            faceIndex: 0,
+            variant: "normal" as const,
+            url: "https://card-images.archidekt.com/ignored.jpg",
+          },
+        ],
+      },
+    ],
+  }
+  await repositories.decks.save(legacy, "legacy-owner")
+
+  expect((await repositories.decks.get(legacy.id))?.definitions[0]?.imageRefs)
+    .toEqual([
+      { resolver: 1, imageId: forest, faceIndex: 0, variant: "normal" },
+    ])
+  expect(await repositories.decks.list()).toHaveLength(1)
+  expect((await repositories.decks.list("legacy-owner"))[0]?.id).toBe(legacy.id)
+})

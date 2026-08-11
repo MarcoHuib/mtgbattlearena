@@ -48,8 +48,13 @@ credentials en poort worden opnieuw gecontroleerd. Redirects, non-JPEG-responses
 te grote responses en timeouts worden geweigerd. Er is geen R2, Cloudflare Images,
 Firebase, App Check of cookie.
 
-Oude snapshots worden bij hydratatie compatibel gelezen. Alleen hun printing-ID
-wordt gebruikt; de oude URL bepaalt nooit identiteit. Een toekomstige
+Oude snapshots worden bij hydratatie compatibel gelezen. De gedeelde
+normalizer gebruikt eerst een geldige huidige referentie, daarna de expliciete
+printing-ID en ten slotte een strikt gevalideerde legacy
+`{printingUuid}:{faceIndex}:{variant}`-assetkey. De oude URL wordt genegeerd en
+bepaalt nooit identiteit. Authoritative online states ouder dan schema 6 worden
+eenmalig genormaliseerd; IndexedDB-deckrevisies worden zonder rewrite of nieuw
+revision-ID bij read genormaliseerd. Een toekomstige
 deckprovider die dezelfde Scryfall printing-ID levert hergebruikt resolver 1 en
 dezelfde cachekey en vereist dus geen nieuwe resolver.
 

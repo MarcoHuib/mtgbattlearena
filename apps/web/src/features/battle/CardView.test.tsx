@@ -11,8 +11,15 @@ import { BattleRuntimeProvider, type BattleRuntime } from "./BattleRuntime"
 import { CardView } from "./CardView"
 
 vi.mock("../../persistence/imageResolver", () => ({
-  resolveCardImage: vi.fn((image?: { url: string }) =>
-    Promise.resolve(image ? { source: "remote", url: image.url } : null),
+  resolveCardImage: vi.fn((image?: { imageId: string; faceIndex: number }) =>
+    Promise.resolve(
+      image
+        ? {
+            source: "remote",
+            url: `https://cdn.mtgbattlearena.nl/v1/1/${image.imageId}/${image.faceIndex}/normal`,
+          }
+        : null,
+    ),
   ),
 }))
 
@@ -23,25 +30,23 @@ const definition: CardDefinition = {
   faces: [
     {
       name: "Edgar, Charmed Groom",
-      imageUrl: "https://img.test/front.jpg",
     },
     {
       name: "Edgar Markov's Coffin",
-      imageUrl: "https://img.test/back.jpg",
     },
   ],
   imageRefs: [
     {
-      assetKey: "edgar:0:normal",
+      resolver: 1,
+      imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
       faceIndex: 0,
       variant: "normal",
-      url: "https://img.test/front.jpg",
     },
     {
-      assetKey: "edgar:1:normal",
+      resolver: 1,
+      imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
       faceIndex: 1,
       variant: "normal",
-      url: "https://img.test/back.jpg",
     },
   ],
 }

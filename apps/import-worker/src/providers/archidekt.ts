@@ -178,14 +178,7 @@ const foretellDefinition: CardDefinition = {
         "Place foretold cards here. You may cast them later for their foretell cost.",
     },
   ],
-  imageRefs: [
-    {
-      resolver: 1,
-      imageId: "207b3d62-2541-4a51-8152-3c54218ab6f7",
-      faceIndex: 0,
-      variant: "normal" as const,
-    },
-  ],
+  imageRefs: [],
   typeLine: "Card",
   token: { kind: "other", name: "Foretell", source: "deck" as const },
 }
