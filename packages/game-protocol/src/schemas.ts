@@ -4,12 +4,20 @@ export const playerIdSchema = z.string().min(1).max(80)
 export const cardInstanceIdSchema = z.string().min(1).max(120)
 export const gameIdSchema = z.string().min(1).max(120)
 
+const imageRefSchema = z
+  .object({
+    resolver: z.number().int().positive(),
+    imageId: z.string().min(1).max(120),
+    faceIndex: z.number().int().min(0).max(1),
+    variant: z.literal("normal"),
+  })
+  .strict()
+
 const tokenDefinitionFields = {
   definitionId: z.string().min(1).max(120),
   name: z.string().min(1).max(300),
   typeLine: z.string().max(500).optional(),
-  imageUrl: z.url().optional(),
-  scryfallId: z.string().max(120).optional(),
+  imageRef: imageRefSchema.optional(),
 }
 const tokenStatSchema = z.number().int().min(-1_000).max(1_000)
 
@@ -45,8 +53,7 @@ export const onlineDeckCardSchema = z
     definitionId: z.string().min(1).max(120),
     name: z.string().min(1).max(300),
     typeLine: z.string().max(500).optional(),
-    imageUrl: z.url().optional(),
-    scryfallId: z.string().max(120).optional(),
+    imageRefs: z.array(imageRefSchema).max(2).default([]).optional(),
     faces: z
       .array(
         z
@@ -54,7 +61,6 @@ export const onlineDeckCardSchema = z
             name: z.string().min(1).max(300),
             typeLine: z.string().max(500).optional(),
             oracleText: z.string().max(20_000).optional(),
-            imageUrl: z.url().optional(),
           })
           .strict(),
       )
@@ -542,7 +548,7 @@ const visibleCardSchema = z
     instanceId: cardInstanceIdSchema,
     definitionId: z.string().min(1).max(120),
     name: z.string().min(1).max(300),
-    imageUrl: z.url().optional(),
+    imageRef: imageRefSchema.optional(),
     typeLine: z.string().max(500).optional(),
     tapped: z.boolean(),
     activeFaceIndex: z.number().int().nonnegative(),
@@ -553,7 +559,7 @@ const visibleCardSchema = z
           .object({
             name: z.string().min(1).max(300),
             typeLine: z.string().max(500).optional(),
-            imageUrl: z.url().optional(),
+            imageRef: imageRefSchema.optional(),
           })
           .strict(),
       )

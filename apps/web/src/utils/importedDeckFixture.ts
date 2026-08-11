@@ -38,16 +38,14 @@ export const importedDeckFixture = (
         {
           name: "Treasure",
           typeLine: "Token Artifact — Treasure",
-          imageUrl:
-            "https://card-images.archidekt.com/normal/front/f/9/f909bd95-58a1-4299-9570-87724145fc85.jpg?1783902798",
         },
       ],
       imageRefs: [
         {
-          assetKey: "token-treasure:0:normal",
+          resolver: 1,
+          imageId: "f909bd95-58a1-4299-9570-87724145fc85",
           faceIndex: 0,
           variant: "normal",
-          url: "https://card-images.archidekt.com/normal/front/f/9/f909bd95-58a1-4299-9570-87724145fc85.jpg?1783902798",
         },
       ],
       token: { kind: "treasure", name: "Treasure", source: "deck" },

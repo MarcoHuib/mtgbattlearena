@@ -1079,8 +1079,7 @@ type CreateTokenOptions = {
   kind: TokenKind
   name: string
   typeLine?: string
-  imageUrl?: string
-  scryfallId?: string
+  imageRef?: CardDefinition["imageRefs"][number]
   power?: number | null
   toughness?: number | null
   position?: BattlefieldPosition
@@ -1114,19 +1113,9 @@ export const createToken = (
       [definitionId]: {
         id: definitionId,
         name,
-        scryfallId: options.scryfallId,
         typeLine,
-        faces: [{ name, typeLine, imageUrl: options.imageUrl }],
-        imageRefs: options.imageUrl
-          ? [
-              {
-                assetKey: `${definitionId}:0:normal`,
-                faceIndex: 0,
-                variant: "normal",
-                url: options.imageUrl,
-              },
-            ]
-          : [],
+        faces: [{ name, typeLine }],
+        imageRefs: options.imageRef ? [options.imageRef] : [],
         token: {
           kind: options.kind,
           name,

@@ -17,13 +17,14 @@ const card = (
   index: number,
   playerId = "mock-player-1",
 ): VisibleOnlineCard => {
-  const frontImage = `https://cards.example/${playerId}-${index}-front.jpg`
-  const backImage = `https://cards.example/${playerId}-${index}-back.jpg`
+  const imageId = "6a9c39e4-a8cf-42dd-8d0e-45634b335546"
+  const frontImage = { resolver: 1, imageId, faceIndex: 0, variant: "normal" as const }
+  const backImage = { resolver: 1, imageId, faceIndex: 1, variant: "normal" as const }
   return {
     instanceId: `${playerId}-card-${index}`,
     definitionId: `${playerId}-definition-${index}`,
     name,
-    imageUrl: frontImage,
+    imageRef: frontImage,
     typeLine: "Creature — Demo",
     tapped: false,
     activeFaceIndex: 0,
@@ -31,11 +32,11 @@ const card = (
     faces:
       index === 1
         ? [
-            { name, typeLine: "Creature — Demo", imageUrl: frontImage },
+            { name, typeLine: "Creature — Demo", imageRef: frontImage },
             {
               name: `${name} achterkant`,
               typeLine: "Artifact — Demo",
-              imageUrl: backImage,
+              imageRef: backImage,
             },
           ]
         : undefined,
@@ -428,7 +429,7 @@ export class MockRealtimeConnection implements OnlineGameConnection {
           definitionId: command.payload.token.definitionId,
           name: command.payload.token.name,
           typeLine: command.payload.token.typeLine,
-          imageUrl: command.payload.token.imageUrl,
+          imageRef: command.payload.token.imageRef,
           tapped: false,
           activeFaceIndex: 0,
           counters: {},
@@ -544,7 +545,7 @@ export class MockRealtimeConnection implements OnlineGameConnection {
         if (activeFace) {
           visibleCard.name = activeFace.name
           visibleCard.typeLine = activeFace.typeLine
-          visibleCard.imageUrl = activeFace.imageUrl
+          visibleCard.imageRef = activeFace.imageRef
         }
         break
       }

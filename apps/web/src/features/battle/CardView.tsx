@@ -3,6 +3,7 @@ import { useDraggable } from "@dnd-kit/react"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import type { CardDefinition, CardInstance, Zone } from "@mtg/game-core/types"
+import { cardImageAssetKey, getCardImageUrl } from "@mtg/game-core/images"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
 import { resolveCardImage } from "../../persistence/imageResolver"
 import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
@@ -82,8 +83,10 @@ export const CardView = ({
   const imageRef = definition.imageRefs.find(
     image => image.faceIndex === instance.activeFaceIndex,
   )
-  const imageAssetKey = imageRef?.assetKey
-  const remoteImageUrl = imageRef?.url
+  const imageAssetKey = imageRef ? cardImageAssetKey(imageRef) : undefined
+  const remoteImageUrl = imageRef
+    ? getCardImageUrl(imageRef)
+    : undefined
   const [imageUrl, setImageUrl] = useState<string | null>(
     online ? (remoteImageUrl ?? null) : null,
   )

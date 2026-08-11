@@ -94,13 +94,12 @@ export const typeDefs = /* GraphQL */ `
     name: String!
     typeLine: String
     oracleText: String
-    imageUrl: String
   }
   type ImportedImageRef {
-    assetKey: String!
+    resolver: Int!
+    imageId: ID!
     faceIndex: Int!
     variant: String!
-    url: String!
   }
   type ImportedToken {
     kind: String!
@@ -112,7 +111,6 @@ export const typeDefs = /* GraphQL */ `
   type ImportedCardDefinition {
     id: ID!
     name: String!
-    scryfallId: String
     oracleId: String
     layout: String
     faces: [ImportedCardFace!]!
@@ -159,14 +157,18 @@ export const typeDefs = /* GraphQL */ `
     name: String!
     typeLine: String
     oracleText: String
-    imageUrl: String
+  }
+  input ImageRefInput {
+    resolver: Int!
+    imageId: ID!
+    faceIndex: Int!
+    variant: String!
   }
   input DeckCardInput {
     definitionId: ID!
     name: String!
     typeLine: String
-    imageUrl: String
-    scryfallId: String
+    imageRefs: [ImageRefInput!]
     faces: [CardFaceInput!]
     quantity: Int!
     isCommander: Boolean!
@@ -175,8 +177,7 @@ export const typeDefs = /* GraphQL */ `
     definitionId: ID!
     name: String!
     typeLine: String
-    imageUrl: String
-    scryfallId: String
+    imageRef: ImageRefInput
     kind: String!
     power: Int
     toughness: Int

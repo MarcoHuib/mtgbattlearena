@@ -1,4 +1,5 @@
 import type { CardDefinition, CardImageRef, GameState } from "./types"
+import { cardImageAssetKey } from "./images"
 
 export const deduplicateImageRefs = (
   definitions: readonly CardDefinition[],
@@ -6,7 +7,8 @@ export const deduplicateImageRefs = (
   const assets = new Map<string, CardImageRef>()
   for (const definition of definitions) {
     for (const image of definition.imageRefs) {
-      if (!assets.has(image.assetKey)) assets.set(image.assetKey, image)
+      const key = cardImageAssetKey(image)
+      if (!assets.has(key)) assets.set(key, image)
     }
   }
   return [...assets.values()]

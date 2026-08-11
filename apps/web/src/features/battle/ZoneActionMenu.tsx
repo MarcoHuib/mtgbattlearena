@@ -5,6 +5,7 @@ import type {
   CardDefinition,
   PlayerId,
 } from "@mtg/game-core/types"
+import { getCardImageUrl } from "@mtg/game-core/images"
 import { useOnlineStatus } from "../../hooks/useOnlineStatus"
 import { resolveCardImage } from "../../persistence/imageResolver"
 import { canControlPlayer, useBattleRuntime } from "./BattleRuntime"
@@ -42,7 +43,7 @@ const TokenThumbnail = ({ definition }: { definition: CardDefinition }) => {
   const online = useOnlineStatus()
   const image = definition.imageRefs.find(item => item.faceIndex === 0)
   const [imageUrl, setImageUrl] = useState<string | null>(
-    online ? (image?.url ?? null) : null,
+    online && image ? getCardImageUrl(image) : null,
   )
 
   useEffect(() => {

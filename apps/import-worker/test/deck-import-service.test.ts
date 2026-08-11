@@ -92,6 +92,18 @@ test("een willekeurige host kan nooit een uitgaande fetch afdwingen", async () =
 })
 
 describe("application DTO cache", () => {
+  test("maps a Scryfall printing ID to resolver 1 without upstream image URLs", async () => {
+    const id = "6a9c39e4-a8cf-42dd-8d0e-45634b335546"
+    const deck = rawDeck()
+    deck.cards[0]!.card.uid = id
+    const result = await createDeckImportService({ cache: new MemoryCache(), fetcher: fetcher(deck) })
+      .importFromUrl("https://archidekt.com/decks/123")
+    expect(result.deck.definitions[0]?.imageRefs).toEqual([
+      { resolver: 1, imageId: id, faceIndex: 0, variant: "normal" },
+    ])
+    expect(JSON.stringify(result.deck)).not.toMatch(/card-images\.archidekt|cards\.scryfall|imageUrl/)
+  })
+
   test("miss fetcht, valideert, hasht en cachet het DTO", async () => {
     const cache = new MemoryCache()
     const upstream = fetcher()

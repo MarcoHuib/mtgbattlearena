@@ -52,7 +52,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
       body: pixel,
     })
   })
-  await page.route("https://card-images.archidekt.com/**", async route => {
+  await page.route("https://cdn.mtgbattlearena.nl/**", async route => {
     await route.fulfill({
       contentType: "image/png",
       headers: { "Access-Control-Allow-Origin": "*" },

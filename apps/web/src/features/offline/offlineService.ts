@@ -1,5 +1,6 @@
 import { createAsyncThunk } from "@reduxjs/toolkit"
 import { collectGameAssets } from "@mtg/game-core/assets"
+import { cardImageAssetKey, getCardImageUrl } from "@mtg/game-core/images"
 import type {
   OfflineAssetRecord,
   OfflineBattlePackage,
@@ -7,27 +8,11 @@ import type {
 import { browserAssetCache } from "../../persistence/assetCache"
 import { repositories } from "../../persistence/database"
 import type { RootState } from "../../app/store"
-import { archidektImportUrl } from "../../archidekt/endpoints"
 import { updateOfflinePackage } from "./offlineSlice"
 
 const activeDownloads = new Map<string, AbortController>()
-
-export const offlineAssetFetchUrl = (assetUrl: string): string => {
-  try {
-    const url = new URL(assetUrl)
-    if (url.hostname !== "card-images.archidekt.com") return assetUrl
-    const match =
-      /^\/normal\/(front|back)\/[0-9a-f]\/[0-9a-f]\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jpg$/i.exec(
-        url.pathname,
-      )
-    const hash = url.search.slice(1)
-    if (!match || !/^\d+$/.test(hash)) return assetUrl
-    const [, face, cardId] = match
-    return archidektImportUrl(`/image/${cardId}?face=${face}&hash=${hash}`)
-  } catch {
-    return assetUrl
-  }
-}
+/** @deprecated old callers may pass an already-safe URL; new assets are CDN-only. */
+export const offlineAssetFetchUrl = (url: string): string => url
 
 const persistPackage = async (
   record: OfflineBattlePackage,
@@ -53,7 +38,7 @@ const fetchAsset = async (
     timeout.abort()
   }, 15_000)
   try {
-    const response = await fetch(offlineAssetFetchUrl(asset.url), {
+    const response = await fetch(asset.url, {
       mode: "cors",
       signal: AbortSignal.any([signal, timeout.signal]),
     })
@@ -100,14 +85,15 @@ export const downloadOfflineBattle = createAsyncThunk<
     const existingAssets = existing?.assets ?? {}
     const assets = Object.fromEntries(
       imageRefs.map(image => {
-        const previous = existingAssets[image.assetKey]
+        const assetKey = cardImageAssetKey(image)
+        const previous = existingAssets[assetKey]
         return [
-          image.assetKey,
+          assetKey,
           previous?.status === "complete"
             ? previous
             : {
-                assetKey: image.assetKey,
-                url: image.url,
+                assetKey,
+                url: getCardImageUrl(image),
                 status: "queued" as const,
               },
         ]

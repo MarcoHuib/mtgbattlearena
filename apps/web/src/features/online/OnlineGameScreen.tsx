@@ -10,6 +10,7 @@ import { AppLink, navigate } from "../../app/router"
 import { Brand } from "../../components/Brand"
 import { StatusBar } from "../../components/StatusBar"
 import { repositories } from "../../persistence/database"
+import { publicImageRef } from "@mtg/game-core/images"
 import { BattleRuntimeProvider } from "../battle/BattleRuntime"
 import { BattleExperience } from "../battle/BattleExperience"
 import {
@@ -147,9 +148,7 @@ export const OnlineGameScreen = ({
               definitionId: definition.id,
               name: definition.name,
               typeLine: definition.typeLine,
-              imageUrl:
-                definition.faces[0]?.imageUrl ?? definition.imageRefs[0]?.url,
-              scryfallId: definition.scryfallId,
+              imageRef: publicImageRef(definition.imageRefs[0]),
               kind: definition.token?.kind ?? "other",
               power: definition.token?.power,
               toughness: definition.token?.toughness,
