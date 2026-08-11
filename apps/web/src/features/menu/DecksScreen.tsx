@@ -119,7 +119,7 @@ export const DecksScreen = ({ auth }: DecksScreenProps) => {
                   <div>
                     <strong>{deck.name}</strong>
                     <span>
-                      Archidekt {deck.sourceDeckId} · {deckCardCount(deck)}{" "}
+                      {deck.source} {deck.sourceId} · {deckCardCount(deck)}{" "}
                       kaarten
                     </span>
                   </div>
@@ -176,7 +176,7 @@ export const DecksScreen = ({ auth }: DecksScreenProps) => {
                     <div>
                       <strong>{deck.name}</strong>
                       <span>
-                        Archidekt {deck.sourceDeckId} · {deckCardCount(deck)}{" "}
+                        {deck.source} {deck.sourceId} · {deckCardCount(deck)}{" "}
                         kaarten
                       </span>
                     </div>

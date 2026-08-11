@@ -52,6 +52,13 @@ export const maskGraphQLError = (error: unknown) => {
         "VALIDATION_ERROR",
         "CONFLICT",
         "RATE_LIMITED",
+        "UNSUPPORTED_DECK_PROVIDER",
+        "INVALID_DECK_URL",
+        "DECK_NOT_FOUND",
+        "DECK_PROVIDER_UNAVAILABLE",
+        "DECK_PROVIDER_RATE_LIMITED",
+        "INVALID_DECK_DATA",
+        "DECK_IMPORT_FAILED",
       ].includes(code)
     ) {
       return new GraphQLError(

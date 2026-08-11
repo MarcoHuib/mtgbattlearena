@@ -59,6 +59,56 @@ export const LobbyDocument = new TypedDocumentString(`
   }
 }
     `);
+export const DeckFromUrlDocument = new TypedDocumentString(`
+    query DeckFromUrl($url: String!, $sourceHash: String) {
+  deckFromUrl(url: $url, sourceHash: $sourceHash) {
+    cacheStatus
+    deck {
+      source
+      sourceId
+      sourceUrl
+      sourceHash
+      name
+      format
+      importedAt
+      cards {
+        definitionId
+        quantity
+        isCommander
+      }
+      definitions {
+        id
+        name
+        scryfallId
+        oracleId
+        layout
+        faces {
+          name
+          typeLine
+          oracleText
+          imageUrl
+        }
+        imageRefs {
+          assetKey
+          faceIndex
+          variant
+          url
+        }
+        oracleText
+        typeLine
+        manaValue
+        token {
+          kind
+          name
+          power
+          toughness
+          source
+        }
+      }
+    }
+  }
+}
+    `);
 export const CreateLobbyDocument = new TypedDocumentString(`
     mutation CreateLobby($input: CreateLobbyInput!) {
   createLobby(input: $input) {
@@ -113,6 +163,9 @@ const injectedRtkApi = graphqlApi.injectEndpoints({
     Lobby: build.query<Types.LobbyQuery, Types.LobbyQueryVariables>({
       query: (variables) => ({ document: LobbyDocument as unknown as string, variables })
     }),
+    DeckFromUrl: build.query<Types.DeckFromUrlQuery, Types.DeckFromUrlQueryVariables>({
+      query: (variables) => ({ document: DeckFromUrlDocument as unknown as string, variables })
+    }),
     CreateLobby: build.mutation<Types.CreateLobbyMutation, Types.CreateLobbyMutationVariables>({
       query: (variables) => ({ document: CreateLobbyDocument as unknown as string, variables })
     }),
@@ -138,5 +191,5 @@ const injectedRtkApi = graphqlApi.injectEndpoints({
 });
 
 export { injectedRtkApi as api };
-export const { usePublicLobbiesQuery, useLazyPublicLobbiesQuery, useLobbyQuery, useLazyLobbyQuery, useCreateLobbyMutation, useJoinLobbyMutation, useDeleteLobbyMutation, useAbortGameMutation, useRegisterDeckMutation, useStartGameMutation, useCreateSocketTicketMutation } = injectedRtkApi;
+export const { usePublicLobbiesQuery, useLazyPublicLobbiesQuery, useLobbyQuery, useLazyLobbyQuery, useDeckFromUrlQuery, useLazyDeckFromUrlQuery, useCreateLobbyMutation, useJoinLobbyMutation, useDeleteLobbyMutation, useAbortGameMutation, useRegisterDeckMutation, useStartGameMutation, useCreateSocketTicketMutation } = injectedRtkApi;
 

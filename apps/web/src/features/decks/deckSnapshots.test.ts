@@ -3,7 +3,9 @@ import { createImportedDeckSnapshot } from "./deckSnapshots"
 
 const imported: ImportedDeck = {
   source: "archidekt",
-  sourceDeckId: "12345",
+  sourceId: "12345",
+  sourceUrl: "https://archidekt.com/decks/12345",
+  sourceHash: "fixture-hash",
   name: "Mijn deck",
   importedAt: "2026-07-29T20:00:00.000Z",
   cards: [{ definitionId: "card", quantity: 1, isCommander: false }],

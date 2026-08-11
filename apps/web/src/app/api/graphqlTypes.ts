@@ -16,6 +16,14 @@ export type LobbyQueryVariables = Exact<{
 
 export type LobbyQuery = { lobby: { lobby: { code: string, title: string, hostDisplayName: string, status: Schema.LobbyStatus, maxPlayers: number, viewerRole: Schema.LobbyRole | null }, participants: Array<{ displayName: string, role: Schema.ConnectionRole, seatNumber: number | null, isHost: boolean, isViewer: boolean, deckReady: boolean, deckName: string | null }> } };
 
+export type DeckFromUrlQueryVariables = Exact<{
+  url: string;
+  sourceHash?: string | null | undefined;
+}>;
+
+
+export type DeckFromUrlQuery = { deckFromUrl: { cacheStatus: Schema.DeckCacheStatus, deck: { source: Schema.DeckSource, sourceId: string, sourceUrl: string, sourceHash: string, name: string, format: string | null, importedAt: string, cards: Array<{ definitionId: string, quantity: number, isCommander: boolean }>, definitions: Array<{ id: string, name: string, scryfallId: string | null, oracleId: string | null, layout: string | null, oracleText: string | null, typeLine: string | null, manaValue: number | null, faces: Array<{ name: string, typeLine: string | null, oracleText: string | null, imageUrl: string | null }>, imageRefs: Array<{ assetKey: string, faceIndex: number, variant: string, url: string }>, token: { kind: string, name: string, power: number | null, toughness: number | null, source: string | null } | null }> } } };
+
 export type CreateLobbyMutationVariables = Exact<{
   input: Schema.CreateLobbyInput;
 }>;

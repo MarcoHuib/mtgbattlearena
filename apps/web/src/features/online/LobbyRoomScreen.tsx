@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState, type SyntheticEvent } from "react"
 import { deckCardCount } from "@mtg/game-core/decks"
 import type { DeckSnapshot } from "@mtg/game-core/types"
-import { importArchidektDeck } from "../../archidekt/client"
-import { DeckImportError } from "../../archidekt/errors"
+import { useAppDispatch } from "../../app/hooks"
+import {
+  importDeckFromUrl,
+  importedDeckErrorMessage,
+} from "../../app/api/importDeck"
 import { AppLink } from "../../app/router"
 import { AppShell } from "../../components/AppShell"
 import { createImportedDeckSnapshot } from "../decks/deckSnapshots"
@@ -27,6 +30,7 @@ export const LobbyRoomScreen = ({
   onEnterGame,
   onLeave,
 }: LobbyRoomScreenProps) => {
+  const dispatch = useAppDispatch()
   const usesGraphQLQuery = onlineGames.kind === "cloudflare"
   const lobbyQuery = useLobbyQuery(
     { id: gameId },
@@ -187,7 +191,7 @@ export const LobbyRoomScreen = ({
     setDeckBusy(true)
     setMessage("Deck importeren…")
     try {
-      const imported = await importArchidektDeck(deckUrl.trim())
+      const imported = await importDeckFromUrl(dispatch, deckUrl.trim())
       const deck = createImportedDeckSnapshot(imported)
       await repositories.decks.save(deck, deckOwnerId)
       setDecks(current => [
@@ -198,11 +202,7 @@ export const LobbyRoomScreen = ({
       setDeckUrl("")
       setMessage(`${deck.name} is lokaal geïmporteerd. Kies ‘Deck gereed’.`)
     } catch (error) {
-      setMessage(
-        error instanceof DeckImportError
-          ? error.message
-          : "Het deck kon niet worden geïmporteerd.",
-      )
+      setMessage(importedDeckErrorMessage(error))
     } finally {
       setDeckBusy(false)
     }

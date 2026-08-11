@@ -1,14 +1,22 @@
 import { expect, test, type Page } from "@playwright/test"
-import { archidektFixture } from "../src/archidekt/fixtures"
+import { importedDeckFixture } from "../src/utils/importedDeckFixture"
 
 const mockImports = async (page: Page) => {
-  await page.route("**/api/import/archidekt/**", async route => {
-    const deckId = new URL(route.request().url()).pathname.split("/").at(-1)
+  await page.route("**/graphql", async route => {
+    const body = route.request().postDataJSON() as {
+      variables?: { url?: string }
+    }
+    const deckId =
+      /\/decks\/(\d+)/.exec(body.variables?.url ?? "")?.[1] ?? "unknown"
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        ...structuredClone(archidektFixture),
-        name: `Deck ${deckId}`,
+        data: {
+          deckFromUrl: {
+            cacheStatus: "MISS",
+            deck: importedDeckFixture(deckId, `Deck ${deckId}`),
+          },
+        },
       }),
     })
   })

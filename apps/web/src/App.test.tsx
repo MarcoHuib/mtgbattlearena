@@ -1,36 +1,36 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, vi } from "vitest"
 import { App } from "./App"
-import { archidektFixture, archidektTokenFixture } from "./archidekt/fixtures"
+import { importedDeckFixture } from "./utils/importedDeckFixture"
 import { renderWithProviders } from "./utils/test-utils"
 
 beforeEach(() => {
   window.history.replaceState({}, "", "/")
-  vi.spyOn(globalThis, "fetch").mockImplementation(input => {
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const url =
       typeof input === "string"
         ? input
         : input instanceof URL
           ? input.toString()
           : input.url
-    if (url.includes("/api/import/archidekt/tokens")) {
+    if (url.includes("/graphql")) {
+      const body = JSON.parse(
+        typeof init?.body === "string" ? init.body : "{}",
+      ) as { variables?: { url?: string } }
+      const deckId =
+        /\/decks\/(\d+)/.exec(body.variables?.url ?? "")?.[1] ?? "unknown"
       return Promise.resolve(
-        new Response(JSON.stringify(archidektTokenFixture), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
+        Response.json({
+          data: {
+            deckFromUrl: {
+              cacheStatus: "MISS",
+              deck: importedDeckFixture(
+                deckId,
+                deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
+              ),
+            },
+          },
         }),
-      )
-    }
-    if (url.includes("/api/import/archidekt/")) {
-      const deckId = url.split("/").at(-1)
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            ...archidektFixture,
-            name: deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
       )
     }
     return Promise.resolve(new Response(null, { status: 503 }))
@@ -194,7 +194,7 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
     libraryDefinition?.name ?? "",
   )
   expect(
-    within(libraryDialog).getByText(libraryDefinition?.name ?? ""),
+    within(libraryDialog).getAllByText(libraryDefinition?.name ?? "")[0],
   ).toBeInTheDocument()
   const libraryCardView = within(libraryDialog).getByLabelText(
     `${libraryDefinition?.name ?? ""}, Library`,

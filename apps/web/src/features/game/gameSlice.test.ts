@@ -1,5 +1,4 @@
-import { archidektFixture } from "../../archidekt/fixtures"
-import { normalizeArchidektDeck } from "../../archidekt/adapter"
+import { importedDeckFixture } from "../../utils/importedDeckFixture"
 import { createDeckSnapshot } from "@mtg/game-core/decks"
 import { createGame } from "@mtg/game-core/game"
 import {
@@ -20,7 +19,7 @@ import {
 } from "./gameSlice"
 
 test("kan de laatste relevante gameactie ongedaan maken", () => {
-  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const imported = importedDeckFixture("1")
   const deck = createDeckSnapshot(imported, "deck")
   let id = 0
   const game = createGame([deck, deck], {
@@ -39,7 +38,7 @@ test("kan de laatste relevante gameactie ongedaan maken", () => {
 })
 
 test("undo en redo herstellen de actieve kaartzijde", () => {
-  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const imported = importedDeckFixture("1")
   const deck = createDeckSnapshot(imported, "deck")
   let id = 0
   const created = createGame([deck, deck], {
@@ -80,7 +79,7 @@ test("undo en redo herstellen de actieve kaartzijde", () => {
 })
 
 test("undo en redo behandelen multiselect als één relevante spelactie", () => {
-  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const imported = importedDeckFixture("1")
   const deck = createDeckSnapshot(imported, "deck")
   let id = 0
   const game = createGame([deck, deck], {
@@ -119,7 +118,7 @@ test("undo en redo behandelen multiselect als één relevante spelactie", () => 
 })
 
 test("undo en redo herstellen attachments en permanente groepen", () => {
-  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const imported = importedDeckFixture("1")
   const deck = createDeckSnapshot(imported, "deck")
   let id = 0
   const game = createGame([deck, deck], {
@@ -165,7 +164,7 @@ test("undo en redo herstellen attachments en permanente groepen", () => {
 })
 
 test("undo en redo herstellen spelertrackers en centrale matchstatus", () => {
-  const imported = normalizeArchidektDeck(archidektFixture, "1")
+  const imported = importedDeckFixture("1")
   const deck = createDeckSnapshot(imported, "deck")
   let id = 0
   const game = createGame([deck, deck], {

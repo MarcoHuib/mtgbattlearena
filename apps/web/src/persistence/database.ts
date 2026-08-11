@@ -58,6 +58,27 @@ class BattleDatabase extends Dexie {
           })),
         )
       })
+    this.version(3)
+      .stores({
+        games: "id, savedAt",
+        decks: "id, sourceId, importedAt",
+        deckOwners: "key, deckId, ownerId, [ownerId+deckId]",
+        offlinePackages: "id, currentGameId, updatedAt",
+        assets: "assetKey, cacheKind, cachedAt",
+      })
+      .upgrade(async transaction => {
+        const table = transaction.table<
+          DeckSnapshot & { sourceDeckId?: string }
+        >("decks")
+        await table.toCollection().modify(deck => {
+          if (deck.sourceId) return
+          const sourceId = deck.sourceDeckId ?? deck.id
+          deck.sourceId = sourceId
+          deck.sourceUrl = `https://archidekt.com/decks/${encodeURIComponent(sourceId)}`
+          deck.sourceHash = `legacy-${deck.id}`
+          delete deck.sourceDeckId
+        })
+      })
   }
 }
 

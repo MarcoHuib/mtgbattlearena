@@ -35,6 +35,55 @@ query Lobby($id: ID!) {
   }
 }
 
+query DeckFromUrl($url: String!, $sourceHash: String) {
+  deckFromUrl(url: $url, sourceHash: $sourceHash) {
+    cacheStatus
+    deck {
+      source
+      sourceId
+      sourceUrl
+      sourceHash
+      name
+      format
+      importedAt
+      cards {
+        definitionId
+        quantity
+        isCommander
+      }
+      definitions {
+        id
+        name
+        scryfallId
+        oracleId
+        layout
+        faces {
+          name
+          typeLine
+          oracleText
+          imageUrl
+        }
+        imageRefs {
+          assetKey
+          faceIndex
+          variant
+          url
+        }
+        oracleText
+        typeLine
+        manaValue
+        token {
+          kind
+          name
+          power
+          toughness
+          source
+        }
+      }
+    }
+  }
+}
+
 mutation CreateLobby($input: CreateLobbyInput!) {
   createLobby(input: $input) {
     id

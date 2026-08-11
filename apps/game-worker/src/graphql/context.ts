@@ -1,4 +1,5 @@
 import type { PersonalGameSnapshot, ServerEvent } from "@mtg/game-protocol"
+import type { ImportedDeck } from "@mtg/game-core/types"
 import type { Env, LobbyDurableObjectStub, VerifiedIdentity } from "../types"
 
 export type GraphQLContext = {
@@ -6,6 +7,13 @@ export type GraphQLContext = {
   env: Env
   identity: VerifiedIdentity | null
   lobby: LobbyDurableObjectStub
+  importDeck(
+    url: string,
+    sourceHash?: string,
+  ): Promise<{
+    cacheStatus: "HIT" | "MISS" | "REFRESHED"
+    deck: ImportedDeck
+  }>
   personalSnapshot(
     gameId: string,
     identity: VerifiedIdentity,

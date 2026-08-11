@@ -10,7 +10,7 @@ import {
   changePlayerPoison,
   changePlayerTracker,
   completeFirstPlayerRoll,
-  createFirstPlayerRollState,
+  createGameForPlayers,
   createKnownToken,
   createCardGroup,
   createToken,
@@ -36,7 +36,6 @@ import {
   setPlayerCitysBlessing,
   setPlayerDisabled,
   setPlayerTrackerVisibility,
-  shuffle,
   shuffleLibrary,
   switchCardFace,
   toggleCardTapped,
@@ -50,11 +49,11 @@ import type {
   CardDefinition,
   CardGroup,
   CardInstance,
+  DeckSnapshot,
   GameMode,
   GameState,
   PlayerId,
   PlayerState,
-  Zone,
 } from "@mtg/game-core/types"
 import {
   onlineDeckSubmissionSchema,
@@ -143,32 +142,78 @@ const defaultOptions = (): ServerAdapterOptions => ({
   createId: prefix => `${prefix}-${crypto.randomUUID()}`,
 })
 
-const emptyZones = (): PlayerState["zones"] => ({
-  library: [],
-  hand: [],
-  battlefield: [],
-  graveyard: [],
-  exile: [],
-  command: [],
-})
-
-const createPlayer = (
-  playerId: string,
-  displayName: string,
-  deckSnapshotId: string,
-): PlayerState => ({
-  id: playerId,
-  name: displayName,
-  deckSnapshotId,
-  life: 40,
-  poison: 0,
-  trackers: { energy: 0, experience: 0, rad: 0 },
-  visibleTrackers: { energy: false, experience: false, rad: false },
-  citysBlessing: false,
-  disabled: false,
-  commanderTax: {},
-  commanderDamage: {},
-  zones: emptyZones(),
+export const deckSnapshotFromOnlineSubmission = (
+  submission: OnlineDeckSubmission,
+): DeckSnapshot => ({
+  id: submission.deckSnapshotId,
+  schemaVersion: 1,
+  source: "archidekt",
+  sourceId: submission.deckSnapshotId,
+  sourceUrl: `https://local.invalid/imported/${encodeURIComponent(submission.deckSnapshotId)}`,
+  sourceHash: "online-validated-submission",
+  name: submission.deckName,
+  importedAt: "1970-01-01T00:00:00.000Z",
+  cards: submission.cards.map(card => ({
+    definitionId: card.definitionId,
+    quantity: card.quantity,
+    isCommander: card.isCommander,
+  })),
+  definitions: [
+    ...submission.cards.map(card => {
+      const faces = card.faces ?? [
+        { name: card.name, typeLine: card.typeLine, imageUrl: card.imageUrl },
+      ]
+      return {
+        id: card.definitionId,
+        name: card.name,
+        scryfallId: card.scryfallId,
+        typeLine: card.typeLine,
+        faces,
+        imageRefs: faces.flatMap((face, faceIndex) =>
+          face.imageUrl
+            ? [
+                {
+                  assetKey: `${card.definitionId}:${faceIndex}:normal`,
+                  faceIndex,
+                  variant: "normal" as const,
+                  url: face.imageUrl,
+                },
+              ]
+            : [],
+        ),
+      }
+    }),
+    ...submission.tokens.map(token => ({
+      id: token.definitionId,
+      name: token.name,
+      scryfallId: token.scryfallId,
+      typeLine: token.typeLine,
+      faces: [
+        {
+          name: token.name,
+          typeLine: token.typeLine,
+          imageUrl: token.imageUrl,
+        },
+      ],
+      imageRefs: token.imageUrl
+        ? [
+            {
+              assetKey: `${token.definitionId}:0:normal`,
+              faceIndex: 0,
+              variant: "normal" as const,
+              url: token.imageUrl,
+            },
+          ]
+        : [],
+      token: {
+        kind: token.kind,
+        name: token.name,
+        power: token.power,
+        toughness: token.toughness,
+        source: "deck" as const,
+      },
+    })),
+  ],
 })
 
 const definitionKey = (playerId: string, definitionId: string) =>
@@ -220,148 +265,41 @@ export const createAuthoritativeGame = (
 ): AuthoritativeGameState => {
   const seed = onlineGameSeedSchema.parse(input)
   const options = { ...defaultOptions(), ...providedOptions }
-  const createdAt = options.now()
   const turnOrder = seed.players.map(player => player.playerId)
-  const players: Record<PlayerId, PlayerState> = {}
-  const playerUids: Record<PlayerId, string> = {}
-  const cardDefinitionsById: Record<string, CardDefinition> = {}
-  const cardsById: Record<string, CardInstance> = {}
-
-  for (const playerSeed of seed.players) {
-    const player = createPlayer(
-      playerSeed.playerId,
-      playerSeed.displayName,
-      playerSeed.deckSnapshotId,
-    )
-    players[player.id] = player
-    playerUids[player.id] = playerSeed.uid
-
-    for (const entry of playerSeed.cards) {
-      const keyedDefinitionId = definitionKey(
-        playerSeed.playerId,
-        entry.definitionId,
-      )
-      const faces = entry.faces ?? [
-        {
-          name: entry.name,
-          typeLine: entry.typeLine,
-          imageUrl: entry.imageUrl,
-        },
-      ]
-      cardDefinitionsById[keyedDefinitionId] = {
-        id: keyedDefinitionId,
-        name: entry.name,
-        scryfallId: entry.scryfallId,
-        typeLine: entry.typeLine,
-        faces,
-        imageRefs: faces.flatMap((face, faceIndex) =>
-          face.imageUrl
-            ? [
-                {
-                  assetKey: `${keyedDefinitionId}:${faceIndex}:normal`,
-                  faceIndex,
-                  variant: "normal" as const,
-                  url: face.imageUrl,
-                },
-              ]
-            : [],
-        ),
-      }
-      for (let copy = 0; copy < entry.quantity; copy += 1) {
-        const instanceId = options.createId("online-card")
-        const zone: Zone = entry.isCommander ? "command" : "library"
-        cardsById[instanceId] = {
-          instanceId,
-          definitionId: keyedDefinitionId,
-          ownerId: player.id,
-          controllerId: player.id,
-          zone,
-          tapped: false,
-          faceDown: false,
-          activeFaceIndex: 0,
-          counters: {},
-          isCommander: entry.isCommander,
-        }
-        player.zones[zone].push(instanceId)
-        if (entry.isCommander) player.commanderTax[instanceId] = 0
-      }
-    }
-    for (const token of playerSeed.tokens) {
-      const keyedDefinitionId = definitionKey(
-        playerSeed.playerId,
-        token.definitionId,
-      )
-      cardDefinitionsById[keyedDefinitionId] = {
-        id: keyedDefinitionId,
-        name: token.name,
-        scryfallId: token.scryfallId,
-        typeLine: token.typeLine,
-        faces: [
-          {
-            name: token.name,
-            typeLine: token.typeLine,
-            imageUrl: token.imageUrl,
-          },
-        ],
-        imageRefs: token.imageUrl
-          ? [
-              {
-                assetKey: `${keyedDefinitionId}:0:normal`,
-                faceIndex: 0,
-                variant: "normal",
-                url: token.imageUrl,
-              },
-            ]
-          : [],
-        token: {
-          kind: token.kind,
-          name: token.name,
-          power: token.power,
-          toughness: token.toughness,
-          source: "deck",
-        },
-      }
-    }
-    player.zones.library = shuffle(player.zones.library, options.random)
-  }
-
-  let game: AuthoritativeGameState = {
+  const core = createGameForPlayers(
+    seed.players.map(player => ({
+      id: player.playerId,
+      name: player.displayName,
+      deck: deckSnapshotFromOnlineSubmission(player),
+    })),
+    { random: options.random, createId: options.createId, now: options.now() },
+  )
+  return {
     schemaVersion: 5,
     mode: "online",
     gameId: seed.gameId,
     version: 0,
     title: seed.title,
-    createdAt,
-    updatedAt: createdAt,
+    createdAt: core.createdAt,
+    updatedAt: core.updatedAt,
     turnOrder,
-    activePlayerId: turnOrder[0] ?? "",
-    turnNumber: 1,
-    phase: "beginning",
-    matchStatus: {
-      monarchPlayerId: null,
-      initiativePlayerId: null,
-      dayNight: "none",
-    },
-    firstPlayerRoll: createFirstPlayerRollState(turnOrder),
-    openingHands: Object.fromEntries(
-      turnOrder.map(playerId => [playerId, { mulliganCount: 0, kept: false }]),
-    ),
+    activePlayerId: core.activePlayerId,
+    turnNumber: core.turnNumber,
+    phase: core.phase,
+    matchStatus: core.matchStatus,
+    firstPlayerRoll: core.firstPlayerRoll,
+    openingHands: core.openingHands,
     libraryRevealCounts: Object.fromEntries(
       turnOrder.map(playerId => [playerId, 0]),
     ),
-    players,
-    playerUids,
-    cardDefinitionsById,
-    cardsById,
-    groupsById: {},
+    players: core.players,
+    playerUids: Object.fromEntries(
+      seed.players.map(player => [player.playerId, player.uid]),
+    ),
+    cardDefinitionsById: core.cardDefinitionsById,
+    cardsById: core.cardsById,
+    groupsById: core.groupsById,
   }
-  for (const playerId of turnOrder) {
-    game = fromCoreGame(
-      game,
-      drawCards(toCoreGame(game), playerId, 7, createdAt),
-    )
-  }
-  return game
 }
 
 export const migrateAuthoritativeGame = (

@@ -8,6 +8,9 @@ const publicLobbiesHash = Object.entries(persistedOperations).find(
 )?.[0]
 if (!publicLobbiesHash)
   throw new Error("PublicLobbies manifest entry ontbreekt.")
+const deckImportHash = Object.entries(persistedOperations).find(
+  ([, operation]) => operation.operationName === "DeckFromUrl",
+)?.[0]
 
 const request = (body: unknown) =>
   new Request("https://api.example/graphql", {
@@ -33,6 +36,10 @@ test("bekende persisted operation wordt server-side naar het registerdocument ve
   expect(body.operationName).toBe("PublicLobbies")
   expect(body.query).toContain("query PublicLobbies")
   expect(body.query).toContain("publicLobbies")
+})
+
+test("de provider-neutrale deckimport is als persisted operation geregistreerd", () => {
+  expect(deckImportHash).toMatch(/^[a-f0-9]{64}$/)
 })
 
 test("bekende persisted operation wordt in productie uitgevoerd", async () => {

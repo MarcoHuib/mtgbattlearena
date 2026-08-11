@@ -121,14 +121,6 @@ const eslintConfig = config(
     },
   },
   {
-    name: "import-worker-javascript",
-    files: ["apps/import-worker/src/**/*.js"],
-    extends: [configs.disableTypeChecked],
-    languageOptions: {
-      globals: globals.serviceworker,
-    },
-  },
-  {
     name: "import-worker-scripts",
     files: ["apps/import-worker/scripts/**/*.mjs"],
     extends: [configs.disableTypeChecked],
