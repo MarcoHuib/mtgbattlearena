@@ -1,6 +1,11 @@
 import { describe, expect, test, vi } from "vitest"
 import { fingerprintArchidektSource } from "@mtg/deck-source"
-import { createDeckImportService } from "../src/deck-import-service"
+import {
+  createDeckImportService,
+  importedDeckCacheKey,
+  type DeckImportCache,
+  type DeckImportDiagnostic,
+} from "../src/deck-import-service"
 import { parseArchidektUrl } from "../src/providers/archidekt"
 
 const rawDeck = (quantity = 1, commander = true) => ({
@@ -47,7 +52,7 @@ class MemoryCache {
     return Promise.resolve()
   }
 }
-const fetcher = (deck = rawDeck()) =>
+const fetcher = (deck: unknown = rawDeck()) =>
   vi.fn<typeof fetch>(input => {
     const url =
       typeof input === "string"
@@ -174,6 +179,111 @@ describe("application DTO cache", () => {
     }).importFromUrl("https://archidekt.com/decks/123")
     expect(retained.deck.sourceHash).toBe(original.deck.sourceHash)
   })
+
+  test("negeert een legacy raw cache-entry en schrijft een geldig v2 DTO", async () => {
+    const cache = new MemoryCache()
+    const key = importedDeckCacheKey("archidekt", "123")
+    expect(key.url).toContain("/imported-deck/v2/archidekt/123")
+    expect(new URL(key.url).hostname).not.toBe("cache.internal")
+    cache.values.set(key.url, Response.json(rawDeck()))
+    const diagnostics: DeckImportDiagnostic[] = []
+    const upstream = fetcher(rawDeck(2))
+    const result = await createDeckImportService({
+      cache,
+      fetcher: upstream,
+      onDiagnostic: item => diagnostics.push(item),
+    }).importFromUrl("https://archidekt.com/decks/123")
+    expect(result.cacheStatus).toBe("MISS")
+    expect(result.deck.cards[0]?.quantity).toBe(2)
+    expect(upstream).toHaveBeenCalledTimes(2)
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "INVALID_CACHE_ENTRY",
+        phase: "cache_read",
+      }),
+    )
+    const cachedValue: unknown = await cache.values.get(key.url)?.clone().json()
+    expect(cachedValue).toMatchObject({ source: "archidekt" })
+    expect((cachedValue as { sourceHash?: unknown }).sourceHash).toMatch(
+      /^[a-f0-9]{64}$/,
+    )
+  })
+
+  test("cachefouten blokkeren een authoritative import niet", async () => {
+    const diagnostics: DeckImportDiagnostic[] = []
+    const cache: DeckImportCache = {
+      match: () => Promise.reject(new Error("reserved cache host")),
+      put: () => Promise.reject(new Error("cache unavailable")),
+    }
+    const result = await createDeckImportService({
+      cache,
+      fetcher: fetcher(),
+      onDiagnostic: item => diagnostics.push(item),
+    }).importFromUrl("https://archidekt.com/decks/123")
+    expect(result.deck.name).toBe("Provider Neutral")
+    expect(diagnostics.map(item => item.code)).toEqual([
+      "IMPORT_CACHE_READ_FAILED",
+      "IMPORT_CACHE_WRITE_FAILED",
+    ])
+  })
+})
+
+test("productierepro 24765444 en een geldige response van circa 200 KB importeren", async () => {
+  const reproduction = {
+    id: 24765444,
+    name: "Primal Stampede",
+    padding: "x".repeat(195_000),
+    cards: [
+      {
+        quantity: 1,
+        categories: [{ name: "Commander" }],
+        card: {
+          uid: "commander",
+          name: "Slinza, the Spiked Stampede",
+          oracleCard: {
+            oracleId: 999,
+            typeLine: "Legendary Creature — Beast",
+            tokens: [1354, 20220, 42175, 4855],
+          },
+        },
+      },
+    ],
+  }
+  const upstream = fetcher(reproduction)
+  const result = await createDeckImportService({
+    cache: new MemoryCache(),
+    fetcher: upstream,
+  }).importFromUrl("https://archidekt.com/decks/24765444/primal_stampede")
+  expect(result.deck).toMatchObject({
+    sourceId: "24765444",
+    name: "Primal Stampede",
+  })
+  expect(upstream).toHaveBeenCalledTimes(2)
+  const tokenInput = upstream.mock.calls[1]?.[0]
+  const tokenUrl =
+    typeof tokenInput === "string"
+      ? tokenInput
+      : tokenInput instanceof URL
+        ? tokenInput.href
+        : tokenInput?.url
+  expect(tokenUrl).toContain("oracleCardIds=1354%2C20220%2C42175%2C4855")
+})
+
+test("ongeldige providerdata faalt veilig met diagnostische fase", async () => {
+  const diagnostics: DeckImportDiagnostic[] = []
+  await expect(
+    createDeckImportService({
+      cache: new MemoryCache(),
+      fetcher: fetcher({ name: "broken", cards: [{ nope: true }] }),
+      onDiagnostic: item => diagnostics.push(item),
+    }).importFromUrl("https://archidekt.com/decks/123"),
+  ).rejects.toMatchObject({ code: "INVALID_DECK_DATA" })
+  expect(diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "INVALID_PROVIDER_RESPONSE",
+      phase: "mapping",
+    }),
+  )
 })
 
 test("gedeelde bronfingerprint is orde-onafhankelijk en detecteert deckwijzigingen", async () => {

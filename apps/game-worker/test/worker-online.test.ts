@@ -4,6 +4,7 @@ import {
   type FirebaseClaims,
 } from "../src/auth"
 import worker, {
+  importDeckThroughService,
   isOriginAllowed,
   readAppCheckEnforcementMode,
 } from "../src/index"
@@ -13,6 +14,75 @@ import {
   SocketTicketService,
 } from "../src/tickets"
 import type { Env } from "../src/types"
+
+test("deckimport gebruikt het private service-bindingcontract zonder browsercredentials", async () => {
+  const service = {
+    fetch: vi.fn(async (request: Request) => {
+      expect(request.url).toBe("https://import.internal/internal/deck-import")
+      expect(request.method).toBe("POST")
+      expect(request.headers.get("Content-Type")).toBe("application/json")
+      expect(request.headers.has("Authorization")).toBe(false)
+      expect(request.headers.has("X-Firebase-AppCheck")).toBe(false)
+      expect(await request.json()).toEqual({
+        url: "https://archidekt.com/decks/24765444/primal_stampede",
+        sourceHash: "hint",
+      })
+      return Response.json({
+        cacheStatus: "HIT",
+        deck: {
+          source: "archidekt",
+          sourceId: "24765444",
+          sourceUrl: "https://archidekt.com/decks/24765444",
+          sourceHash: "server-hash",
+          name: "Primal Stampede",
+          importedAt: "2026-08-11T00:00:00.000Z",
+          cards: [],
+          definitions: [],
+        },
+      })
+    }),
+  }
+  await expect(
+    importDeckThroughService(
+      service,
+      "https://archidekt.com/decks/24765444/primal_stampede",
+      "hint",
+      "release-test",
+    ),
+  ).resolves.toMatchObject({ cacheStatus: "HIT" })
+  expect(service.fetch).toHaveBeenCalledOnce()
+})
+
+test("interne importfouten blijven publiek gemaskeerd maar worden gestructureerd gelogd", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined)
+  const service = {
+    fetch: () =>
+      Promise.resolve(
+        Response.json(
+          {
+            error: {
+              code: "FINGERPRINT_FAILED",
+              message: "crypto internals",
+            },
+          },
+          { status: 502 },
+        ),
+      ),
+  }
+  await expect(
+    importDeckThroughService(service, "https://archidekt.com/decks/1", "hint"),
+  ).rejects.toMatchObject({
+    message: "Het deck kon niet veilig worden geïmporteerd.",
+    extensions: { code: "DECK_IMPORT_FAILED" },
+  })
+  expect(log).toHaveBeenCalledWith(
+    "Deck import service rejected request.",
+    expect.objectContaining({
+      code: "FINGERPRINT_FAILED",
+      importWorkerStatus: 502,
+    }),
+  )
+})
 
 test("Firebase-claims worden aan project, issuer en tijd gebonden", () => {
   const claims: FirebaseClaims = {
@@ -339,7 +409,9 @@ test("GraphQL beschermt lobbydetails en blokkeert aliasmisbruik", async () => {
 })
 
 test("GraphQL geeft stabiele fouten voor ongeldige Auth en App Check", async () => {
-  const invalidAuthRequest = graphqlRequest("query PublicLobbies { publicLobbies { id } }")
+  const invalidAuthRequest = graphqlRequest(
+    "query PublicLobbies { publicLobbies { id } }",
+  )
   invalidAuthRequest.headers.set("Authorization", "Bearer malformed")
   const invalidAuth = await worker.fetch(invalidAuthRequest, graphqlEnv)
   expect(invalidAuth.status).toBe(401)

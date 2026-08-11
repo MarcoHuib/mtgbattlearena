@@ -310,6 +310,67 @@ const gameSnapshotValue = (
   return result.value
 }
 
+export const importDeckThroughService = async (
+  service: Env["IMPORT"],
+  url: string,
+  sourceHash: string | undefined,
+  releaseVersion = "unknown",
+) => {
+  let response: Response
+  try {
+    response = await service.fetch(
+      new Request("https://import.internal/internal/deck-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, sourceHash }),
+      }),
+    )
+  } catch {
+    console.error("Deck import service request failed.", {
+      event: "deck_import_service_failed",
+      code: "IMPORT_SERVICE_ERROR",
+      releaseVersion,
+    })
+    throw new GraphQLError("Het deck kon niet veilig worden geïmporteerd.", {
+      extensions: { code: "DECK_IMPORT_FAILED" },
+    })
+  }
+  let body: {
+    cacheStatus?: "HIT" | "MISS" | "REFRESHED"
+    deck?: ImportedDeck
+    error?: { code?: string; message?: string }
+  }
+  try {
+    body = (await response.json()) as typeof body
+  } catch {
+    body = {}
+  }
+  if (!response.ok || !body.deck || !body.cacheStatus) {
+    console.error("Deck import service rejected request.", {
+      event: "deck_import_service_rejected",
+      code: body.error?.code ?? "IMPORT_SERVICE_ERROR",
+      importWorkerStatus: response.status,
+      releaseVersion,
+    })
+    const publicProviderError = Boolean(
+      response.status < 500 && body.error?.code && body.error.message,
+    )
+    throw new GraphQLError(
+      publicProviderError
+        ? (body.error?.message ?? "Het deck kon niet worden geïmporteerd.")
+        : "Het deck kon niet veilig worden geïmporteerd.",
+      {
+        extensions: {
+          code: publicProviderError
+            ? (body.error?.code ?? "DECK_IMPORT_FAILED")
+            : "DECK_IMPORT_FAILED",
+        },
+      },
+    )
+  }
+  return { cacheStatus: body.cacheStatus, deck: body.deck }
+}
+
 const graphqlRequest = async (request: Request, env: Env) => {
   if (request.method !== "POST") {
     return error(405, "METHOD_NOT_ALLOWED", "Gebruik POST voor GraphQL.")
@@ -379,31 +440,8 @@ const graphqlRequest = async (request: Request, env: Env) => {
     }
   }
   const lobby = env.LOBBY.getByName("global")
-  const importDeck = async (url: string, sourceHash?: string) => {
-    const response = await env.IMPORT.fetch(
-      new Request("https://import.internal/internal/deck-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, sourceHash }),
-      }),
-    )
-    const body = (await response.json()) as {
-      cacheStatus?: "HIT" | "MISS" | "REFRESHED"
-      deck?: ImportedDeck
-      error?: { code?: string; message?: string }
-    }
-    if (!response.ok || !body.deck || !body.cacheStatus) {
-      throw new GraphQLError(
-        body.error?.message ?? "Het deck kon niet worden geïmporteerd.",
-        {
-          extensions: {
-            code: body.error?.code ?? "DECK_IMPORT_FAILED",
-          },
-        },
-      )
-    }
-    return { cacheStatus: body.cacheStatus, deck: body.deck }
-  }
+  const importDeck = (url: string, sourceHash?: string) =>
+    importDeckThroughService(env.IMPORT, url, sourceHash, env.RELEASE_VERSION)
   const yoga = createGraphQLYoga({
     request: resolvedRequest,
     env,

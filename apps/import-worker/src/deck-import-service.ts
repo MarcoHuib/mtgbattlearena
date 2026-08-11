@@ -21,7 +21,44 @@ export type DeckImportCache = {
 export type DeckImportServiceOptions = {
   cache: DeckImportCache
   fetcher?: typeof fetch
+  onDiagnostic?: (diagnostic: DeckImportDiagnostic) => void
 }
+
+export type DeckImportDiagnostic = {
+  code:
+    | "INVALID_CACHE_ENTRY"
+    | "IMPORT_CACHE_READ_FAILED"
+    | "IMPORT_CACHE_WRITE_FAILED"
+    | "PROVIDER_FETCH_FAILED"
+    | "INVALID_PROVIDER_RESPONSE"
+    | "FINGERPRINT_FAILED"
+    | "MAPPING_FAILED"
+  phase:
+    "cache_read" | "provider_fetch" | "mapping" | "fingerprint" | "cache_write"
+  provider: string
+  sourceId: string
+}
+
+const isImportedDeck = (value: unknown): value is ImportedDeck => {
+  if (!value || typeof value !== "object") return false
+  const deck = value as Partial<ImportedDeck>
+  return (
+    typeof deck.source === "string" &&
+    typeof deck.sourceId === "string" &&
+    typeof deck.sourceUrl === "string" &&
+    typeof deck.sourceHash === "string" &&
+    /^[a-f0-9]{64}$/.test(deck.sourceHash) &&
+    typeof deck.name === "string" &&
+    typeof deck.importedAt === "string" &&
+    Array.isArray(deck.cards) &&
+    Array.isArray(deck.definitions)
+  )
+}
+
+export const importedDeckCacheKey = (provider: string, sourceId: string) =>
+  new Request(
+    `https://api.mtgbattlearena.nl/__internal-cache/imported-deck/v2/${encodeURIComponent(provider)}/${encodeURIComponent(sourceId)}`,
+  )
 
 const providers = [archidektProvider]
 const upstreamJson = async (
@@ -77,6 +114,7 @@ const upstreamJson = async (
 export const createDeckImportService = ({
   cache,
   fetcher = fetch,
+  onDiagnostic = () => undefined,
 }: DeckImportServiceOptions) => ({
   async importFromUrl(
     inputUrl: string,
@@ -102,40 +140,94 @@ export const createDeckImportService = ({
         400,
       )
     const source = provider.parseUrl(inputUrl)
-    const cacheKey = new Request(
-      `https://cache.internal/imported-decks/${source.source}/${source.sourceId}`,
-    )
-    const cachedResponse = await cache.match(cacheKey)
-    const cached = cachedResponse
-      ? ((await cachedResponse.json()) as ImportedDeck)
-      : null
+    const diagnostic = (
+      code: DeckImportDiagnostic["code"],
+      phase: DeckImportDiagnostic["phase"],
+    ) => {
+      onDiagnostic({
+        code,
+        phase,
+        provider: source.source,
+        sourceId: source.sourceId,
+      })
+    }
+    const cacheKey = importedDeckCacheKey(source.source, source.sourceId)
+    let cached: ImportedDeck | null = null
+    try {
+      const cachedResponse = await cache.match(cacheKey)
+      if (cachedResponse) {
+        const candidate: unknown = await cachedResponse.json()
+        if (
+          isImportedDeck(candidate) &&
+          candidate.source === source.source &&
+          candidate.sourceId === source.sourceId
+        )
+          cached = candidate
+        else diagnostic("INVALID_CACHE_ENTRY", "cache_read")
+      }
+    } catch {
+      // Cache availability must never prevent an authoritative import.
+      diagnostic("IMPORT_CACHE_READ_FAILED", "cache_read")
+    }
     if (cached && (!clientHash || clientHash === cached.sourceHash))
       return { cacheStatus: "HIT", deck: cached }
-    const rawDeck = await upstreamJson(
-      `https://archidekt.com/api/decks/${source.sourceId}/`,
-      fetcher,
-    )
+    let rawDeck: unknown
+    try {
+      rawDeck = await upstreamJson(
+        `https://archidekt.com/api/decks/${source.sourceId}/`,
+        fetcher,
+      )
+    } catch (error) {
+      diagnostic("PROVIDER_FETCH_FAILED", "provider_fetch")
+      throw error
+    }
     const tokenIds = archidektTokenIdsForFingerprint(rawDeck)
-    const rawTokens = tokenIds.length
-      ? await upstreamJson(
-          `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`,
-          fetcher,
-        )
-      : null
-    const deck = mapArchidektDeck(
-      rawDeck,
-      rawTokens,
-      source,
-      new Date().toISOString(),
-    )
+    let rawTokens: unknown
+    try {
+      rawTokens = tokenIds.length
+        ? await upstreamJson(
+            `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`,
+            fetcher,
+          )
+        : null
+    } catch (error) {
+      diagnostic("PROVIDER_FETCH_FAILED", "provider_fetch")
+      throw error
+    }
+    let deck: ImportedDeck
+    try {
+      deck = mapArchidektDeck(
+        rawDeck,
+        rawTokens,
+        source,
+        new Date().toISOString(),
+      )
+    } catch (error) {
+      diagnostic(
+        error instanceof DeckProviderError && error.code === "INVALID_DECK_DATA"
+          ? "INVALID_PROVIDER_RESPONSE"
+          : "MAPPING_FAILED",
+        "mapping",
+      )
+      throw error
+    }
     // Never persist the client hint: independently hash the fetched provider data.
-    deck.sourceHash = await fingerprintArchidektSource(rawDeck, rawTokens)
-    await cache.put(
-      cacheKey,
-      Response.json(deck, {
-        headers: { "Cache-Control": "public, max-age=31536000" },
-      }),
-    )
+    try {
+      deck.sourceHash = await fingerprintArchidektSource(rawDeck, rawTokens)
+    } catch (error) {
+      diagnostic("FINGERPRINT_FAILED", "fingerprint")
+      throw error
+    }
+    try {
+      await cache.put(
+        cacheKey,
+        Response.json(deck, {
+          headers: { "Cache-Control": "public, max-age=31536000" },
+        }),
+      )
+    } catch {
+      diagnostic("IMPORT_CACHE_WRITE_FAILED", "cache_write")
+    }
     return { cacheStatus: cached ? "REFRESHED" : "MISS", deck }
   },
 })

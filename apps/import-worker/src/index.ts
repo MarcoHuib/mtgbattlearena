@@ -83,6 +83,13 @@ export default {
         }
         const result = await createDeckImportService({
           cache: (caches as CloudflareCacheStorage).default,
+          onDiagnostic: diagnostic => {
+            console.error("Deck import diagnostic.", {
+              event: "deck_import_diagnostic",
+              ...diagnostic,
+              releaseVersion: env.RELEASE_VERSION ?? "unknown",
+            })
+          },
         }).importFromUrl(body.url, body.sourceHash)
         return new Response(JSON.stringify(result), {
           headers: {
@@ -91,6 +98,20 @@ export default {
           },
         })
       } catch (error) {
+        const sourceId =
+          typeof (error as { sourceId?: unknown })?.sourceId === "string"
+            ? (error as { sourceId: string }).sourceId
+            : undefined
+        console.error("Deck import failed.", {
+          event: "deck_import_failed",
+          code:
+            error instanceof DeckProviderError
+              ? error.code
+              : "DECK_IMPORT_FAILED",
+          provider: "archidekt",
+          ...(sourceId ? { sourceId } : {}),
+          releaseVersion: env.RELEASE_VERSION ?? "unknown",
+        })
         if (error instanceof DeckProviderError)
           return jsonError(error.status, error.code, error.message, corsHeaders)
         return jsonError(
@@ -250,7 +271,7 @@ import {
   DeckProviderError,
 } from "./deck-import-service.ts"
 
-type Env = { ALLOWED_ORIGIN?: string }
+type Env = { ALLOWED_ORIGIN?: string; RELEASE_VERSION?: string }
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void }
 type CloudflareCacheStorage = CacheStorage & { default: Cache }
 type ImportRequestBody = { url?: unknown; sourceHash?: unknown }
