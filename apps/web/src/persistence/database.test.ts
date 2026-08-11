@@ -37,8 +37,12 @@ test("verwijdert alleen de koppeling van de huidige eigenaar", async () => {
   await repositories.decks.delete(shared.id, "user-a")
 
   expect(await repositories.decks.list("user-a")).toEqual([])
-  expect(await repositories.decks.list("user-b")).toEqual([shared])
-  expect(await repositories.decks.get(shared.id)).toEqual(shared)
+  expect(await repositories.decks.list("user-b")).toEqual([
+    expect.objectContaining(shared),
+  ])
+  expect(await repositories.decks.get(shared.id)).toEqual(
+    expect.objectContaining(shared),
+  )
 })
 
 test("kan een oude apparaatimport veilig aan een account koppelen", async () => {
@@ -50,31 +54,41 @@ test("kan een oude apparaatimport veilig aan een account koppelen", async () => 
   await repositories.decks.delete(legacyDeck.id, "device")
 
   expect(await repositories.decks.list("device")).toEqual([])
-  expect(await repositories.decks.list("user-a")).toEqual([legacyDeck])
+  expect(await repositories.decks.list("user-a")).toEqual([
+    expect.objectContaining(legacyDeck),
+  ])
 })
 
-test("upsert een gewijzigde providerimport op intern ID zonder duplicaat", async () => {
+test("houdt revisions per eigenaar geïsoleerd en upsert expliciet per source", async () => {
   const repositories = createMemoryRepositories()
   const first = {
-    ...deck("00000000-0000-4000-8000-000000000001"),
+    ...deck("revision-a"),
+    deckSourceId: "00000000-0000-4000-8000-000000000001",
+    revisionId: "revision-a",
     sourceId: "24765444",
     sourceHash: "hash-a",
     name: "Primal Stampede",
+    cards: [{ definitionId: "card-a", quantity: 100, isCommander: false }],
   }
-  await repositories.decks.save(first)
-  await repositories.decks.save({
+  const second = {
     ...first,
+    id: "revision-b",
+    revisionId: "revision-b",
     sourceHash: "hash-b",
     importedAt: "2026-07-30T20:00:00.000Z",
-    cards: [{ definitionId: "card", quantity: 101, isCommander: false }],
-  })
-  const records = await repositories.decks.list()
-  expect(records).toHaveLength(1)
-  expect(records[0]).toMatchObject({
-    id: first.id,
-    sourceHash: "hash-b",
-    cards: [{ quantity: 101 }],
-  })
+    cards: [{ definitionId: "card-b", quantity: 101, isCommander: false }],
+  }
+  await repositories.decks.save(first, "user-a")
+  await repositories.decks.save(second, "user-b")
+  expect(await repositories.decks.list("user-a")).toEqual([first])
+  expect(await repositories.decks.list("user-b")).toEqual([second])
+  expect((await repositories.decks.get(first.id))?.cards).toEqual(first.cards)
+
+  await repositories.decks.save(second, "user-a")
+  await repositories.decks.save(second, "user-a")
+  expect(await repositories.decks.list("user-a")).toEqual([second])
+  expect(await repositories.decks.list("user-b")).toEqual([second])
+  expect(await repositories.decks.list("user-a")).toHaveLength(1)
 })
 
 test("verbergt oude content-ID duplicaten maar bewaart gerefereerde games", async () => {

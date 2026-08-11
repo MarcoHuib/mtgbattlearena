@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers"
+import type { ImportedDeck } from "@mtg/game-core/types"
 import {
   onlineDeckSubmissionSchema,
   type OnlineDeckSubmission,
@@ -150,16 +151,37 @@ export class LobbyDurableObject extends DurableObject<Env> {
         deck_id TEXT NOT NULL UNIQUE,
         provider TEXT NOT NULL,
         external_id TEXT NOT NULL,
+        source_url TEXT,
         created_at TEXT NOT NULL,
         PRIMARY KEY (provider, external_id)
       );
+      CREATE TABLE IF NOT EXISTS deck_revisions (
+        revision_id TEXT NOT NULL UNIQUE,
+        deck_id TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        deck_json TEXT NOT NULL,
+        imported_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (deck_id, source_hash),
+        FOREIGN KEY (deck_id) REFERENCES deck_source_identities(deck_id)
+      );
     `)
+    const sourceColumns = this.storage.sql
+      .exec<{ name: string }>("PRAGMA table_info(deck_source_identities)")
+      .toArray()
+    if (!sourceColumns.some(column => column.name === "source_url"))
+      this.storage.sql.exec(
+        "ALTER TABLE deck_source_identities ADD COLUMN source_url TEXT",
+      )
   }
 
-  resolveDeckId(provider: string, externalId: string): Promise<string> {
-    const normalizedProvider = provider.trim().toLowerCase()
-    const normalizedExternalId = externalId.trim()
-    if (!normalizedProvider || !normalizedExternalId)
+  resolveDeckRevision(
+    deck: Omit<ImportedDeck, "source"> & { source: string },
+  ): Promise<{ deckId: string; revisionId: string }> {
+    const provider = deck.source.trim().toLowerCase()
+    const externalId = deck.sourceId.trim()
+    const sourceHash = deck.sourceHash.trim()
+    if (!provider || !externalId || !sourceHash)
       throw new Error("INVALID_DECK_SOURCE_IDENTITY")
     return Promise.resolve(
       this.storage.transactionSync(() => {
@@ -167,29 +189,74 @@ export class LobbyDurableObject extends DurableObject<Env> {
           .exec<{ deckId: string }>(
             `SELECT deck_id AS deckId FROM deck_source_identities
            WHERE provider = ? AND external_id = ?`,
-            normalizedProvider,
-            normalizedExternalId,
+            provider,
+            externalId,
           )
           .toArray()[0]
-        if (existing) return existing.deckId
-        const candidate = crypto.randomUUID()
+        const deckId = existing?.deckId ?? crypto.randomUUID()
+        if (!existing)
+          this.storage.sql.exec(
+            `INSERT OR IGNORE INTO deck_source_identities
+         (deck_id, provider, external_id, source_url, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+            deckId,
+            provider,
+            externalId,
+            deck.sourceUrl,
+            new Date(this.now()).toISOString(),
+          )
         this.storage.sql.exec(
-          `INSERT OR IGNORE INTO deck_source_identities
-         (deck_id, provider, external_id, created_at)
-         VALUES (?, ?, ?, ?)`,
-          candidate,
-          normalizedProvider,
-          normalizedExternalId,
-          new Date(this.now()).toISOString(),
+          `UPDATE deck_source_identities SET source_url = ?
+           WHERE provider = ? AND external_id = ?
+             AND (source_url IS NULL OR source_url = '')`,
+          deck.sourceUrl,
+          provider,
+          externalId,
         )
-        return this.storage.sql
+        const persistedDeckId = this.storage.sql
           .exec<{ deckId: string }>(
             `SELECT deck_id AS deckId FROM deck_source_identities
            WHERE provider = ? AND external_id = ?`,
-            normalizedProvider,
-            normalizedExternalId,
+            provider,
+            externalId,
           )
           .one().deckId
+        const existingRevision = this.storage.sql
+          .exec<{ revisionId: string }>(
+            `SELECT revision_id AS revisionId FROM deck_revisions
+             WHERE deck_id = ? AND source_hash = ?`,
+            persistedDeckId,
+            sourceHash,
+          )
+          .toArray()[0]
+        if (existingRevision)
+          return {
+            deckId: persistedDeckId,
+            revisionId: existingRevision.revisionId,
+          }
+        const revisionId = crypto.randomUUID()
+        this.storage.sql.exec(
+          `INSERT OR IGNORE INTO deck_revisions
+           (revision_id, deck_id, source_hash, deck_json, imported_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          revisionId,
+          persistedDeckId,
+          sourceHash,
+          JSON.stringify(deck),
+          deck.importedAt,
+          new Date(this.now()).toISOString(),
+        )
+        return {
+          deckId: persistedDeckId,
+          revisionId: this.storage.sql
+            .exec<{ revisionId: string }>(
+              `SELECT revision_id AS revisionId FROM deck_revisions
+               WHERE deck_id = ? AND source_hash = ?`,
+              persistedDeckId,
+              sourceHash,
+            )
+            .one().revisionId,
+        }
       }),
     )
   }

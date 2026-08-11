@@ -4,7 +4,10 @@ import type { GraphQLRequestError } from "./graphqlBaseQuery"
 import { remoteGraphqlApi } from "./remoteGraphqlApi"
 import { currentArchidektSourceHash } from "../../archidekt/freshness"
 
-export type ImportedDeckWithId = ImportedDeck & { id: string }
+export type ImportedDeckWithId = ImportedDeck & {
+  id: string
+  revisionId: string
+}
 
 export const importDeckFromUrl = async (
   dispatch: AppDispatch,
@@ -21,6 +24,7 @@ export const importDeckFromUrl = async (
   return {
     ...(result.deckFromUrl.deck as ImportedDeck),
     id: result.deckFromUrl.deckId,
+    revisionId: result.deckFromUrl.revisionId,
   }
 }
 

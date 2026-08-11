@@ -16,6 +16,7 @@ beforeEach(() => {
           deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
         ),
         id: `00000000-0000-4000-8000-${deckId.padStart(12, "0")}`,
+        revisionId: `10000000-0000-4000-8000-${deckId.padStart(12, "0")}`,
       })
     },
   )

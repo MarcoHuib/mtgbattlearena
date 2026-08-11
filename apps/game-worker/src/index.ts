@@ -448,10 +448,7 @@ const graphqlRequest = async (request: Request, env: Env) => {
       env.RELEASE_VERSION,
     ).then(async result => ({
       ...result,
-      deckId: await lobby.resolveDeckId(
-        result.deck.source,
-        result.deck.sourceId,
-      ),
+      ...(await lobby.resolveDeckRevision(result.deck)),
     }))
   const yoga = createGraphQLYoga({
     request: resolvedRequest,

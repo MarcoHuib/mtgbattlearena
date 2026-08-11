@@ -64,6 +64,7 @@ export const DeckFromUrlDocument = new TypedDocumentString(`
   deckFromUrl(url: $url, sourceHash: $sourceHash) {
     cacheStatus
     deckId
+    revisionId
     deck {
       source
       sourceId

@@ -17,6 +17,7 @@ test("stuurt provider-URL en optionele sourceHash via het gegenereerde RTK Query
         deckFromUrl: {
           cacheStatus: "HIT",
           deckId: "00000000-0000-4000-8000-000000000042",
+          revisionId: "00000000-0000-4000-8000-000000000043",
           deck: {
             source: "archidekt",
             sourceId: "42",
@@ -39,6 +40,7 @@ test("stuurt provider-URL en optionele sourceHash via het gegenereerde RTK Query
   )
   expect(deck.sourceHash).toBe("server-hash")
   expect(deck.id).toBe("00000000-0000-4000-8000-000000000042")
+  expect(deck.revisionId).toBe("00000000-0000-4000-8000-000000000043")
   const requestBody = fetchMock.mock.calls[0]?.[1]?.body
   const body = JSON.parse(
     typeof requestBody === "string" ? requestBody : "{}",
@@ -75,6 +77,7 @@ test("observeert de actuele bron en stuurt automatisch de gedeelde fingerprint",
           deckFromUrl: {
             cacheStatus: "REFRESHED",
             deckId: "00000000-0000-4000-8000-000000000042",
+            revisionId: "00000000-0000-4000-8000-000000000043",
             deck: {
               source: "archidekt",
               sourceId: "42",

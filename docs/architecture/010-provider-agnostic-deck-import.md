@@ -22,32 +22,43 @@ Archidekt-objecten, `cardPackage`, categories en providerresponses verlaten de
 Archidekt-adapter niet. Het DTO is nadrukkelijk geen `GameState`: runtime-ID's,
 zones, shuffle, spelers en counters ontstaan pas tijdens game setup.
 
-## Deckidentiteit
+## Sources, revisions en gebruikerskeuze
 
-Een opgeslagen deck krijgt een door MTG Battle Arena gegenereerde UUID. De
-globale Lobby Durable Object bewaart de duurzame SQLite-tabel
-`deck_source_identities`, met `PRIMARY KEY (provider, external_id)` en een unieke
-`deck_id`. Daardoor blijft de interne identiteit bestaan wanneer importcachedata
-wordt verwijderd of wanneer de inhoud van een providerdeck verandert.
+De globale Lobby Durable Object bewaart twee duurzame SQLite-relaties. De tabel
+`deck_source_identities` geeft iedere unieke `(provider, external_id)` één door
+MTG Battle Arena gegenereerd source-ID. `deck_revisions` bewaart vervolgens een
+onveranderlijke import per `(deck_id, source_hash)`, inclusief het gevalideerde
+provider-neutrale deck-JSON. Zowel source- als revision-ID zijn UUID's. Cache-
+evictie heeft daardoor geen invloed op identiteit of historische revisions.
 
 De begrippen zijn bewust gescheiden:
 
-- intern deck-ID: MTG Battle Arena UUID en sleutel voor lokale upserts;
-- externe bronkey: `(provider, externalId)`, bijvoorbeeld
-  `(archidekt, 24765444)`;
-- `sourceHash`: uitsluitend de actuele inhouds-/versiefingerprint;
-- game snapshot: de volledige, onveranderlijke kaarten en definities die bij het
-  starten in `GameState` worden gekopieerd.
+- `DeckSource`: de stabiele providerbron `(provider, externalId)` en zijn interne
+  `deckId`;
+- `DeckRevision`: één onveranderlijke MTG Battle Arena-weergave van een
+  `sourceHash`, geïdentificeerd door `revisionId`;
+- `UserDeck`: de lokale ownerkoppeling die per `(ownerId, deckSourceId)` precies
+  één gekozen `revisionId` aanwijst;
+- `GameDeckSnapshot`: de volledige kaarten en definities die bij gamestart uit
+  die revision naar `GameState` worden gekopieerd en daarna niet wijzigen.
 
-GraphQL retourneert `deckId` naast het provider-neutrale `ImportedDeck`. IndexedDB
-upsert op dat ID. Bij migratie worden oude content-hashduplicaten per bronkey
-samengevoegd naar het recentste record. Records waar bestaande games of
-offlinepakketten naar verwijzen blijven intern beschikbaar, maar hun ownerlink
-wordt naar het canonieke deck verplaatst zodat ze niet dubbel in de decklijst
-verschijnen. Zo worden bestaande snapshots niet herschreven of verwijderd.
+GraphQL retourneert zowel `deckId` als `revisionId` naast `ImportedDeck`. Een
+herhaalde import met dezelfde hash hergebruikt de revision; een nieuwe hash maakt
+een nieuwe revision zonder de oude rij te muteren. Omdat userdeck-ownership nu
+alleen lokaal bestaat, blijft de keuze in IndexedDB. Een expliciete herimport
+vervangt alleen de ownerkoppeling van de gebruiker die importeert; andere owners
+blijven hun eerdere revision zien.
 
-Een volgende provider gebruikt dezelfde SQLite-mapping met een eigen
-providerwaarde; dezelfde externe ID onder verschillende providers botst niet.
+IndexedDB-versie 5 behandelt bestaande deckrecords als initiële revisions en
+maakt per owner/source één selectie. Wanneer oude duplicaten verschillende
+`sourceHash`-waarden hebben, blijven het afzonderlijke revisions. Bij meerdere
+selecties voor dezelfde owner/source wint de recentste `importedAt`. Bestaande
+games en offlinepakketten worden niet herschreven of verwijderd.
+
+Een toekomstige provider of SYSTEM/demo-bron gebruikt dezelfde source- en
+revisionregels met een eigen providerwaarde. Daardoor kunnen ook demo-gebruikers
+op een oudere revision blijven terwijl nieuwe gebruikers de nieuwste kiezen;
+demo-decks zelf vallen buiten deze wijziging.
 
 ## Provider- en securitygrens
 

@@ -89,6 +89,8 @@ export type ImportedDeck = {
 
 export type DeckSnapshot = ImportedDeck & {
   id: string
+  deckSourceId?: string
+  revisionId?: string
   schemaVersion: 1
 }
 

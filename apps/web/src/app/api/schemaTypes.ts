@@ -115,6 +115,7 @@ export type ImportedDeckResult = {
   cacheStatus: DeckCacheStatus;
   deck: ImportedDeck;
   deckId: Scalars['ID']['output'];
+  revisionId: Scalars['ID']['output'];
 };
 
 export type ImportedImageRef = {

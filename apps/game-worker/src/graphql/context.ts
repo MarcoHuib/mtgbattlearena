@@ -13,6 +13,7 @@ export type GraphQLContext = {
   ): Promise<{
     cacheStatus: "HIT" | "MISS" | "REFRESHED"
     deckId: string
+    revisionId: string
     deck: ImportedDeck
   }>
   personalSnapshot(

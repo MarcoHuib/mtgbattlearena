@@ -18,7 +18,11 @@ const imported: ImportedDeck = {
     },
   ],
 }
-const identified = { ...imported, id: "00000000-0000-4000-8000-000000012345" }
+const identified = {
+  ...imported,
+  id: "00000000-0000-4000-8000-000000012345",
+  revisionId: "10000000-0000-4000-8000-000000012345",
+}
 
 test("geeft een identieke Archidekt-import hetzelfde snapshot-ID", () => {
   const first = createImportedDeckSnapshot(identified)
@@ -28,15 +32,19 @@ test("geeft een identieke Archidekt-import hetzelfde snapshot-ID", () => {
   })
 
   expect(duplicate.id).toBe(first.id)
+  expect(duplicate.deckSourceId).toBe(identified.id)
 })
 
-test("behoudt het interne deck-ID wanneer providerinhoud wijzigt", () => {
+test("geeft gewijzigde providerinhoud een nieuwe revision onder dezelfde source", () => {
   const first = createImportedDeckSnapshot(identified)
   const changed = createImportedDeckSnapshot({
     ...identified,
+    sourceHash: "changed-hash",
+    revisionId: "20000000-0000-4000-8000-000000012345",
     cards: [{ definitionId: "card", quantity: 2, isCommander: false }],
   })
 
-  expect(changed.id).toBe(first.id)
+  expect(changed.id).not.toBe(first.id)
+  expect(changed.deckSourceId).toBe(first.deckSourceId)
   expect(changed.cards[0]?.quantity).toBe(2)
 })
