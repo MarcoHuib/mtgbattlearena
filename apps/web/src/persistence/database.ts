@@ -5,6 +5,7 @@ import type {
   OfflineBattlePackage,
   PersistedGame,
 } from "@mtg/game-core/types"
+import { normalizeDeckSnapshotImages } from "@mtg/game-core/images"
 import type {
   AssetMetadataRepository,
   DeckSnapshotRepository,
@@ -303,13 +304,14 @@ const createDexieRepositories = (): PersistenceRepositories => {
       )
     },
     async get(id) {
-      return (await database.decks.get(id)) ?? null
+      const deck = await database.decks.get(id)
+      return deck ? normalizeDeckSnapshotImages(deck) : null
     },
     async getMany(ids) {
       const records = await database.decks.bulkGet([...ids])
-      return records.filter(
-        (record): record is DeckSnapshot => record !== undefined,
-      )
+      return records
+        .filter((record): record is DeckSnapshot => record !== undefined)
+        .map(normalizeDeckSnapshotImages)
     },
     async list(ownerId) {
       const records = ownerId
@@ -327,6 +329,7 @@ const createDexieRepositories = (): PersistenceRepositories => {
           (b?.importedAt ?? "").localeCompare(a?.importedAt ?? ""),
         )
         .filter((record): record is DeckSnapshot => record !== undefined)
+        .map(normalizeDeckSnapshotImages)
     },
     async delete(id, ownerId) {
       await database.transaction(
@@ -470,13 +473,18 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
         return Promise.resolve()
       },
       get(id) {
-        return Promise.resolve(structuredClone(deckRecords.get(id) ?? null))
+        const deck = deckRecords.get(id)
+        return Promise.resolve(
+          deck ? normalizeDeckSnapshotImages(structuredClone(deck)) : null,
+        )
       },
       getMany(ids) {
         return Promise.resolve(
           ids.flatMap(id => {
             const deck = deckRecords.get(id)
-            return deck ? [structuredClone(deck)] : []
+            return deck
+              ? [normalizeDeckSnapshotImages(structuredClone(deck))]
+              : []
           }),
         )
       },
@@ -492,7 +500,7 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
                 ),
             )
             .sort((a, b) => b.importedAt.localeCompare(a.importedAt))
-            .map(deck => structuredClone(deck)),
+            .map(deck => normalizeDeckSnapshotImages(structuredClone(deck))),
         )
       },
       delete(id, ownerId) {

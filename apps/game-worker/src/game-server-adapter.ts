@@ -55,7 +55,10 @@ import type {
   PlayerId,
   PlayerState,
 } from "@mtg/game-core/types"
-import { publicImageRef } from "@mtg/game-core/images"
+import {
+  normalizeCardImages,
+  publicImageRef,
+} from "@mtg/game-core/images"
 import {
   onlineDeckSubmissionSchema,
   onlineTokenDefinitionSchema,
@@ -107,7 +110,7 @@ export type OnlineGameSeed = z.infer<typeof onlineGameSeedSchema>
 export type { OnlineDeckSubmission }
 
 export type AuthoritativeGameState = {
-  schemaVersion: 5
+  schemaVersion: 6
   mode: Extract<GameMode, "online">
   gameId: string
   version: number
@@ -252,7 +255,7 @@ export const createAuthoritativeGame = (
     { random: options.random, createId: options.createId, now: options.now() },
   )
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     mode: "online",
     gameId: seed.gameId,
     version: 0,
@@ -283,26 +286,24 @@ export const migrateAuthoritativeGame = (
   state: AuthoritativeGameState,
 ): AuthoritativeGameState => {
   const legacy = state as AuthoritativeGameState & {
-    schemaVersion: 1 | 2 | 3 | 4 | 5
+    schemaVersion: 1 | 2 | 3 | 4 | 5 | 6
     openingHands?: GameState["openingHands"]
     phase?: GameState["phase"]
     matchStatus?: GameState["matchStatus"]
     libraryRevealCounts?: Record<PlayerId, number>
     firstPlayerRoll?: GameState["firstPlayerRoll"]
   }
-  if (
-    legacy.schemaVersion === 5 &&
-    legacy.openingHands &&
-    legacy.phase &&
-    legacy.matchStatus &&
-    legacy.libraryRevealCounts &&
-    legacy.firstPlayerRoll
-  ) {
-    return state
-  }
+  if (legacy.schemaVersion === 6) return state
+
   return {
     ...state,
-    schemaVersion: 5,
+    schemaVersion: 6,
+    cardDefinitionsById: Object.fromEntries(
+      Object.entries(state.cardDefinitionsById).map(([id, definition]) => [
+        id,
+        normalizeCardImages(definition),
+      ]),
+    ),
     phase: legacy.phase ?? "beginning",
     matchStatus: legacy.matchStatus ?? {
       monarchPlayerId: null,

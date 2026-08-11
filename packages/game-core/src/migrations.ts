@@ -334,44 +334,58 @@ const migrateVersionSixGame = (game: LegacyGame): GameState => {
   }
 }
 
-export const hydratePersistedGame = (value: unknown): PersistedGame => {
-  const current = currentPersistedGameSchema.safeParse(value)
-  if (current.success) {
-    const record = current.data as unknown as PersistedGame
-    const normalize = (game: GameState): GameState => ({
+const normalizePersistedGameImages = (
+  record: PersistedGame,
+): PersistedGame => {
+  const normalize = (game: GameState): GameState => ({
       ...game,
       cardDefinitionsById: Object.fromEntries(
-        Object.entries(game.cardDefinitionsById).map(([id, definition]) => [id, normalizeCardImages(definition)]),
+        Object.entries(game.cardDefinitionsById ?? {}).map(([id, definition]) => [
+          id,
+          normalizeCardImages(definition),
+        ]),
       ),
     })
-    return { ...record, game: normalize(record.game), past: record.past.map(normalize), future: record.future.map(normalize) }
+  return {
+    ...record,
+    game: normalize(record.game),
+    past: record.past.map(normalize),
+    future: record.future.map(normalize),
   }
+}
+
+export const hydratePersistedGame = (value: unknown): PersistedGame => {
+  const current = currentPersistedGameSchema.safeParse(value)
+  if (current.success)
+    return normalizePersistedGameImages(
+      current.data as unknown as PersistedGame,
+    )
 
   const versionSix = versionSixPersistedGameSchema.safeParse(value)
   if (versionSix.success) {
-    return {
+    return normalizePersistedGameImages({
       schemaVersion: 7,
       game: migrateVersionSixGame(versionSix.data.game),
       past: versionSix.data.past.map(migrateVersionSixGame),
       future: versionSix.data.future.map(migrateVersionSixGame),
       savedAt: versionSix.data.savedAt,
-    }
+    })
   }
 
   const versionFive = versionFivePersistedGameSchema.safeParse(value)
   if (versionFive.success) {
-    return {
+    return normalizePersistedGameImages({
       schemaVersion: 7,
       game: migrateVersionFiveGame(versionFive.data.game),
       past: versionFive.data.past.map(migrateVersionFiveGame),
       future: versionFive.data.future.map(migrateVersionFiveGame),
       savedAt: versionFive.data.savedAt,
-    }
+    })
   }
 
   const versionFour = versionFourPersistedGameSchema.safeParse(value)
   if (versionFour.success) {
-    return {
+    return normalizePersistedGameImages({
       schemaVersion: 7,
       game: migrateVersionFiveGame(
         migrateVersionFourGame(versionFour.data.game),
@@ -383,25 +397,31 @@ export const hydratePersistedGame = (value: unknown): PersistedGame => {
         migrateVersionFiveGame(migrateVersionFourGame(game)),
       ),
       savedAt: versionFour.data.savedAt,
-    }
+    })
   }
 
   const versionThree = versionThreePersistedGameSchema.safeParse(value)
   if (versionThree.success) {
-    return migrateLegacyRecord(versionThree.data, existingOpeningHands)
+    return normalizePersistedGameImages(
+      migrateLegacyRecord(versionThree.data, existingOpeningHands),
+    )
   }
 
   const versionTwo = versionTwoPersistedGameSchema.safeParse(value)
   if (versionTwo.success) {
-    return migrateLegacyRecord(versionTwo.data, () =>
-      structuredClone(keptOpeningHands),
+    return normalizePersistedGameImages(
+      migrateLegacyRecord(versionTwo.data, () =>
+        structuredClone(keptOpeningHands),
+      ),
     )
   }
 
   const versionOne = versionOnePersistedGameSchema.safeParse(value)
   if (versionOne.success) {
-    return migrateLegacyRecord(versionOne.data, () =>
-      structuredClone(keptOpeningHands),
+    return normalizePersistedGameImages(
+      migrateLegacyRecord(versionOne.data, () =>
+        structuredClone(keptOpeningHands),
+      ),
     )
   }
 

@@ -104,6 +104,23 @@ describe("application DTO cache", () => {
     expect(JSON.stringify(result.deck)).not.toMatch(/card-images\.archidekt|cards\.scryfall|imageUrl/)
   })
 
+  test("custom Foretell definition does not claim a Scryfall image", async () => {
+    const deck = rawDeck()
+    ;(
+      deck.cards[0]!.card.oracleCard as typeof deck.cards[0]["card"]["oracleCard"] & {
+        keywords: string[]
+      }
+    ).keywords = ["Foretell"]
+    const result = await createDeckImportService({
+      cache: new MemoryCache(),
+      fetcher: fetcher(deck),
+    }).importFromUrl("https://archidekt.com/decks/123")
+    expect(
+      result.deck.definitions.find(definition => definition.name === "Foretell")
+        ?.imageRefs,
+    ).toEqual([])
+  })
+
   test("miss fetcht, valideert, hasht en cachet het DTO", async () => {
     const cache = new MemoryCache()
     const upstream = fetcher()

@@ -3,10 +3,10 @@ import { deduplicateImageRefs } from "./assets"
 
 test("dedupliceert assets op kaart, zijde en variant", () => {
   const shared = {
-    assetKey: "card:0:normal",
+    resolver: 1,
+    imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
     faceIndex: 0,
     variant: "normal" as const,
-    url: "https://cards.test/card.jpg",
   }
   const definitions: CardDefinition[] = [
     { id: "one", name: "One", faces: [{ name: "One" }], imageRefs: [shared] },
@@ -17,10 +17,10 @@ test("dedupliceert assets op kaart, zijde en variant", () => {
       imageRefs: [
         shared,
         {
-          assetKey: "card:1:normal",
+          resolver: 1,
+          imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
           faceIndex: 1,
           variant: "normal",
-          url: "https://cards.test/back.jpg",
         },
       ],
     },
