@@ -12,7 +12,7 @@ export const cardImageAssetKey = (ref: CardImageRef): string =>
     : ref.assetKey ?? `legacy:${ref.faceIndex}:${ref.variant}`
 
 export const getCardImageUrl = (ref: CardImageRef): string =>
-  `${CARD_IMAGE_CDN_ORIGIN}/v1/${ref.resolver ?? 1}/${encodeURIComponent((ref.imageId ?? "").toLowerCase())}/${ref.faceIndex}/${ref.variant}.webp`
+  `${CARD_IMAGE_CDN_ORIGIN}/v1/${ref.resolver ?? 1}/${encodeURIComponent((ref.imageId ?? "").toLowerCase())}/${ref.faceIndex}/${ref.variant}`
 
 export const publicImageRef = (ref: CardImageRef | undefined) =>
   ref?.resolver && ref.imageId

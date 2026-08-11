@@ -6,6 +6,10 @@ workers_dev = false
 preview_urls = false
 routes = [{ pattern = "cdn.mtgbattlearena.nl", custom_domain = true }]
 
+[cache]
+enabled = true
+cross_version_cache = false
+
 [observability]
 enabled = false
 
@@ -14,3 +18,6 @@ name = "mtg-battle-mode-images-staging"
 workers_dev = false
 preview_urls = false
 routes = []
+
+[env.staging.cache]
+enabled = false
