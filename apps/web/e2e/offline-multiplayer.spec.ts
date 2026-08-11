@@ -14,6 +14,8 @@ const mockImports = async (page: Page) => {
         data: {
           deckFromUrl: {
             cacheStatus: "MISS",
+            deckId: `source-${deckId}`,
+            revisionId: `revision-${deckId}`,
             deck: importedDeckFixture(deckId, `Deck ${deckId}`),
           },
         },

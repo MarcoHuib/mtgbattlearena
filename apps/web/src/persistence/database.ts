@@ -17,13 +17,18 @@ type StoredGame = PersistedGame & { id: string; title: string }
 type StoredDeckOwner = {
   key: string
   deckId: string
+  deckSourceId?: string
   ownerId: string
 }
 
 export const deviceDeckOwnerId = "device"
 
-const deckOwnerKey = (deckId: string, ownerId: string) =>
-  `${encodeURIComponent(ownerId)}::${deckId}`
+const deckSourceIdentity = (deck: DeckSnapshot) =>
+  deck.deckSourceId ??
+  (deck.source === "local" ? deck.id : `${deck.source}:${deck.sourceId}`)
+
+const deckOwnerKey = (deckSourceId: string, ownerId: string) =>
+  `${encodeURIComponent(ownerId)}::${deckSourceId}`
 
 class BattleDatabase extends Dexie {
   games!: EntityTable<StoredGame, "id">
@@ -79,6 +84,104 @@ class BattleDatabase extends Dexie {
           delete deck.sourceDeckId
         })
       })
+    this.version(4)
+      .stores({
+        games: "id, savedAt",
+        decks: "id, [source+sourceId], importedAt",
+        deckOwners: "key, deckId, ownerId, [ownerId+deckId]",
+        offlinePackages: "id, currentGameId, updatedAt",
+        assets: "assetKey, cacheKind, cachedAt",
+      })
+      .upgrade(async transaction => {
+        const decks = await transaction.table<DeckSnapshot>("decks").toArray()
+        const owners = transaction.table<StoredDeckOwner>("deckOwners")
+        const games = await transaction.table<StoredGame>("games").toArray()
+        const packages = await transaction
+          .table<OfflineBattlePackage>("offlinePackages")
+          .toArray()
+        const groups = new Map<string, DeckSnapshot[]>()
+        for (const deck of decks) {
+          if (!deck.source || !deck.sourceId || deck.source === "local")
+            continue
+          const key = `${deck.source}\u0000${deck.sourceId}\u0000${deck.sourceHash}`
+          groups.set(key, [...(groups.get(key) ?? []), deck])
+        }
+        for (const duplicates of groups.values()) {
+          if (duplicates.length < 2) continue
+          const [canonical, ...older] = [...duplicates].sort((left, right) =>
+            right.importedAt.localeCompare(left.importedAt),
+          )
+          if (!canonical) continue
+          for (const duplicate of older) {
+            const duplicateOwners = await owners
+              .where("deckId")
+              .equals(duplicate.id)
+              .toArray()
+            await owners.bulkPut(
+              duplicateOwners.map(owner => ({
+                key: deckOwnerKey(canonical.id, owner.ownerId),
+                deckId: canonical.id,
+                ownerId: owner.ownerId,
+              })),
+            )
+            await owners.where("deckId").equals(duplicate.id).delete()
+            const referenced =
+              games.some(record =>
+                record.game.deckSnapshotIds.includes(duplicate.id),
+              ) ||
+              packages.some(record =>
+                record.deckSnapshotIds.includes(duplicate.id),
+              )
+            if (!referenced)
+              await transaction
+                .table<DeckSnapshot>("decks")
+                .delete(duplicate.id)
+          }
+        }
+      })
+    this.version(5)
+      .stores({
+        games: "id, savedAt",
+        decks:
+          "id, deckSourceId, [source+sourceId], [deckSourceId+sourceHash], importedAt",
+        deckOwners:
+          "key, deckId, deckSourceId, ownerId, [ownerId+deckSourceId]",
+        offlinePackages: "id, currentGameId, updatedAt",
+        assets: "assetKey, cacheKind, cachedAt",
+      })
+      .upgrade(async transaction => {
+        const decks = transaction.table<DeckSnapshot>("decks")
+        await decks.toCollection().modify(deck => {
+          deck.deckSourceId = deckSourceIdentity(deck)
+          deck.revisionId = deck.revisionId ?? deck.id
+        })
+        const records = await decks.toArray()
+        const byId = new Map(records.map(deck => [deck.id, deck]))
+        const owners = transaction.table<StoredDeckOwner>("deckOwners")
+        const existingOwners = await owners.toArray()
+        const selected = new Map<string, StoredDeckOwner>()
+        for (const owner of existingOwners) {
+          const deck = byId.get(owner.deckId)
+          if (!deck) continue
+          const deckSourceId = deckSourceIdentity(deck)
+          const key = deckOwnerKey(deckSourceId, owner.ownerId)
+          const current = selected.get(key)
+          const currentDeck = current ? byId.get(current.deckId) : undefined
+          if (
+            currentDeck &&
+            currentDeck.importedAt.localeCompare(deck.importedAt) >= 0
+          )
+            continue
+          selected.set(key, {
+            key,
+            deckId: deck.id,
+            deckSourceId,
+            ownerId: owner.ownerId,
+          })
+        }
+        await owners.clear()
+        await owners.bulkPut([...selected.values()])
+      })
   }
 }
 
@@ -124,13 +227,42 @@ const createDexieRepositories = (): PersistenceRepositories => {
         "rw",
         database.decks,
         database.deckOwners,
+        database.games,
+        database.offlinePackages,
         async () => {
-          await database.decks.put(deck)
+          const deckSourceId = deckSourceIdentity(deck)
+          const revision = {
+            ...deck,
+            deckSourceId,
+            revisionId: deck.revisionId ?? deck.id,
+          }
+          await database.decks.put(revision)
           await database.deckOwners.put({
-            key: deckOwnerKey(deck.id, ownerId),
-            deckId: deck.id,
+            key: deckOwnerKey(deckSourceId, ownerId),
+            deckId: revision.id,
+            deckSourceId,
             ownerId,
           })
+          const previousRevisions = await database.decks
+            .where("deckSourceId")
+            .equals(deckSourceId)
+            .and(candidate => candidate.id !== revision.id)
+            .toArray()
+          for (const previous of previousRevisions) {
+            const referenced =
+              (await database.games.toArray()).some(record =>
+                record.game.deckSnapshotIds.includes(previous.id),
+              ) ||
+              (await database.offlinePackages.toArray()).some(record =>
+                record.deckSnapshotIds.includes(previous.id),
+              )
+            const selected = await database.deckOwners
+              .where("deckId")
+              .equals(previous.id)
+              .count()
+            if (!referenced && selected === 0)
+              await database.decks.delete(previous.id)
+          }
         },
       )
     },
@@ -167,7 +299,11 @@ const createDexieRepositories = (): PersistenceRepositories => {
         database.deckOwners,
         async () => {
           if (ownerId) {
-            await database.deckOwners.delete(deckOwnerKey(id, ownerId))
+            const deck = await database.decks.get(id)
+            if (deck)
+              await database.deckOwners.delete(
+                deckOwnerKey(deckSourceIdentity(deck), ownerId),
+              )
           } else {
             await database.deckOwners.where("deckId").equals(id).delete()
           }
@@ -259,10 +395,35 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
     },
     decks: {
       save(deck, ownerId = deviceDeckOwnerId) {
-        deckRecords.set(deck.id, structuredClone(deck))
-        const owners = deckOwners.get(deck.id) ?? new Set<string>()
+        const sourceIdentity = deckSourceIdentity(deck)
+        const revision = {
+          ...deck,
+          deckSourceId: sourceIdentity,
+          revisionId: deck.revisionId ?? deck.id,
+        }
+        for (const previous of deckRecords.values()) {
+          if (
+            previous.id === deck.id ||
+            deckSourceIdentity(previous) !== sourceIdentity
+          )
+            continue
+          const previousOwners = deckOwners.get(previous.id)
+          previousOwners?.delete(ownerId)
+          if (!previousOwners?.size) deckOwners.delete(previous.id)
+          const referenced =
+            [...gameRecords.values()].some(record =>
+              record.game.deckSnapshotIds.includes(previous.id),
+            ) ||
+            [...packageRecords.values()].some(record =>
+              record.deckSnapshotIds.includes(previous.id),
+            )
+          if (!referenced && !previousOwners?.size)
+            deckRecords.delete(previous.id)
+        }
+        deckRecords.set(revision.id, structuredClone(revision))
+        const owners = deckOwners.get(revision.id) ?? new Set<string>()
         owners.add(ownerId)
-        deckOwners.set(deck.id, owners)
+        deckOwners.set(revision.id, owners)
         return Promise.resolve()
       },
       get(id) {

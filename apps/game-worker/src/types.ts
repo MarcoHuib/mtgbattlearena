@@ -4,6 +4,7 @@ import type {
   PersonalGameSnapshot,
   ServerEvent,
 } from "@mtg/game-protocol"
+import type { ImportedDeck } from "@mtg/game-core/types"
 import type { OnlineGameSeed } from "./game-server-adapter"
 
 export type SqlStorageValue = string | number | ArrayBuffer | null
@@ -172,6 +173,12 @@ export type LobbyDurableObjectStub = {
     gameId: string,
     identity: VerifiedIdentity,
   ): Promise<RpcResult<null>>
+  resolveDeckRevision(
+    deck: Omit<ImportedDeck, "source"> & { source: string },
+  ): Promise<{
+    deckId: string
+    revisionId: string
+  }>
 }
 
 export type GameDurableObjectStub = {

@@ -3,9 +3,11 @@ import type { CardDefinition, DeckSnapshot, ImportedDeck } from "./types"
 export const createDeckSnapshot = (
   deck: ImportedDeck,
   id: string,
+  identity?: { deckSourceId: string; revisionId: string },
 ): DeckSnapshot => ({
   ...structuredClone(deck),
   id,
+  ...identity,
   schemaVersion: 1,
 })
 

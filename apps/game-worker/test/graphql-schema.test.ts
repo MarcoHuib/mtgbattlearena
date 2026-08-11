@@ -140,6 +140,8 @@ test("deckFromUrl retourneert uitsluitend het provider-neutrale importcontract",
   const context = contextWith()
   context.importDeck = vi.fn().mockResolvedValue({
     cacheStatus: "MISS",
+    deckId: "00000000-0000-4000-8000-000000000042",
+    revisionId: "00000000-0000-4000-8000-000000000043",
     deck: {
       source: "archidekt",
       sourceId: "42",
@@ -158,11 +160,13 @@ test("deckFromUrl retourneert uitsluitend het provider-neutrale importcontract",
   const importDeck = context.importDeck
   const result = await execute(
     context,
-    `query { deckFromUrl(url: "https://archidekt.com/decks/42") { cacheStatus deck { source sourceId sourceHash name cards { definitionId quantity isCommander } } } }`,
+    `query { deckFromUrl(url: "https://archidekt.com/decks/42") { cacheStatus deckId revisionId deck { source sourceId sourceHash name cards { definitionId quantity isCommander } } } }`,
   )
   expect(result.errors).toBeUndefined()
   expect(result.data?.deckFromUrl).toMatchObject({
     cacheStatus: "MISS",
+    deckId: "00000000-0000-4000-8000-000000000042",
+    revisionId: "00000000-0000-4000-8000-000000000043",
     deck: { sourceId: "42", name: "Deck" },
   })
   expect(importDeck).toHaveBeenCalledWith(

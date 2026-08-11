@@ -34,7 +34,14 @@ test("herstelt een gedownloade battle volledig offline", async ({
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        data: { deckFromUrl: { cacheStatus: "MISS", deck: fixture } },
+        data: {
+          deckFromUrl: {
+            cacheStatus: "MISS",
+            deckId: `source-${deckId}`,
+            revisionId: `revision-${deckId}`,
+            deck: fixture,
+          },
+        },
       }),
     })
   })

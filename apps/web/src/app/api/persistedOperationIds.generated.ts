@@ -3,7 +3,7 @@ export const persistedOperationIds = {
   "AbortGame": "110d082d51f12e58d8879bfe00c279ef0da56f70103c02d9184749c8766d6697",
   "CreateLobby": "e0232757e4a9f4309b8eaee14864c36faaf660c5ba14c993987502d2c86ab00a",
   "CreateSocketTicket": "74b8439012215c1b388d063fda471963eebde1977b47750711d8141b81372ac6",
-  "DeckFromUrl": "8ca6a9e7373b4a48f40b113da15c6d3351617de8cca56dfc7b55e5bb2e2dba84",
+  "DeckFromUrl": "e5f4c17750180d9a6be0bd2abd24c79ad650dc6d276b408835ffd509ced9a546",
   "DeleteLobby": "b6d00ee20fc57791e3da08d600bab1e34d2a032bb76826eb315761f610af59ef",
   "JoinLobby": "adad48f5ea3c9cd1dd60a1c7667fc1ef871e3e1dee04b39bce7f642ef1b0c1ef",
   "Lobby": "4989715e0a20d509a135f7aac2458be5dcaac27659981ab2dfda804bdcfdb6d9",

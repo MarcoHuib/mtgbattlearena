@@ -38,6 +38,8 @@ query Lobby($id: ID!) {
 query DeckFromUrl($url: String!, $sourceHash: String) {
   deckFromUrl(url: $url, sourceHash: $sourceHash) {
     cacheStatus
+    deckId
+    revisionId
     deck {
       source
       sourceId

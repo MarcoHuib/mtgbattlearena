@@ -4,11 +4,16 @@ import type { GraphQLRequestError } from "./graphqlBaseQuery"
 import { remoteGraphqlApi } from "./remoteGraphqlApi"
 import { currentArchidektSourceHash } from "../../archidekt/freshness"
 
+export type ImportedDeckWithId = ImportedDeck & {
+  id: string
+  revisionId: string
+}
+
 export const importDeckFromUrl = async (
   dispatch: AppDispatch,
   url: string,
   sourceHash?: string,
-): Promise<ImportedDeck> => {
+): Promise<ImportedDeckWithId> => {
   const freshnessHash = sourceHash ?? (await currentArchidektSourceHash(url))
   const result = await dispatch(
     remoteGraphqlApi.endpoints.DeckFromUrl.initiate(
@@ -16,7 +21,11 @@ export const importDeckFromUrl = async (
       { subscribe: false, forceRefetch: true },
     ),
   ).unwrap()
-  return result.deckFromUrl.deck as ImportedDeck
+  return {
+    ...(result.deckFromUrl.deck as ImportedDeck),
+    id: result.deckFromUrl.deckId,
+    revisionId: result.deckFromUrl.revisionId,
+  }
 }
 
 export const importedDeckErrorMessage = (error: unknown): string =>
