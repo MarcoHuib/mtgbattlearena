@@ -17,18 +17,15 @@ export const createOnlineDeckSubmission = (
         throw new Error(
           `Kaartdefinitie ${card.definitionId} ontbreekt in ${deck.name}.`,
         )
-      const firstFace = definition.faces[0]
       return {
         definitionId: definition.id,
-        name: firstFace?.name ?? definition.name,
-        typeLine: firstFace?.typeLine ?? definition.typeLine,
-        imageUrl: firstFace?.imageUrl ?? definition.imageRefs[0]?.url,
-        scryfallId: definition.scryfallId,
-        faces: definition.faces.map((face, faceIndex) => ({
-          ...face,
-          imageUrl:
-            face.imageUrl ??
-            definition.imageRefs.find(ref => ref.faceIndex === faceIndex)?.url,
+        name: definition.faces[0]?.name ?? definition.name,
+        typeLine: definition.faces[0]?.typeLine ?? definition.typeLine,
+        imageRefs: definition.imageRefs,
+        faces: definition.faces.map(face => ({
+          name: face.name,
+          typeLine: face.typeLine,
+          oracleText: face.oracleText,
         })),
         quantity: card.quantity,
         isCommander: card.isCommander,
@@ -37,13 +34,11 @@ export const createOnlineDeckSubmission = (
     tokens: deck.definitions
       .filter(item => item.token?.source === "deck")
       .map(definition => {
-        const firstFace = definition.faces[0]
         return {
           definitionId: definition.id,
-          name: firstFace?.name ?? definition.name,
-          typeLine: firstFace?.typeLine ?? definition.typeLine,
-          imageUrl: firstFace?.imageUrl ?? definition.imageRefs[0]?.url,
-          scryfallId: definition.scryfallId,
+          name: definition.faces[0]?.name ?? definition.name,
+          typeLine: definition.faces[0]?.typeLine ?? definition.typeLine,
+          imageRef: definition.imageRefs[0],
           kind: definition.token?.kind ?? "other",
           power: definition.token?.power,
           toughness: definition.token?.toughness,

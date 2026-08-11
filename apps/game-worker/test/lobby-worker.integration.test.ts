@@ -1002,6 +1002,7 @@ describe("Lobby Durable Object RPC", () => {
           {
             definitionId: "card-host",
             name: "Testkaart",
+            imageRefs: [],
             quantity: 10,
             isCommander: false,
           },

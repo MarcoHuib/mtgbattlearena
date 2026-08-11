@@ -1,4 +1,3 @@
-const MAX_RESPONSE_BYTES = 5_000_000
 const UPSTREAM_TIMEOUT_MS = 10_000
 
 const corsHeadersFor = (request: Request, env: Env): Record<string, string> => {
@@ -134,27 +133,6 @@ export default {
     }
 
     const isTokenRequest = url.pathname === "/api/import/archidekt/tokens"
-    const imageMatch =
-      /^\/api\/import\/archidekt\/image\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
-        url.pathname,
-      )
-    const imageId = imageMatch?.[1]
-    const imageFace = url.searchParams.get("face")
-    const imageHash = url.searchParams.get("hash")
-    const isImageRequest = imageId !== undefined
-    if (
-      isImageRequest &&
-      ((imageFace !== "front" && imageFace !== "back") ||
-        !imageHash ||
-        !/^\d+$/.test(imageHash))
-    ) {
-      return jsonError(
-        400,
-        "INVALID_IMAGE_REFERENCE",
-        "Ongeldige afbeeldingsverwijzing.",
-        corsHeaders,
-      )
-    }
     const requestedTokenIds = (url.searchParams.get("ids") ?? "").split(",")
     const tokenIds = isTokenRequest ? [...new Set(requestedTokenIds)] : []
     if (
@@ -172,14 +150,14 @@ export default {
     }
     const match = /^\/api\/import\/archidekt\/(\d+)$/.exec(url.pathname)
     const deckId = match?.[1]
-    if (!isTokenRequest && !isImageRequest && (!deckId || deckId === "0")) {
+    if (!isTokenRequest && (!deckId || deckId === "0")) {
       return jsonError(400, "INVALID_DECK_ID", "Ongeldig deck-ID.", corsHeaders)
     }
 
     const cache = (caches as CloudflareCacheStorage).default
     const cacheKey = new Request(url.toString(), request)
     const freshnessProbe =
-      !isImageRequest && url.searchParams.get("fresh") === "1"
+      url.searchParams.get("fresh") === "1"
     const cached = freshnessProbe ? undefined : await cache.match(cacheKey)
     if (cached) return withCors(cached, corsHeaders)
 
@@ -190,10 +168,8 @@ export default {
     try {
       const upstreamUrl = isTokenRequest
         ? archidektTokensApiUrl(tokenIds)
-        : isImageRequest
-          ? `https://card-images.archidekt.com/normal/${imageFace}/${imageId[0]}/${imageId[1]}/${imageId}.jpg?${imageHash}`
-          : archidektDeckApiUrl(deckId ?? "")
-      if (!isImageRequest) {
+        : archidektDeckApiUrl(deckId ?? "")
+      {
         const upstream = await fetchArchidektJson(upstreamUrl)
         const response = new Response(upstream.payload, {
           headers: {
@@ -207,61 +183,6 @@ export default {
           context.waitUntil(cache.put(cacheKey, response.clone()))
         return withCors(response, corsHeaders)
       }
-      const upstream = await fetch(upstreamUrl, {
-        headers: {
-          Accept: "image/*",
-          "User-Agent": "MTGBattleMode/1.0",
-        },
-        signal: controller.signal,
-      })
-      if (upstream.status === 404) {
-        return jsonError(404, "NOT_FOUND", "Deck niet gevonden.", corsHeaders)
-      }
-      if (upstream.status === 401 || upstream.status === 403) {
-        return jsonError(
-          403,
-          "PRIVATE_DECK",
-          "Deck is niet openbaar.",
-          corsHeaders,
-        )
-      }
-      if (!upstream.ok) {
-        return jsonError(
-          502,
-          "UPSTREAM_ERROR",
-          "Archidekt is tijdelijk niet bereikbaar.",
-          corsHeaders,
-        )
-      }
-      const declaredSize = Number(upstream.headers.get("Content-Length") ?? 0)
-      if (declaredSize > MAX_RESPONSE_BYTES) {
-        return jsonError(
-          413,
-          "RESPONSE_TOO_LARGE",
-          "Deckresponse is te groot.",
-          corsHeaders,
-        )
-      }
-      const payload = await upstream.arrayBuffer()
-      if (payload.byteLength > MAX_RESPONSE_BYTES) {
-        return jsonError(
-          413,
-          "RESPONSE_TOO_LARGE",
-          "Deckresponse is te groot.",
-          corsHeaders,
-        )
-      }
-      const response = new Response(payload, {
-        headers: {
-          "Content-Type": upstream.headers.get("Content-Type") ?? "image/jpeg",
-          "Cache-Control": freshnessProbe
-            ? "no-store"
-            : "public, max-age=120, s-maxage=600",
-        },
-      })
-      if (!freshnessProbe)
-        context.waitUntil(cache.put(cacheKey, response.clone()))
-      return withCors(response, corsHeaders)
     } catch (error: unknown) {
       if (error instanceof ArchidektHttpError) {
         const status = error.upstreamStatus

@@ -8,6 +8,7 @@
     { "path": "./apps/game-worker/tsconfig.json" },
     { "path": "./apps/game-worker/tsconfig.test.json" },
     { "path": "./apps/import-worker/tsconfig.json" },
+    { "path": "./apps/image-worker/tsconfig.json" },
     { "path": "./packages/game-core/tsconfig.json" },
     { "path": "./packages/game-protocol/tsconfig.json" },
     { "path": "./tsconfig.tools.json" }

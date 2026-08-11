@@ -3,6 +3,7 @@ import type { AppDispatch } from "../store"
 import type { GraphQLRequestError } from "./graphqlBaseQuery"
 import { remoteGraphqlApi } from "./remoteGraphqlApi"
 import { currentArchidektSourceHash } from "../../archidekt/freshness"
+import { normalizeCardImages } from "@mtg/game-core/images"
 
 export type ImportedDeckWithId = ImportedDeck & {
   id: string
@@ -21,8 +22,10 @@ export const importDeckFromUrl = async (
       { subscribe: false, forceRefetch: true },
     ),
   ).unwrap()
+  const deck = result.deckFromUrl.deck as unknown as ImportedDeck
   return {
-    ...(result.deckFromUrl.deck as ImportedDeck),
+    ...deck,
+    definitions: deck.definitions.map(normalizeCardImages),
     id: result.deckFromUrl.deckId,
     revisionId: result.deckFromUrl.revisionId,
   }

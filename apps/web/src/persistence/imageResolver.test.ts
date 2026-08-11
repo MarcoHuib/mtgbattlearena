@@ -3,11 +3,12 @@ import { browserAssetCache } from "./assetCache"
 import { resolveCardImage } from "./imageResolver"
 
 const image: CardImageRef = {
-  assetKey: "card-id:0:normal",
+  resolver: 1,
+  imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
   faceIndex: 0,
   variant: "normal",
-  url: "https://cards.scryfall.io/normal/front/c/a/card-id.jpg",
 }
+const cdnUrl = "https://cdn.mtgbattlearena.nl/v1/1/6a9c39e4-a8cf-42dd-8d0e-45634b335546/0/normal.webp"
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -22,7 +23,7 @@ describe("resolveCardImage", () => {
 
     await expect(resolveCardImage(image, false)).resolves.toEqual({
       source: "automatic-cache",
-      url: image.url,
+      url: cdnUrl,
     })
   })
 
@@ -31,7 +32,7 @@ describe("resolveCardImage", () => {
 
     await expect(resolveCardImage(image, true)).resolves.toEqual({
       source: "remote",
-      url: image.url,
+      url: cdnUrl,
     })
   })
 })

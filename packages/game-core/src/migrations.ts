@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { GameState, PersistedGame, PlayerId } from "./types"
+import { normalizeCardImages } from "./images"
 
 const playerIdSchema = z.enum(["player-1", "player-2"])
 const openingHandStateSchema = z.object({
@@ -335,7 +336,16 @@ const migrateVersionSixGame = (game: LegacyGame): GameState => {
 
 export const hydratePersistedGame = (value: unknown): PersistedGame => {
   const current = currentPersistedGameSchema.safeParse(value)
-  if (current.success) return current.data as unknown as PersistedGame
+  if (current.success) {
+    const record = current.data as unknown as PersistedGame
+    const normalize = (game: GameState): GameState => ({
+      ...game,
+      cardDefinitionsById: Object.fromEntries(
+        Object.entries(game.cardDefinitionsById).map(([id, definition]) => [id, normalizeCardImages(definition)]),
+      ),
+    })
+    return { ...record, game: normalize(record.game), past: record.past.map(normalize), future: record.future.map(normalize) }
+  }
 
   const versionSix = versionSixPersistedGameSchema.safeParse(value)
   if (versionSix.success) {

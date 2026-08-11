@@ -70,7 +70,8 @@ De Archidekt-provider herkent uitsluitend `https` op `archidekt.com` en
 het bekende deckpad met positief numeriek ID. Uitgaand verkeer gebruikt vaste
 API-constants en volgt geen redirects; de gebruikers-URL wordt nooit gefetcht.
 Responses hebben timeout- en groottelimieten en worden vóór mapping met Zod
-gevalideerd. Imagebytes blijven via de bestaande, nauw begrensde HTTP-proxy gaan.
+gevalideerd. Card-imagebytes lopen uitsluitend via de afzonderlijke grens uit
+[ADR 011](./011-image-delivery-boundary.md); Archidekt is geen imageprovider.
 
 De GraphQL-query `deckFromUrl` gebruikt de bestaande App Check-, CORS-,
 requestlimit-, foutmaskerings- en persisted-operationketen. Deckimport blijft,

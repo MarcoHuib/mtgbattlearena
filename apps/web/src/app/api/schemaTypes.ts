@@ -11,7 +11,6 @@ export type Scalars = {
 };
 
 export type CardFaceInput = {
-  imageUrl?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   oracleText?: InputMaybe<Scalars['String']['input']>;
   typeLine?: InputMaybe<Scalars['String']['input']>;
@@ -38,11 +37,10 @@ export enum DeckCacheStatus {
 export type DeckCardInput = {
   definitionId: Scalars['ID']['input'];
   faces?: InputMaybe<Array<CardFaceInput>>;
-  imageUrl?: InputMaybe<Scalars['String']['input']>;
+  imageRefs?: InputMaybe<Array<ImageRefInput>>;
   isCommander: Scalars['Boolean']['input'];
   name: Scalars['String']['input'];
   quantity: Scalars['Int']['input'];
-  scryfallId?: InputMaybe<Scalars['String']['input']>;
   typeLine?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -52,11 +50,10 @@ export enum DeckSource {
 
 export type DeckTokenInput = {
   definitionId: Scalars['ID']['input'];
-  imageUrl?: InputMaybe<Scalars['String']['input']>;
+  imageRef?: InputMaybe<ImageRefInput>;
   kind: Scalars['String']['input'];
   name: Scalars['String']['input'];
   power?: InputMaybe<Scalars['Int']['input']>;
-  scryfallId?: InputMaybe<Scalars['String']['input']>;
   toughness?: InputMaybe<Scalars['Int']['input']>;
   typeLine?: InputMaybe<Scalars['String']['input']>;
 };
@@ -65,6 +62,13 @@ export type Health = {
   __typename?: 'Health';
   firebaseConfigured: Scalars['Boolean']['output'];
   status: Scalars['String']['output'];
+};
+
+export type ImageRefInput = {
+  faceIndex: Scalars['Int']['input'];
+  imageId: Scalars['ID']['input'];
+  resolver: Scalars['Int']['input'];
+  variant: Scalars['String']['input'];
 };
 
 export type ImportedCardDefinition = {
@@ -77,14 +81,12 @@ export type ImportedCardDefinition = {
   name: Scalars['String']['output'];
   oracleId?: Maybe<Scalars['String']['output']>;
   oracleText?: Maybe<Scalars['String']['output']>;
-  scryfallId?: Maybe<Scalars['String']['output']>;
   token?: Maybe<ImportedToken>;
   typeLine?: Maybe<Scalars['String']['output']>;
 };
 
 export type ImportedCardFace = {
   __typename?: 'ImportedCardFace';
-  imageUrl?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   oracleText?: Maybe<Scalars['String']['output']>;
   typeLine?: Maybe<Scalars['String']['output']>;
@@ -120,9 +122,9 @@ export type ImportedDeckResult = {
 
 export type ImportedImageRef = {
   __typename?: 'ImportedImageRef';
-  assetKey: Scalars['String']['output'];
   faceIndex: Scalars['Int']['output'];
-  url: Scalars['String']['output'];
+  imageId: Scalars['ID']['output'];
+  resolver: Scalars['Int']['output'];
   variant: Scalars['String']['output'];
 };
 

@@ -28,19 +28,27 @@ export type CardFaceDefinition = {
   name: string
   typeLine?: string
   oracleText?: string
+  /** @deprecated persisted-data compatibility only */
   imageUrl?: string
 }
 
+export type ImageVariant = "normal"
+
 export type CardImageRef = {
-  assetKey: string
+  resolver?: number
+  imageId?: string
   faceIndex: number
-  variant: "normal"
-  url: string
+  variant: ImageVariant
+  /** @deprecated persisted-data compatibility only */
+  assetKey?: string
+  /** @deprecated persisted-data compatibility only */
+  url?: string
 }
 
 export type CardDefinition = {
   id: string
   name: string
+  /** @deprecated persisted-data compatibility only */
   scryfallId?: string
   oracleId?: string
   layout?: string

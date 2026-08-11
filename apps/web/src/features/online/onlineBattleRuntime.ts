@@ -32,25 +32,14 @@ const zones: Zone[] = [
 const tokenDefinition = (token: OnlineTokenDefinition): CardDefinition => ({
   id: token.definitionId,
   name: token.name,
-  scryfallId: token.scryfallId,
   typeLine: token.typeLine,
   faces: [
     {
       name: token.name,
       typeLine: token.typeLine,
-      imageUrl: token.imageUrl,
     },
   ],
-  imageRefs: token.imageUrl
-    ? [
-        {
-          assetKey: `online:${token.definitionId}:0`,
-          faceIndex: 0,
-          variant: "normal",
-          url: token.imageUrl,
-        },
-      ]
-    : [],
+  imageRefs: token.imageRef ? [token.imageRef] : [],
   token: {
     source: "deck",
     kind: token.kind,
@@ -66,25 +55,14 @@ const visibleDefinition = (card: VisibleOnlineCard): CardDefinition => {
     Array.from({ length: Math.max(1, card.activeFaceIndex + 1) }, () => ({
       name: card.name,
       typeLine: card.typeLine,
-      imageUrl: card.imageUrl,
+      imageRef: card.imageRef,
     }))
   return {
     id: card.definitionId,
     name: card.name,
     typeLine: card.typeLine,
     faces,
-    imageRefs: faces.flatMap((face, faceIndex) =>
-      face.imageUrl
-        ? [
-            {
-              assetKey: `online:${card.definitionId}:${faceIndex}`,
-              faceIndex,
-              variant: "normal" as const,
-              url: face.imageUrl,
-            },
-          ]
-        : [],
-    ),
+    imageRefs: faces.flatMap(face => face.imageRef ? [face.imageRef] : []),
   }
 }
 
@@ -312,8 +290,7 @@ export const useOnlineBattleRuntime = (
             definitionId: definition.id,
             name: definition.name,
             typeLine: definition.typeLine,
-            imageUrl: definition.faces[0]?.imageUrl,
-            scryfallId: definition.scryfallId,
+            imageRef: definition.imageRefs[0],
             kind: definition.token.kind,
             power: definition.token.power,
             toughness: definition.token.toughness,

@@ -18,6 +18,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       game_worker: ${{ steps.filter.outputs.game_worker }}
       import_worker: ${{ steps.filter.outputs.import_worker }}
+      image_worker: ${{ steps.filter.outputs.image_worker }}
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -37,11 +38,13 @@ jobs:
           frontend=false
           game_worker=false
           import_worker=false
+          image_worker=false
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             frontend=true
             game_worker=true
             import_worker=true
+            image_worker=true
           else
             while IFS= read -r -d '' file; do
               case "$file" in
@@ -49,11 +52,13 @@ jobs:
                   frontend=true
                   game_worker=true
                   import_worker=true
+                  image_worker=true
                   ;;
                 tsconfig.json|tsconfig.base.json|tsconfig.tools.json|packages/*)
                   frontend=true
                   game_worker=true
                   import_worker=true
+                  image_worker=true
                   ;;
                 apps/web/*|firebase.json|.firebaserc)
                   frontend=true
@@ -64,6 +69,9 @@ jobs:
                 apps/import-worker/*)
                   import_worker=true
                   ;;
+                apps/image-worker/*)
+                  image_worker=true
+                  ;;
               esac
             done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
           fi
@@ -71,6 +79,7 @@ jobs:
           echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
           echo "game_worker=$game_worker" >> "$GITHUB_OUTPUT"
           echo "import_worker=$import_worker" >> "$GITHUB_OUTPUT"
+          echo "image_worker=$image_worker" >> "$GITHUB_OUTPUT"
 
   frontend:
     name: CI / Frontend
@@ -201,6 +210,39 @@ jobs:
       - name: Validate import Worker
         if: needs.changes.outputs.import_worker == 'true'
         run: npm run validate:import-worker
+
+  image-worker:
+    name: CI / Image Worker
+    needs: changes
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require successful change detection
+        if: needs.changes.result != 'success'
+        run: exit 1
+      - name: No image Worker changes
+        if: needs.changes.result == 'success' && needs.changes.outputs.image_worker != 'true'
+        run: echo "Image Worker validation is not required for this change."
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: needs.changes.outputs.image_worker == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.changes.outputs.image_worker == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm ci
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npx eslint apps/image-worker
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm run image-worker:type-check
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm run test:image-worker
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm run deploy:cloudflare:check:image
 
   dependency-review:
     name: CI / Dependency Review

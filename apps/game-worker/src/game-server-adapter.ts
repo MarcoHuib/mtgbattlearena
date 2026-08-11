@@ -55,6 +55,7 @@ import type {
   PlayerId,
   PlayerState,
 } from "@mtg/game-core/types"
+import { publicImageRef } from "@mtg/game-core/images"
 import {
   onlineDeckSubmissionSchema,
   personalGameSnapshotSchema,
@@ -160,51 +161,26 @@ export const deckSnapshotFromOnlineSubmission = (
   })),
   definitions: [
     ...submission.cards.map(card => {
-      const faces = card.faces ?? [
-        { name: card.name, typeLine: card.typeLine, imageUrl: card.imageUrl },
-      ]
+      const faces = card.faces ?? [{ name: card.name, typeLine: card.typeLine }]
       return {
         id: card.definitionId,
         name: card.name,
-        scryfallId: card.scryfallId,
         typeLine: card.typeLine,
         faces,
-        imageRefs: faces.flatMap((face, faceIndex) =>
-          face.imageUrl
-            ? [
-                {
-                  assetKey: `${card.definitionId}:${faceIndex}:normal`,
-                  faceIndex,
-                  variant: "normal" as const,
-                  url: face.imageUrl,
-                },
-              ]
-            : [],
-        ),
+        imageRefs: card.imageRefs ?? [],
       }
     }),
     ...submission.tokens.map(token => ({
       id: token.definitionId,
       name: token.name,
-      scryfallId: token.scryfallId,
       typeLine: token.typeLine,
       faces: [
         {
           name: token.name,
           typeLine: token.typeLine,
-          imageUrl: token.imageUrl,
         },
       ],
-      imageRefs: token.imageUrl
-        ? [
-            {
-              assetKey: `${token.definitionId}:0:normal`,
-              faceIndex: 0,
-              variant: "normal" as const,
-              url: token.imageUrl,
-            },
-          ]
-        : [],
+      imageRefs: token.imageRef ? [token.imageRef] : [],
       token: {
         kind: token.kind,
         name: token.name,
@@ -849,8 +825,7 @@ export const applyAuthoritativeCommand = (
               kind: submittedToken.kind,
               name: submittedToken.name,
               typeLine: submittedToken.typeLine,
-              imageUrl: submittedToken.imageUrl,
-              scryfallId: submittedToken.scryfallId,
+              imageRef: submittedToken.imageRef,
               power: submittedToken.power,
               toughness: submittedToken.toughness,
               position: command.payload.position,
@@ -1009,15 +984,12 @@ const visibleCard = (
     throw new Error("Kaartdefinitie ontbreekt in authoritative state.")
   const activeFace =
     definition.faces[card.activeFaceIndex] ?? definition.faces[0]
-  const imageUrl =
-    activeFace?.imageUrl ??
-    definition.imageRefs.find(ref => ref.faceIndex === card.activeFaceIndex)
-      ?.url
+  const imageRef = publicImageRef(definition.imageRefs.find(ref => ref.faceIndex === card.activeFaceIndex))
   return {
     instanceId: card.instanceId,
     definitionId: card.definitionId,
     name: activeFace?.name ?? definition.name,
-    imageUrl,
+    imageRef,
     typeLine: activeFace?.typeLine ?? definition.typeLine,
     tapped: card.tapped,
     activeFaceIndex: card.activeFaceIndex,
@@ -1025,9 +997,7 @@ const visibleCard = (
     faces: definition.faces.map((face, faceIndex) => ({
       name: face.name,
       typeLine: face.typeLine,
-      imageUrl:
-        face.imageUrl ??
-        definition.imageRefs.find(ref => ref.faceIndex === faceIndex)?.url,
+      imageRef: publicImageRef(definition.imageRefs.find(ref => ref.faceIndex === faceIndex)),
     })),
     attachedTo: card.attachedTo,
     position: card.position,
@@ -1043,10 +1013,7 @@ const visibleTokenDefinition = (
     definitionId: definition.id,
     name: firstFace?.name ?? definition.name,
     typeLine: firstFace?.typeLine ?? definition.typeLine,
-    imageUrl:
-      firstFace?.imageUrl ??
-      definition.imageRefs.find(reference => reference.faceIndex === 0)?.url,
-    scryfallId: definition.scryfallId,
+    imageRef: publicImageRef(definition.imageRefs.find(reference => reference.faceIndex === 0)),
     kind: definition.token?.kind ?? "other",
     power: definition.token?.power,
     toughness: definition.token?.toughness,

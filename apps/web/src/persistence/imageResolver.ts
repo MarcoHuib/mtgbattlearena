@@ -1,4 +1,5 @@
 import type { CardImageRef } from "@mtg/game-core/types"
+import { cardImageAssetKey, getCardImageUrl } from "@mtg/game-core/images"
 import { browserAssetCache } from "./assetCache"
 
 export type ResolvedImage = {
@@ -12,12 +13,14 @@ export const resolveCardImage = async (
   online: boolean,
 ): Promise<ResolvedImage | null> => {
   if (!image) return null
-  const cached = await browserAssetCache.match(image.assetKey, image.url)
+  const assetKey = cardImageAssetKey(image)
+  const remoteUrl = getCardImageUrl(image)
+  const cached = await browserAssetCache.match(assetKey, remoteUrl)
   if (cached) {
     if (cached.source === "automatic-cache") {
       return {
         source: "automatic-cache",
-        url: image.url,
+        url: remoteUrl,
       }
     }
     const objectUrl = URL.createObjectURL(await cached.response.blob())
@@ -29,5 +32,5 @@ export const resolveCardImage = async (
       },
     }
   }
-  return online ? { source: "remote", url: image.url } : null
+  return online ? { source: "remote", url: remoteUrl } : null
 }

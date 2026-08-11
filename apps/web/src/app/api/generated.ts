@@ -81,20 +81,18 @@ export const DeckFromUrlDocument = new TypedDocumentString(`
       definitions {
         id
         name
-        scryfallId
         oracleId
         layout
         faces {
           name
           typeLine
           oracleText
-          imageUrl
         }
         imageRefs {
-          assetKey
+          resolver
+          imageId
           faceIndex
           variant
-          url
         }
         oracleText
         typeLine

@@ -27,6 +27,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       game_worker: ${{ steps.filter.outputs.game_worker }}
       import_worker: ${{ steps.filter.outputs.import_worker }}
+      image_worker: ${{ steps.filter.outputs.image_worker }}
       any: ${{ steps.filter.outputs.any }}
     steps:
       - name: Check out repository
@@ -47,11 +48,13 @@ jobs:
           frontend=false
           game_worker=false
           import_worker=false
+          image_worker=false
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
             frontend=true
             game_worker=true
             import_worker=true
+            image_worker=true
           else
             while IFS= read -r -d '' file; do
               case "$file" in
@@ -59,11 +62,13 @@ jobs:
                   frontend=true
                   game_worker=true
                   import_worker=true
+                  image_worker=true
                   ;;
                 tsconfig.json|tsconfig.base.json|tsconfig.tools.json|packages/*)
                   frontend=true
                   game_worker=true
                   import_worker=true
+                  image_worker=true
                   ;;
                 apps/web/*|scripts/write-runtime-config.mjs|firebase.json|.firebaserc)
                   frontend=true
@@ -74,18 +79,22 @@ jobs:
                 apps/import-worker/*)
                   import_worker=true
                   ;;
+                apps/image-worker/*)
+                  image_worker=true
+                  ;;
               esac
             done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
           fi
 
           any=false
-          if [[ "$frontend" == true || "$game_worker" == true || "$import_worker" == true ]]; then
+          if [[ "$frontend" == true || "$game_worker" == true || "$import_worker" == true || "$image_worker" == true ]]; then
             any=true
           fi
 
           echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
           echo "game_worker=$game_worker" >> "$GITHUB_OUTPUT"
           echo "import_worker=$import_worker" >> "$GITHUB_OUTPUT"
+          echo "image_worker=$image_worker" >> "$GITHUB_OUTPUT"
           echo "any=$any" >> "$GITHUB_OUTPUT"
 
   build-frontend:
@@ -211,6 +220,30 @@ jobs:
         if: needs.changes.outputs.import_worker == 'true'
         run: npm run validate:import-worker
 
+  build-image-worker:
+    name: Build / Image Worker
+    needs: changes
+    if: needs.changes.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Image Worker unchanged
+        if: needs.changes.outputs.image_worker != 'true'
+        run: echo "Image Worker is unchanged; build is not required."
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: needs.changes.outputs.image_worker == 'true'
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: needs.changes.outputs.image_worker == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm ci
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm run image-worker:type-check && npm run test:image-worker
+      - if: needs.changes.outputs.image_worker == 'true'
+        run: npm run deploy:cloudflare:check:staging:image && npm run deploy:cloudflare:check:image
+
   build-complete:
     name: Build / Complete
     needs:
@@ -218,6 +251,7 @@ jobs:
       - build-frontend
       - build-game-worker
       - build-import-worker
+      - build-image-worker
     if: always() && needs.changes.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -227,11 +261,13 @@ jobs:
           FRONTEND_RESULT: ${{ needs.build-frontend.result }}
           GAME_RESULT: ${{ needs.build-game-worker.result }}
           IMPORT_RESULT: ${{ needs.build-import-worker.result }}
+          IMAGE_RESULT: ${{ needs.build-image-worker.result }}
         run: |
           set -euo pipefail
           [[ "$FRONTEND_RESULT" == success ]]
           [[ "$GAME_RESULT" == success ]]
           [[ "$IMPORT_RESULT" == success ]]
+          [[ "$IMAGE_RESULT" == success ]]
 
   release-beta-frontend:
     name: Beta / Frontend
@@ -321,6 +357,23 @@ jobs:
           packageManager: npm
           vars: RELEASE_VERSION
 
+  release-beta-image-worker:
+    name: Beta / Image Worker
+    needs: [changes, build-complete]
+    if: always() && needs.changes.outputs.image_worker == 'true' && needs.build-complete.result == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: 4.120.0
+          workingDirectory: apps/image-worker
+          command: deploy --env staging --config wrangler.toml
+          packageManager: npm
+
   release-beta-game-worker:
     name: Beta / Game Worker
     needs:
@@ -388,6 +441,7 @@ jobs:
       - release-beta-frontend
       - release-beta-import-worker
       - release-beta-game-worker
+      - release-beta-image-worker
     if: always() && needs.build-complete.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -401,11 +455,14 @@ jobs:
           IMPORT_RESULT: ${{ needs.release-beta-import-worker.result }}
           GAME_REQUIRED: ${{ needs.changes.outputs.game_worker }}
           GAME_RESULT: ${{ needs.release-beta-game-worker.result }}
+          IMAGE_REQUIRED: ${{ needs.changes.outputs.image_worker }}
+          IMAGE_RESULT: ${{ needs.release-beta-image-worker.result }}
         run: |
           set -euo pipefail
           [[ "$FRONTEND_REQUIRED" != true || "$FRONTEND_RESULT" == success ]]
           [[ "$IMPORT_REQUIRED" != true || "$IMPORT_RESULT" == success ]]
           [[ "$GAME_REQUIRED" != true || "$GAME_RESULT" == success ]]
+          [[ "$IMAGE_REQUIRED" != true || "$IMAGE_RESULT" == success ]]
 
   publish-beta-release:
     name: Beta / Publish release metadata
@@ -529,6 +586,23 @@ jobs:
           packageManager: npm
           vars: RELEASE_VERSION
 
+  release-production-image-worker:
+    name: Production / Image Worker
+    needs: [changes, beta-complete]
+    if: always() && needs.changes.outputs.image_worker == 'true' && needs.beta-complete.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: 4.120.0
+          workingDirectory: apps/image-worker
+          command: deploy --config wrangler.toml
+          packageManager: npm
+
   release-production-game-worker:
     name: Production / Game Worker
     needs:
@@ -596,6 +670,7 @@ jobs:
       - release-production-frontend
       - release-production-import-worker
       - release-production-game-worker
+      - release-production-image-worker
     if: always() && needs.beta-complete.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -609,11 +684,14 @@ jobs:
           IMPORT_RESULT: ${{ needs.release-production-import-worker.result }}
           GAME_REQUIRED: ${{ needs.changes.outputs.game_worker }}
           GAME_RESULT: ${{ needs.release-production-game-worker.result }}
+          IMAGE_REQUIRED: ${{ needs.changes.outputs.image_worker }}
+          IMAGE_RESULT: ${{ needs.release-production-image-worker.result }}
         run: |
           set -euo pipefail
           [[ "$FRONTEND_REQUIRED" != true || "$FRONTEND_RESULT" == success ]]
           [[ "$IMPORT_REQUIRED" != true || "$IMPORT_RESULT" == success ]]
           [[ "$GAME_REQUIRED" != true || "$GAME_RESULT" == success ]]
+          [[ "$IMAGE_REQUIRED" != true || "$IMAGE_RESULT" == success ]]
 
   publish-production-release:
     name: Production / Publish release metadata

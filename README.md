@@ -188,7 +188,8 @@ Open daarna de URL die Vite in de terminal toont.
 apps/
 ├── web/             React, Redux, IndexedDB, PWA en Playwright
 ├── game-worker/     Firebase-validatie, WebSockets en Durable Objects
-└── import-worker/   Afgeschermde Archidekt importproxy
+├── import-worker/   Afgeschermde Archidekt deckimportproxy
+└── image-worker/    Publieke cache-first card-image CDN-grens
 
 packages/
 ├── game-core/       Pure game-state en domeinlogica

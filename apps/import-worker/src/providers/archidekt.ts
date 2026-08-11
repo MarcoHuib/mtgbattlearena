@@ -156,12 +156,6 @@ const typeLine = (value: TypeLineInput): string | undefined => {
   ).trim()
   return constructed.length ? constructed : undefined
 }
-const imageUrl = (
-  uuid: string,
-  hash: string | number,
-  side: "front" | "back" = "front",
-): string =>
-  `https://card-images.archidekt.com/normal/${side}/${uuid[0]}/${uuid[1]}/${encodeURIComponent(uuid)}.jpg?${encodeURIComponent(String(hash))}`
 const numberStat = (value: string | null | undefined): number | undefined =>
   value && /^-?\d+$/.test(value) ? Number(value) : undefined
 const tokenKind = (name: string, types: readonly string[]): TokenKind => {
@@ -175,7 +169,6 @@ const tokenKind = (name: string, types: readonly string[]): TokenKind => {
 const foretellDefinition: CardDefinition = {
   id: "207b3d62-2541-4a51-8152-3c54218ab6f7",
   name: "Foretell",
-  scryfallId: "207b3d62-2541-4a51-8152-3c54218ab6f7",
   layout: "token",
   faces: [
     {
@@ -183,16 +176,14 @@ const foretellDefinition: CardDefinition = {
       typeLine: "Card",
       oracleText:
         "Place foretold cards here. You may cast them later for their foretell cost.",
-      imageUrl:
-        "https://card-images.archidekt.com/normal/front/2/0/207b3d62-2541-4a51-8152-3c54218ab6f7.jpg?1783906140",
     },
   ],
   imageRefs: [
     {
-      assetKey: "207b3d62-2541-4a51-8152-3c54218ab6f7:0:normal",
+      resolver: 1,
+      imageId: "207b3d62-2541-4a51-8152-3c54218ab6f7",
       faceIndex: 0,
       variant: "normal" as const,
-      url: "https://card-images.archidekt.com/normal/front/2/0/207b3d62-2541-4a51-8152-3c54218ab6f7.jpg?1783906140",
     },
   ],
   typeLine: "Card",
@@ -219,12 +210,6 @@ const toDefinition = (
   const scryfallId = valueId(card.uid)
   const uuid =
     scryfallId && /^[0-9a-f-]{36}$/i.test(scryfallId) ? scryfallId : undefined
-  const front =
-    card.imageUri ??
-    card.image_uris?.normal ??
-    (uuid && card.scryfallImageHash != null
-      ? imageUrl(uuid, card.scryfallImageHash)
-      : undefined)
   const explicit = card.card_faces ?? oracleCard.cardFaces ?? oracleCard.faces
   const faces = explicit?.length
     ? explicit.map((item, index) => ({
@@ -239,19 +224,12 @@ const toDefinition = (
           typeLine(oracleCard),
         oracleText:
           item.oracleText ?? item.oracle_text ?? item.text ?? oracleCard.text,
-        imageUrl:
-          item.imageUri ??
-          item.image_uris?.normal ??
-          (uuid
-            ? `https://cards.scryfall.io/normal/${index ? "back" : "front"}/${uuid[0]}/${uuid[1]}/${uuid}.jpg`
-            : undefined),
       }))
     : [
         {
           name,
           typeLine: typeLine(oracleCard),
           oracleText: oracleCard.text,
-          imageUrl: front,
         },
       ]
   if (
@@ -269,7 +247,6 @@ const toDefinition = (
       name: `${name} — achterkant`,
       typeLine: typeLine(oracleCard),
       oracleText: undefined,
-      imageUrl: imageUrl(uuid, card.scryfallImageHash, "back"),
     })
   }
   const types = oracleCard.types ?? []
@@ -280,7 +257,6 @@ const toDefinition = (
   return {
     id: definitionId,
     name,
-    ...(scryfallId ? { scryfallId } : {}),
     ...((valueId(oracleCard.uid) ??
     valueId(oracleCard.oracleId) ??
     valueId(oracleCard.id))
@@ -293,18 +269,14 @@ const toDefinition = (
       : {}),
     ...(oracleCard.layout ? { layout: oracleCard.layout } : {}),
     faces,
-    imageRefs: faces.flatMap((item, index) =>
-      item.imageUrl
-        ? [
-            {
-              assetKey: `${scryfallId ?? definitionId}:${index}:normal`,
-              faceIndex: index,
-              variant: "normal" as const,
-              url: item.imageUrl,
-            },
-          ]
-        : [],
-    ),
+    imageRefs: uuid
+      ? faces.map((_item, faceIndex) => ({
+          resolver: 1,
+          imageId: uuid,
+          faceIndex,
+          variant: "normal" as const,
+        }))
+      : [],
     ...(oracleCard.text ? { oracleText: oracleCard.text } : {}),
     ...(typeLine(oracleCard) ? { typeLine: typeLine(oracleCard) } : {}),
     ...((card.manaValue ??

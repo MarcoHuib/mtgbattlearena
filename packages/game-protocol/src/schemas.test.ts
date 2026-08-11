@@ -75,9 +75,10 @@ test("valideert één eigen deckregistratie zonder clientidentiteit of seat", ()
         definitionId: "commander",
         name: "Atraxa",
         faces: [
-          { name: "Atraxa", imageUrl: "https://example.test/front.jpg" },
+          { name: "Atraxa" },
           { name: "Atraxa, Compleated", oracleText: "Andere zijde" },
         ],
+        imageRefs: [{ resolver: 1, imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546", faceIndex: 0, variant: "normal" }],
         quantity: 1,
         isCommander: true,
       },

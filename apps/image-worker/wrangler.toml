@@ -1,0 +1,16 @@
+name = "mtg-battle-mode-images"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["global_fetch_strictly_public"]
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "cdn.mtgbattlearena.nl", custom_domain = true }]
+
+[observability]
+enabled = false
+
+[env.staging]
+name = "mtg-battle-mode-images-staging"
+workers_dev = false
+preview_urls = false
+routes = []
