@@ -10,7 +10,7 @@
 
 <br />
 
-# ⚔️ MTG Battle Mode
+# ⚔️ MTG Battle Arena
 
 ### Een local-first digitale tafel voor Magic: The Gathering
 
