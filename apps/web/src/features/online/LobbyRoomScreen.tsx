@@ -194,10 +194,7 @@ export const LobbyRoomScreen = ({
       const imported = await importDeckFromUrl(dispatch, deckUrl.trim())
       const deck = createImportedDeckSnapshot(imported)
       await repositories.decks.save(deck, deckOwnerId)
-      setDecks(current => [
-        deck,
-        ...current.filter(candidate => candidate.id !== deck.id),
-      ])
+      setDecks(await repositories.decks.list(deckOwnerId))
       setSelectedDeckId(deck.id)
       setDeckUrl("")
       setMessage(`${deck.name} is lokaal geïmporteerd. Kies ‘Deck gereed’.`)

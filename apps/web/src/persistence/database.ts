@@ -14,10 +14,16 @@ import type {
 } from "./repositories"
 
 type StoredGame = PersistedGame & { id: string; title: string }
-type StoredDeckOwner = {
+export type StoredDeckOwner = {
   key: string
-  deckId: string
-  deckSourceId?: string
+  revisionId: string
+  deckSourceId: string
+  ownerId: string
+}
+
+export type LegacyStoredDeckOwner = Partial<StoredDeckOwner> & {
+  key: string
+  deckId?: string
   ownerId: string
 }
 
@@ -29,6 +35,35 @@ const deckSourceIdentity = (deck: DeckSnapshot) =>
 
 const deckOwnerKey = (deckSourceId: string, ownerId: string) =>
   `${encodeURIComponent(ownerId)}::${deckSourceId}`
+
+export const selectLatestDeckOwnerRevisionsForMigration = (
+  decks: readonly DeckSnapshot[],
+  owners: readonly LegacyStoredDeckOwner[],
+): StoredDeckOwner[] => {
+  const byId = new Map(decks.map(deck => [deck.id, deck]))
+  const selected = new Map<string, StoredDeckOwner>()
+  for (const owner of owners) {
+    const revisionId = owner.revisionId ?? owner.deckId
+    const deck = revisionId ? byId.get(revisionId) : undefined
+    if (!deck) continue
+    const deckSourceId = deckSourceIdentity(deck)
+    const key = deckOwnerKey(deckSourceId, owner.ownerId)
+    const current = selected.get(key)
+    const currentDeck = current ? byId.get(current.revisionId) : undefined
+    if (
+      currentDeck &&
+      currentDeck.importedAt.localeCompare(deck.importedAt) >= 0
+    )
+      continue
+    selected.set(key, {
+      key,
+      revisionId: deck.id,
+      deckSourceId,
+      ownerId: owner.ownerId,
+    })
+  }
+  return [...selected.values()]
+}
 
 class BattleDatabase extends Dexie {
   games!: EntityTable<StoredGame, "id">
@@ -55,7 +90,7 @@ class BattleDatabase extends Dexie {
       })
       .upgrade(async transaction => {
         const decks = await transaction.table<DeckSnapshot>("decks").toArray()
-        await transaction.table<StoredDeckOwner>("deckOwners").bulkPut(
+        await transaction.table<LegacyStoredDeckOwner>("deckOwners").bulkPut(
           decks.map(deck => ({
             key: deckOwnerKey(deck.id, deviceDeckOwnerId),
             deckId: deck.id,
@@ -94,7 +129,7 @@ class BattleDatabase extends Dexie {
       })
       .upgrade(async transaction => {
         const decks = await transaction.table<DeckSnapshot>("decks").toArray()
-        const owners = transaction.table<StoredDeckOwner>("deckOwners")
+        const owners = transaction.table<LegacyStoredDeckOwner>("deckOwners")
         const games = await transaction.table<StoredGame>("games").toArray()
         const packages = await transaction
           .table<OfflineBattlePackage>("offlinePackages")
@@ -156,31 +191,32 @@ class BattleDatabase extends Dexie {
           deck.revisionId = deck.revisionId ?? deck.id
         })
         const records = await decks.toArray()
-        const byId = new Map(records.map(deck => [deck.id, deck]))
-        const owners = transaction.table<StoredDeckOwner>("deckOwners")
+        const owners = transaction.table<LegacyStoredDeckOwner>("deckOwners")
         const existingOwners = await owners.toArray()
-        const selected = new Map<string, StoredDeckOwner>()
-        for (const owner of existingOwners) {
-          const deck = byId.get(owner.deckId)
-          if (!deck) continue
-          const deckSourceId = deckSourceIdentity(deck)
-          const key = deckOwnerKey(deckSourceId, owner.ownerId)
-          const current = selected.get(key)
-          const currentDeck = current ? byId.get(current.deckId) : undefined
-          if (
-            currentDeck &&
-            currentDeck.importedAt.localeCompare(deck.importedAt) >= 0
-          )
-            continue
-          selected.set(key, {
-            key,
-            deckId: deck.id,
-            deckSourceId,
-            ownerId: owner.ownerId,
-          })
-        }
         await owners.clear()
-        await owners.bulkPut([...selected.values()])
+        await owners.bulkPut(
+          selectLatestDeckOwnerRevisionsForMigration(records, existingOwners),
+        )
+      })
+    this.version(6)
+      .stores({
+        games: "id, savedAt",
+        decks:
+          "id, deckSourceId, [source+sourceId], [deckSourceId+sourceHash], importedAt",
+        deckOwners:
+          "key, revisionId, deckSourceId, ownerId, [ownerId+deckSourceId]",
+        offlinePackages: "id, currentGameId, updatedAt",
+        assets: "assetKey, cacheKind, cachedAt",
+      })
+      .upgrade(async transaction => {
+        const decks = await transaction.table<DeckSnapshot>("decks").toArray()
+        const owners = transaction.table<LegacyStoredDeckOwner>("deckOwners")
+        const selected = selectLatestDeckOwnerRevisionsForMigration(
+          decks,
+          await owners.toArray(),
+        )
+        await owners.clear()
+        await owners.bulkPut(selected)
       })
   }
 }
@@ -239,7 +275,7 @@ const createDexieRepositories = (): PersistenceRepositories => {
           await database.decks.put(revision)
           await database.deckOwners.put({
             key: deckOwnerKey(deckSourceId, ownerId),
-            deckId: revision.id,
+            revisionId: revision.id,
             deckSourceId,
             ownerId,
           })
@@ -257,7 +293,7 @@ const createDexieRepositories = (): PersistenceRepositories => {
                 record.deckSnapshotIds.includes(previous.id),
               )
             const selected = await database.deckOwners
-              .where("deckId")
+              .where("revisionId")
               .equals(previous.id)
               .count()
             if (!referenced && selected === 0)
@@ -283,7 +319,7 @@ const createDexieRepositories = (): PersistenceRepositories => {
                 .where("ownerId")
                 .equals(ownerId)
                 .toArray()
-            ).map(owner => owner.deckId),
+            ).map(owner => owner.revisionId),
           )
         : await database.decks.toArray()
       return [...records]
@@ -297,18 +333,22 @@ const createDexieRepositories = (): PersistenceRepositories => {
         "rw",
         database.decks,
         database.deckOwners,
+        database.games,
+        database.offlinePackages,
         async () => {
           if (ownerId) {
             const deck = await database.decks.get(id)
-            if (deck)
-              await database.deckOwners.delete(
-                deckOwnerKey(deckSourceIdentity(deck), ownerId),
-              )
+            if (deck) {
+              const key = deckOwnerKey(deckSourceIdentity(deck), ownerId)
+              const selection = await database.deckOwners.get(key)
+              if (selection?.revisionId === id)
+                await database.deckOwners.delete(key)
+            }
           } else {
-            await database.deckOwners.where("deckId").equals(id).delete()
+            await database.deckOwners.where("revisionId").equals(id).delete()
           }
           const remainingOwners = await database.deckOwners
-            .where("deckId")
+            .where("revisionId")
             .equals(id)
             .count()
           if (remainingOwners > 0) return
@@ -358,7 +398,7 @@ const createDexieRepositories = (): PersistenceRepositories => {
 export const createMemoryRepositories = (): PersistenceRepositories => {
   const gameRecords = new Map<string, PersistedGame>()
   const deckRecords = new Map<string, DeckSnapshot>()
-  const deckOwners = new Map<string, Set<string>>()
+  const deckOwners = new Map<string, StoredDeckOwner>()
   const packageRecords = new Map<string, OfflineBattlePackage>()
   const assetRecords = new Map<string, AssetMetadata>()
 
@@ -396,6 +436,7 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
     decks: {
       save(deck, ownerId = deviceDeckOwnerId) {
         const sourceIdentity = deckSourceIdentity(deck)
+        const ownerKey = deckOwnerKey(sourceIdentity, ownerId)
         const revision = {
           ...deck,
           deckSourceId: sourceIdentity,
@@ -407,9 +448,6 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
             deckSourceIdentity(previous) !== sourceIdentity
           )
             continue
-          const previousOwners = deckOwners.get(previous.id)
-          previousOwners?.delete(ownerId)
-          if (!previousOwners?.size) deckOwners.delete(previous.id)
           const referenced =
             [...gameRecords.values()].some(record =>
               record.game.deckSnapshotIds.includes(previous.id),
@@ -417,13 +455,18 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
             [...packageRecords.values()].some(record =>
               record.deckSnapshotIds.includes(previous.id),
             )
-          if (!referenced && !previousOwners?.size)
-            deckRecords.delete(previous.id)
+          const selected = [...deckOwners.values()].some(
+            owner => owner.revisionId === previous.id,
+          )
+          if (!referenced && !selected) deckRecords.delete(previous.id)
         }
         deckRecords.set(revision.id, structuredClone(revision))
-        const owners = deckOwners.get(revision.id) ?? new Set<string>()
-        owners.add(ownerId)
-        deckOwners.set(revision.id, owners)
+        deckOwners.set(ownerKey, {
+          key: ownerKey,
+          revisionId: revision.id,
+          deckSourceId: sourceIdentity,
+          ownerId,
+        })
         return Promise.resolve()
       },
       get(id) {
@@ -440,19 +483,30 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
       list(ownerId) {
         return Promise.resolve(
           [...deckRecords.values()]
-            .filter(deck => !ownerId || deckOwners.get(deck.id)?.has(ownerId))
+            .filter(
+              deck =>
+                !ownerId ||
+                [...deckOwners.values()].some(
+                  owner =>
+                    owner.ownerId === ownerId && owner.revisionId === deck.id,
+                ),
+            )
             .sort((a, b) => b.importedAt.localeCompare(a.importedAt))
             .map(deck => structuredClone(deck)),
         )
       },
       delete(id, ownerId) {
         if (!ownerId) {
-          deckOwners.delete(id)
+          for (const [key, owner] of deckOwners)
+            if (owner.revisionId === id) deckOwners.delete(key)
           deckRecords.delete(id)
           return Promise.resolve()
         }
-        const owners = deckOwners.get(id)
-        owners?.delete(ownerId)
+        const deck = deckRecords.get(id)
+        if (deck) {
+          const key = deckOwnerKey(deckSourceIdentity(deck), ownerId)
+          if (deckOwners.get(key)?.revisionId === id) deckOwners.delete(key)
+        }
         const referenced =
           [...gameRecords.values()].some(record =>
             record.game.deckSnapshotIds.includes(id),
@@ -460,10 +514,10 @@ export const createMemoryRepositories = (): PersistenceRepositories => {
           [...packageRecords.values()].some(record =>
             record.deckSnapshotIds.includes(id),
           )
-        if (!owners?.size) {
-          deckOwners.delete(id)
-          if (!referenced) deckRecords.delete(id)
-        }
+        const selected = [...deckOwners.values()].some(
+          owner => owner.revisionId === id,
+        )
+        if (!selected && !referenced) deckRecords.delete(id)
         return Promise.resolve()
       },
     },

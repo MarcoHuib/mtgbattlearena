@@ -1,5 +1,9 @@
 import type { DeckSnapshot } from "@mtg/game-core/types"
-import { createMemoryRepositories, deviceDeckOwnerId } from "./database"
+import {
+  createMemoryRepositories,
+  deviceDeckOwnerId,
+  selectLatestDeckOwnerRevisionsForMigration,
+} from "./database"
 import { createGame } from "@mtg/game-core/game"
 
 const deck = (id: string): DeckSnapshot => ({
@@ -89,6 +93,81 @@ test("houdt revisions per eigenaar geïsoleerd en upsert expliciet per source", 
   expect(await repositories.decks.list("user-a")).toEqual([second])
   expect(await repositories.decks.list("user-b")).toEqual([second])
   expect(await repositories.decks.list("user-a")).toHaveLength(1)
+})
+
+test("v6-migratie kiest per owner/source alleen de recentste revision", () => {
+  const first = {
+    ...deck("revision-a"),
+    deckSourceId: "source-24765444",
+    revisionId: "revision-a",
+    sourceId: "24765444",
+    importedAt: "2026-07-29T20:00:00.000Z",
+  }
+  const second = {
+    ...first,
+    id: "revision-b",
+    revisionId: "revision-b",
+    sourceHash: "hash-b",
+    importedAt: "2026-07-30T20:00:00.000Z",
+  }
+  const migrated = selectLatestDeckOwnerRevisionsForMigration(
+    [first, second],
+    [
+      { key: "old-a", deckId: first.id, ownerId: "user-a" },
+      { key: "old-b", deckId: second.id, ownerId: "user-a" },
+      { key: "old-c", deckId: first.id, ownerId: "user-b" },
+    ],
+  )
+  expect(migrated).toEqual([
+    {
+      key: "user-a::source-24765444",
+      ownerId: "user-a",
+      deckSourceId: "source-24765444",
+      revisionId: "revision-b",
+    },
+    {
+      key: "user-b::source-24765444",
+      ownerId: "user-b",
+      deckSourceId: "source-24765444",
+      revisionId: "revision-a",
+    },
+  ])
+  expect(
+    selectLatestDeckOwnerRevisionsForMigration([first, second], migrated),
+  ).toEqual(migrated)
+})
+
+test("één owner kan andere sources en providers onafhankelijk selecteren", async () => {
+  const repositories = createMemoryRepositories()
+  await repositories.decks.save(
+    {
+      ...deck("archidekt-revision"),
+      sourceId: "24765444",
+      deckSourceId: "archidekt-source",
+      revisionId: "archidekt-revision",
+    },
+    "user-a",
+  )
+  await repositories.decks.save(
+    {
+      ...deck("other-archidekt-revision"),
+      sourceId: "other",
+      deckSourceId: "other-archidekt-source",
+      revisionId: "other-archidekt-revision",
+    },
+    "user-a",
+  )
+  await repositories.decks.save(
+    {
+      ...deck("moxfield-revision"),
+      source: "archidekt",
+      sourceId: "24765444",
+      deckSourceId: "moxfield-source",
+      revisionId: "moxfield-revision",
+    },
+    "user-a",
+  )
+  expect(await repositories.decks.list("user-a")).toHaveLength(3)
 })
 
 test("verbergt oude content-ID duplicaten maar bewaart gerefereerde games", async () => {
