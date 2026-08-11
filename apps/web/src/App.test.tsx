@@ -4,6 +4,10 @@ import { App } from "./App"
 import { importedDeckFixture } from "./utils/importedDeckFixture"
 import { renderWithProviders } from "./utils/test-utils"
 
+vi.mock("./archidekt/freshness", () => ({
+  currentArchidektSourceHash: vi.fn(() => Promise.resolve("source-hash")),
+}))
+
 beforeEach(() => {
   window.history.replaceState({}, "", "/")
   vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -30,15 +34,6 @@ beforeEach(() => {
               ),
             },
           },
-        }),
-      )
-    }
-    if (url.includes("/api/import/archidekt/")) {
-      const deckId = /\/archidekt\/(\d+)/.exec(url)?.[1] ?? "unknown"
-      return Promise.resolve(
-        Response.json({
-          name: deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
-          cards: [],
         }),
       )
     }
