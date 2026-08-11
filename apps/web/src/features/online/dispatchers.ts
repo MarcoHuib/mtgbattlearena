@@ -1,9 +1,4 @@
 import type { AppDispatch } from "../../app/store"
-import {
-  gameCommandSchema,
-  type GameCommand,
-  type ServerEvent,
-} from "@mtg/game-protocol"
 import type { BattlefieldPosition, PlayerId, Zone } from "@mtg/game-core/types"
 import {
   changeLife,
@@ -12,7 +7,6 @@ import {
   nextPhase,
   toggleTap,
 } from "../game/gameSlice"
-import type { OnlineGameService } from "./types"
 
 export type OfflineGameCommand =
   | { type: "DRAW_CARD"; playerId: PlayerId; amount?: number }
@@ -64,20 +58,5 @@ export class OfflineGameCommandDispatcher implements GameCommandDispatcher<Offli
         break
     }
     return Promise.resolve()
-  }
-}
-
-export class OnlineGameCommandDispatcher implements GameCommandDispatcher<
-  GameCommand,
-  ServerEvent
-> {
-  constructor(
-    private readonly gameId: string,
-    private readonly service: OnlineGameService,
-  ) {}
-
-  dispatch(command: GameCommand) {
-    const validated = gameCommandSchema.parse(command)
-    return this.service.sendCommand(this.gameId, validated)
   }
 }

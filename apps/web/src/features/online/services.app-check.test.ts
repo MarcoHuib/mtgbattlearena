@@ -14,7 +14,7 @@ test("behoudt Authorization naast de centrale App Check-header", async () => {
   })
   const fetchMock = vi
     .spyOn(globalThis, "fetch")
-    .mockResolvedValue(Response.json([]))
+    .mockResolvedValue(Response.json({ data: { publicLobbies: [] } }))
   const auth = {
     getIdToken: () => Promise.resolve("auth-token"),
   } as unknown as AuthService
@@ -29,4 +29,8 @@ test("behoudt Authorization naast de centrale App Check-header", async () => {
   const headers = new Headers(requestInit?.headers)
   expect(headers.get("Authorization")).toBe("Bearer auth-token")
   expect(headers.get("X-Firebase-AppCheck")).toBe("app-check-token")
+  expect(String(fetchMock.mock.calls[0]?.[0] as URL | string)).toBe(
+    "https://api.example.test/graphql",
+  )
+  expect(requestInit?.method).toBe("POST")
 })

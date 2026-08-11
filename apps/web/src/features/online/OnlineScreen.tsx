@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type SyntheticEvent,
@@ -11,11 +12,16 @@ import type {
   AuthService,
   CreateLobbyInput,
   OnlineGameService,
-  OnlineLobby,
+  PublicLobby,
 } from "./types"
 import { describeFirebaseAuthError } from "./firebaseAuth"
 import { useArenaStatus } from "./ArenaStatus"
 import { AuthProviderIcon } from "./AuthProviderIcon"
+import { usePublicLobbiesQuery } from "../../app/api/remoteGraphqlApi"
+import { lobbyListSchema } from "./types"
+
+const normalizeLobbyVisibility = (value: unknown) =>
+  value === "invite_only" ? "invite-only" : value
 
 type OnlineScreenProps = {
   auth: AuthService
@@ -36,9 +42,9 @@ const LobbyCard = ({
   signedIn,
   onOpen,
 }: {
-  lobby: OnlineLobby
+  lobby: PublicLobby
   signedIn: boolean
-  onOpen: (lobby: OnlineLobby) => void
+  onOpen: (lobby: PublicLobby) => void
 }) => {
   const actionLabel =
     lobby.status === "active"
@@ -101,11 +107,17 @@ export const OnlineScreen = ({
   const authState = useAuthState(auth)
   const arena = useArenaStatus()
   const arenaAvailable = arena.status === "online" || arena.status === "demo"
-  const [lobbies, setLobbies] = useState<OnlineLobby[]>([])
-  const [lobbyStatus, setLobbyStatus] = useState<
+  const usesGraphQLQueries = onlineGames.kind === "cloudflare"
+  const publicLobbiesQuery = usePublicLobbiesQuery(undefined, {
+    skip: !usesGraphQLQueries || !arenaAvailable,
+    refetchOnFocus: true,
+    pollingInterval: 30_000,
+  })
+  const [legacyLobbies, setLegacyLobbies] = useState<PublicLobby[]>([])
+  const [legacyLobbyStatus, setLegacyLobbyStatus] = useState<
     "loading" | "ready" | "empty" | "error"
   >("loading")
-  const [lobbyError, setLobbyError] = useState<string | null>(null)
+  const [legacyLobbyError, setLegacyLobbyError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -121,16 +133,16 @@ export const OnlineScreen = ({
 
   const loadLobbies = useCallback(
     async (signal?: AbortSignal) => {
-      setLobbyStatus("loading")
-      setLobbyError(null)
+      setLegacyLobbyStatus("loading")
+      setLegacyLobbyError(null)
       try {
         const result = await onlineGames.listPublicLobbies(signal)
-        setLobbies(result)
-        setLobbyStatus(result.length ? "ready" : "empty")
+        setLegacyLobbies(result)
+        setLegacyLobbyStatus(result.length ? "ready" : "empty")
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return
-        setLobbyStatus("error")
-        setLobbyError(
+        setLegacyLobbyStatus("error")
+        setLegacyLobbyError(
           error instanceof TypeError ||
             (error instanceof Error &&
               /load failed|failed to fetch|networkerror/i.test(error.message))
@@ -145,13 +157,45 @@ export const OnlineScreen = ({
   )
 
   useEffect(() => {
-    if (!arenaAvailable) return
+    if (!arenaAvailable || usesGraphQLQueries) return
     const controller = new AbortController()
     void loadLobbies(controller.signal)
     return () => {
       controller.abort()
     }
-  }, [arenaAvailable, authState.status, loadLobbies])
+  }, [arenaAvailable, authState.status, loadLobbies, usesGraphQLQueries])
+
+  const graphqlLobbies = useMemo(
+    () =>
+      lobbyListSchema.parse(
+        (publicLobbiesQuery.data?.publicLobbies ?? []).map(lobby => ({
+          ...lobby,
+          visibility: normalizeLobbyVisibility(lobby.visibility),
+        })),
+      ),
+    [publicLobbiesQuery.data],
+  )
+  const lobbies = usesGraphQLQueries ? graphqlLobbies : legacyLobbies
+  const lobbyStatus = usesGraphQLQueries
+    ? publicLobbiesQuery.isLoading || publicLobbiesQuery.isFetching
+      ? "loading"
+      : publicLobbiesQuery.isError
+        ? "error"
+        : graphqlLobbies.length
+          ? "ready"
+          : "empty"
+    : legacyLobbyStatus
+  const lobbyError = usesGraphQLQueries
+    ? publicLobbiesQuery.error &&
+      "data" in publicLobbiesQuery.error &&
+      typeof publicLobbiesQuery.error.data === "object" &&
+      publicLobbiesQuery.error.data !== null &&
+      "message" in publicLobbiesQuery.error.data
+      ? publicLobbiesQuery.error.data.message
+      : publicLobbiesQuery.isError
+        ? "Lobby’s laden is mislukt."
+        : null
+    : legacyLobbyError
 
   const ensureSignedIn = () => {
     if (!arenaAvailable) {
@@ -187,7 +231,7 @@ export const OnlineScreen = ({
     setMessage("Deelnemen…")
     try {
       const result = await onlineGames.joinByCode(code)
-      if (result.lobby.status === "active") {
+      if (result.status === "active") {
         onEnterGame(result.gameId)
       } else {
         onEnterLobby(result.gameId)
@@ -204,7 +248,7 @@ export const OnlineScreen = ({
     void join(joinCode)
   }
 
-  const openLobby = (lobby: OnlineLobby) => {
+  const openLobby = (lobby: PublicLobby) => {
     if (!ensureSignedIn()) return
     if (lobby.status === "active") {
       onEnterGame(lobby.id)
@@ -222,11 +266,11 @@ export const OnlineScreen = ({
     setCreating(true)
     setMessage("Lobby maken…")
     try {
-      const lobby = await onlineGames.createLobby(createInput)
-      if (lobby.status === "active") {
-        onEnterGame(lobby.id)
+      const result = await onlineGames.createLobby(createInput)
+      if (result.status === "active") {
+        onEnterGame(result.id)
       } else {
-        onEnterLobby(lobby.id)
+        onEnterLobby(result.id)
       }
     } catch (error) {
       setMessage(
@@ -555,7 +599,8 @@ export const OnlineScreen = ({
                   className="button button--secondary"
                   type="button"
                   onClick={() => {
-                    void loadLobbies()
+                    if (usesGraphQLQueries) void publicLobbiesQuery.refetch()
+                    else void loadLobbies()
                   }}
                 >
                   Vernieuwen
