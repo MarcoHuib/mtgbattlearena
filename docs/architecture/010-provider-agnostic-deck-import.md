@@ -65,6 +65,13 @@ onbereikbare cache wordt gelogd en als miss behandeld, zodat caching nooit een
 autoritatieve import blokkeert. De publieke GraphQL-fout blijft gemaskeerd;
 Workerlogs bevatten alleen fase, interne foutcode, provider, source-ID en release.
 
+De publieke freshness-route en de autoritatieve import gebruiken dezelfde
+allowlisted Archidekt HTTP-client. Deze client bouwt absolute API-URL's, gebruikt
+GET met dezelfde headers, timeout en 5 MB-limiet, en verwerkt redirects handmatig.
+Alleen HTTPS-redirects naar `archidekt.com` of `www.archidekt.com` en een `/api/`
+pad worden gevolgd. Daarmee kan een normale Archidekt-redirect de interne import
+niet breken zonder de SSRF-grens te verzwakken.
+
 ## Offline/online-pariteit
 
 Na import bewaart IndexedDB een onveranderlijke `DeckSnapshot`; offline spelen
