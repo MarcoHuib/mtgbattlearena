@@ -33,6 +33,15 @@ beforeEach(() => {
         }),
       )
     }
+    if (url.includes("/api/import/archidekt/")) {
+      const deckId = /\/archidekt\/(\d+)/.exec(url)?.[1] ?? "unknown"
+      return Promise.resolve(
+        Response.json({
+          name: deckId === "111" ? "Verdant Resolve" : "Tidal Memory",
+          cards: [],
+        }),
+      )
+    }
     return Promise.resolve(new Response(null, { status: 503 }))
   })
 })

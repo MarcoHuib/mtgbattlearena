@@ -38,17 +38,22 @@ blijft vereist volgens de ingestelde enforcementmodus.
 
 ## Fingerprint en cache
 
-De Worker berekent SHA-256 over een canonieke semantische representatie van
-naam/formaat, gesorteerde deckentries en gesorteerde genormaliseerde
-kaart-/tokendefinities. Objectkeys zijn stabiel gesorteerd. Providerstatistieken,
-viewcounts, responsevolgorde en andere ongebruikte metadata beïnvloeden de hash
-niet; aantallen, commanderstatus, kaartidentiteit, zijden en tokens wel.
+`@mtg/deck-source` berekent aan beide kanten SHA-256 over dezelfde canonieke
+Archidekt-bronrepresentatie. Objectkeys en collecties worden stabiel gesorteerd;
+bekende providerstatistieken en timestamps worden genegeerd. Aantallen,
+commander-categorieën, kaartdata, zijden en tokens beïnvloeden de hash wel. Deze
+module bevat bewust geen mapping naar `ImportedDeck` of gameplay.
+
+Bij een normale import observeert de browser de actuele deck- en tokenresponses
+via de bestaande vaste, met App Check beveiligde importproxy. Rechtstreeks
+Archidekt benaderen is niet nodig en de browser krijgt geen generieke fetchproxy.
+De browser stuurt de gedeelde fingerprint als `sourceHash` naar `deckFromUrl`.
 
 De cache bevat uitsluitend het gevalideerde `ImportedDeck`, nooit raw provider-
 JSON. Zonder cache wordt de provider opgehaald (`MISS`). Zonder clienthash of met
 een match wordt de bekende DTO zonder providercall geretourneerd (`HIT`). Een
 mismatch is alleen een stale-hint: de backend haalt en valideert opnieuw en
-berekent zelf de vervangende hash (`REFRESHED`). De frontendhash is nooit
+berekent met dezelfde module zelf de vervangende bronhash (`REFRESHED`). De frontendhash is nooit
 autoritatief. Een mislukte of ongeldige refresh overschrijft de geldige cache
 niet en levert een zichtbare importfout op.
 

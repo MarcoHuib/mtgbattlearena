@@ -1,9 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
-import type { ImportedDeck } from "@mtg/game-core/types"
-import {
-  createDeckImportService,
-  fingerprintImportedDeck,
-} from "../src/deck-import-service"
+import { fingerprintArchidektSource } from "@mtg/deck-source"
+import { createDeckImportService } from "../src/deck-import-service"
 import { parseArchidektUrl } from "../src/providers/archidekt"
 
 const rawDeck = (quantity = 1, commander = true) => ({
@@ -179,78 +176,14 @@ describe("application DTO cache", () => {
   })
 })
 
-test("fingerprint is orde- en metadata-onafhankelijk maar semantisch gevoelig", async () => {
-  const base: Pick<ImportedDeck, "name" | "format" | "cards" | "definitions"> =
-    {
-      name: "Deck",
-      cards: [
-        { definitionId: "a", quantity: 1, isCommander: false },
-        { definitionId: "b", quantity: 1, isCommander: true },
-      ],
-      definitions: [
-        { id: "a", name: "A", faces: [{ name: "A" }], imageRefs: [] },
-        {
-          id: "b",
-          name: "B",
-          faces: [{ name: "B" }],
-          imageRefs: [],
-          token: { kind: "treasure", name: "Treasure", source: "deck" },
-        },
-      ],
-    }
-  const hash = await fingerprintImportedDeck(base)
-  const reorderedWithIrrelevantMetadata = {
-    ...base,
-    views: 999,
-    cards: [...base.cards].reverse(),
-    definitions: [...base.definitions].reverse(),
-  }
-  expect(await fingerprintImportedDeck(reorderedWithIrrelevantMetadata)).toBe(
-    hash,
-  )
+test("gedeelde bronfingerprint is orde-onafhankelijk en detecteert deckwijzigingen", async () => {
+  const base = rawDeck(1)
+  const hash = await fingerprintArchidektSource(base, rawTokens)
   expect(
-    await fingerprintImportedDeck({
-      ...base,
-      cards: [{ ...base.cards[0], quantity: 2 }, base.cards[1]],
-    }),
-  ).not.toBe(hash)
-  expect(
-    await fingerprintImportedDeck({
-      ...base,
-      cards: [
-        ...base.cards,
-        { definitionId: "c", quantity: 1, isCommander: false },
-      ],
-      definitions: [
-        ...base.definitions,
-        { id: "c", name: "C", faces: [{ name: "C" }], imageRefs: [] },
-      ],
-    }),
-  ).not.toBe(hash)
-  expect(
-    await fingerprintImportedDeck({
-      ...base,
-      cards: [base.cards[0]],
-      definitions: [base.definitions[0]],
-    }),
-  ).not.toBe(hash)
-  expect(
-    await fingerprintImportedDeck({
-      ...base,
-      cards: [{ ...base.cards[0], isCommander: true }, base.cards[1]],
-    }),
-  ).not.toBe(hash)
-  expect(
-    await fingerprintImportedDeck({
-      ...base,
-      definitions: base.definitions.map(item =>
-        item.id === "b"
-          ? {
-              ...item,
-              token: { kind: "treasure", name: "Clue", source: "deck" },
-            }
-          : item,
-      ),
-    }),
-  ).not.toBe(hash)
+    await fingerprintArchidektSource(
+      { ...base, cards: [...base.cards].reverse() },
+      { results: [...rawTokens.results].reverse() },
+    ),
+  ).toBe(hash)
+  expect(await fingerprintArchidektSource(rawDeck(2), rawTokens)).not.toBe(hash)
 })

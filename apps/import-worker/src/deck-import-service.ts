@@ -1,18 +1,14 @@
 import {
   archidektProvider,
-  archidektTokenIds,
   DeckProviderError,
   mapArchidektDeck,
-} from "./providers/archidekt"
+} from "./providers/archidekt.ts"
 import type { ImportedDeck } from "@mtg/game-core/types"
+import {
+  archidektTokenIdsForFingerprint,
+  fingerprintArchidektSource,
+} from "@mtg/deck-source"
 
-type CanonicalValue =
-  | null
-  | string
-  | number
-  | boolean
-  | CanonicalValue[]
-  | { [key: string]: CanonicalValue }
 type DeckCacheStatus = "HIT" | "MISS" | "REFRESHED"
 export type DeckImportResult = {
   cacheStatus: DeckCacheStatus
@@ -28,59 +24,6 @@ export type DeckImportServiceOptions = {
 }
 
 const providers = [archidektProvider]
-const encoder = new TextEncoder()
-const stable = (value: unknown): CanonicalValue | undefined => {
-  if (Array.isArray(value))
-    return value.flatMap(item => {
-      const normalized = stable(item)
-      return normalized === undefined ? [] : [normalized]
-    })
-  if (value && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, item]) => item !== undefined)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .flatMap(([key, item]) => {
-          const normalized = stable(item)
-          return normalized === undefined ? [] : [[key, normalized] as const]
-        }),
-    )
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  )
-    return value
-  return undefined
-}
-const hex = (buffer: ArrayBuffer): string =>
-  [...new Uint8Array(buffer)]
-    .map(value => value.toString(16).padStart(2, "0"))
-    .join("")
-export const fingerprintImportedDeck = async (
-  deck: Pick<ImportedDeck, "name" | "format" | "cards" | "definitions">,
-): Promise<string> => {
-  const semantic = {
-    name: deck.name,
-    format: deck.format,
-    cards: [...deck.cards].sort((a, b) =>
-      `${a.definitionId}:${a.isCommander}`.localeCompare(
-        `${b.definitionId}:${b.isCommander}`,
-      ),
-    ),
-    definitions: [...deck.definitions]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map(definition => stable(definition)),
-  }
-  return hex(
-    await crypto.subtle.digest(
-      "SHA-256",
-      encoder.encode(JSON.stringify(stable(semantic))),
-    ),
-  )
-}
-
 const upstreamJson = async (
   url: string,
   fetcher: typeof fetch,
@@ -172,7 +115,7 @@ export const createDeckImportService = ({
       `https://archidekt.com/api/decks/${source.sourceId}/`,
       fetcher,
     )
-    const tokenIds = archidektTokenIds(rawDeck)
+    const tokenIds = archidektTokenIdsForFingerprint(rawDeck)
     const rawTokens = tokenIds.length
       ? await upstreamJson(
           `https://archidekt.com/api/cards/v2/?oracleCardIds=${encodeURIComponent(tokenIds.join(","))}&includeTokens&unique`,
@@ -185,7 +128,8 @@ export const createDeckImportService = ({
       source,
       new Date().toISOString(),
     )
-    deck.sourceHash = await fingerprintImportedDeck(deck)
+    // Never persist the client hint: independently hash the fetched provider data.
+    deck.sourceHash = await fingerprintArchidektSource(rawDeck, rawTokens)
     await cache.put(
       cacheKey,
       Response.json(deck, {

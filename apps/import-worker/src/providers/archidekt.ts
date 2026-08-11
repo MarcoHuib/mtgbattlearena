@@ -122,12 +122,17 @@ export const parseArchidektUrl = (input: string): ParsedDeckSource => {
 }
 
 export class DeckProviderError extends Error {
+  readonly code: string
+  readonly status: number
+
   constructor(
-    readonly code: string,
+    code: string,
     message: string,
-    readonly status = 502,
+    status = 502,
   ) {
     super(message)
+    this.code = code
+    this.status = status
   }
 }
 

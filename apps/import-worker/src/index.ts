@@ -157,7 +157,9 @@ export default {
 
     const cache = (caches as CloudflareCacheStorage).default
     const cacheKey = new Request(url.toString(), request)
-    const cached = await cache.match(cacheKey)
+    const freshnessProbe =
+      !isImageRequest && url.searchParams.get("fresh") === "1"
+    const cached = freshnessProbe ? undefined : await cache.match(cacheKey)
     if (cached) return withCors(cached, corsHeaders)
 
     const controller = new AbortController()
@@ -219,10 +221,13 @@ export default {
           "Content-Type": isImageRequest
             ? (upstream.headers.get("Content-Type") ?? "image/jpeg")
             : "application/json; charset=utf-8",
-          "Cache-Control": "public, max-age=120, s-maxage=600",
+          "Cache-Control": freshnessProbe
+            ? "no-store"
+            : "public, max-age=120, s-maxage=600",
         },
       })
-      context.waitUntil(cache.put(cacheKey, response.clone()))
+      if (!freshnessProbe)
+        context.waitUntil(cache.put(cacheKey, response.clone()))
       return withCors(response, corsHeaders)
     } catch (error: unknown) {
       const aborted =
@@ -243,7 +248,7 @@ export default {
 import {
   createDeckImportService,
   DeckProviderError,
-} from "./deck-import-service"
+} from "./deck-import-service.ts"
 
 type Env = { ALLOWED_ORIGIN?: string }
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void }

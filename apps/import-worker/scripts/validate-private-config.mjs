@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
-import importWorker from "../src/index.js"
+// The Worker source is TypeScript. Supported CI/runtime Node versions strip
+// erasable TypeScript syntax when importing this module for configuration tests.
+import importWorker from "../src/index.ts"
 
 const rootUrl = new URL("../../../", import.meta.url)
 const read = path => readFile(new URL(path, rootUrl), "utf8")
