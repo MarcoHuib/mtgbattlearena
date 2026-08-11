@@ -1,5 +1,6 @@
 import {
   gameCommandSchema,
+  onlineTokenDefinitionSchema,
   type GameCommand,
   type OnlineTokenDefinition,
 } from "@mtg/game-protocol"
@@ -142,15 +143,17 @@ export const OnlineGameScreen = ({
       setLocalTokens(
         deck.definitions
           .filter(definition => definition.token?.source === "deck")
-          .map(definition => ({
-            definitionId: definition.id,
-            name: definition.name,
-            typeLine: definition.typeLine,
-            imageRef: publicImageRef(definition.imageRefs[0]),
-            kind: definition.token?.kind ?? "other",
-            power: definition.token?.power,
-            toughness: definition.token?.toughness,
-          })),
+          .map(definition =>
+            onlineTokenDefinitionSchema.parse({
+              definitionId: definition.id,
+              name: definition.name,
+              typeLine: definition.typeLine,
+              imageRef: publicImageRef(definition.imageRefs[0]),
+              kind: definition.token?.kind ?? "other",
+              power: definition.token?.power,
+              toughness: definition.token?.toughness,
+            }),
+          ),
       )
     })
     return () => {

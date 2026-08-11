@@ -54,6 +54,32 @@ const deck: DeckSnapshot = {
       imageRefs: [],
       token: { kind: "treasure", name: "Treasure", source: "deck" },
     },
+    {
+      id: "beast",
+      name: "Beast",
+      faces: [{ name: "Beast" }],
+      imageRefs: [],
+      token: {
+        kind: "creature",
+        name: "Beast",
+        power: 3,
+        toughness: 3,
+        source: "deck",
+      },
+    },
+    {
+      id: "food",
+      name: "Food",
+      faces: [{ name: "Food" }],
+      imageRefs: [],
+      token: {
+        kind: "food",
+        name: "Food",
+        power: null,
+        toughness: null,
+        source: "deck",
+      },
+    },
   ],
 }
 
@@ -101,6 +127,11 @@ test("offline en online delen deckinterpretatie voor commanders, aantallen, DFCs
     },
   )
   const submission = createOnlineDeckSubmission(deck)
+  expect(submission.tokens[2]).toMatchObject({
+    kind: "food",
+    power: null,
+    toughness: null,
+  })
   let onlineId = 0
   const online = createAuthoritativeGame(
     {

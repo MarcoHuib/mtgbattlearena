@@ -1080,8 +1080,8 @@ type CreateTokenOptions = {
   name: string
   typeLine?: string
   imageRef?: CardDefinition["imageRefs"][number]
-  power?: number
-  toughness?: number
+  power?: number | null
+  toughness?: number | null
   position?: BattlefieldPosition
   createId: IdFactory
   now?: string
@@ -1091,6 +1091,11 @@ export const createToken = (
   game: GameState,
   options: CreateTokenOptions,
 ): GameState => {
+  if (
+    options.kind === "creature" &&
+    (typeof options.power !== "number" || typeof options.toughness !== "number")
+  )
+    throw new Error("Een creature-token vereist numerieke power en toughness.")
   const name = options.name.trim() || "Token"
   const definitionId = options.createId("token-definition")
   const instanceId = options.createId("token")

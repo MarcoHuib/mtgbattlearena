@@ -460,8 +460,8 @@ export const gameSlice = createSlice({
         playerId: PlayerId
         kind: TokenKind
         name: string
-        power?: number
-        toughness?: number
+        power?: number | null
+        toughness?: number | null
         position?: BattlefieldPosition
         definitionId: string
         instanceId: string

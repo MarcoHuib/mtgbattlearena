@@ -4,33 +4,49 @@ export const playerIdSchema = z.string().min(1).max(80)
 export const cardInstanceIdSchema = z.string().min(1).max(120)
 export const gameIdSchema = z.string().min(1).max(120)
 
-const tokenKindSchema = z.enum([
-  "creature",
-  "treasure",
-  "food",
-  "clue",
-  "copy",
-  "emblem",
-  "other",
-])
-const imageRefSchema = z.object({
-  resolver: z.number().int().positive(),
-  imageId: z.string().min(1).max(120),
-  faceIndex: z.number().int().min(0).max(1),
-  variant: z.literal("normal"),
-}).strict()
-
-export const onlineTokenDefinitionSchema = z
+const imageRefSchema = z
   .object({
-    definitionId: z.string().min(1).max(120),
-    name: z.string().min(1).max(300),
-    typeLine: z.string().max(500).optional(),
-    imageRef: imageRefSchema.optional(),
-    kind: tokenKindSchema,
-    power: z.number().int().min(-1_000).max(1_000).optional(),
-    toughness: z.number().int().min(-1_000).max(1_000).optional(),
+    resolver: z.number().int().positive(),
+    imageId: z.string().min(1).max(120),
+    faceIndex: z.number().int().min(0).max(1),
+    variant: z.literal("normal"),
   })
   .strict()
+
+const tokenDefinitionFields = {
+  definitionId: z.string().min(1).max(120),
+  name: z.string().min(1).max(300),
+  typeLine: z.string().max(500).optional(),
+  imageRef: imageRefSchema.optional(),
+}
+const tokenStatSchema = z.number().int().min(-1_000).max(1_000)
+
+export const onlineTokenDefinitionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...tokenDefinitionFields,
+      kind: z.literal("creature"),
+      power: tokenStatSchema,
+      toughness: tokenStatSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...tokenDefinitionFields,
+      kind: z.enum(["treasure", "food", "clue", "emblem"]),
+      power: z.null().optional(),
+      toughness: z.null().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...tokenDefinitionFields,
+      kind: z.enum(["copy", "other"]),
+      power: tokenStatSchema.nullable().optional(),
+      toughness: tokenStatSchema.nullable().optional(),
+    })
+    .strict(),
+])
 
 export const onlineDeckCardSchema = z
   .object({

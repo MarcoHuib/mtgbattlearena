@@ -36,8 +36,8 @@ const menuStyle = ({ x, y }: MenuPoint): CSSProperties => {
   }
 }
 
-const tokenStats = (power?: number, toughness?: number) =>
-  power === undefined || toughness === undefined ? "" : `${power}/${toughness}`
+const tokenStats = (power?: number | null, toughness?: number | null) =>
+  power == null || toughness == null ? "" : `${power}/${toughness}`
 
 const TokenThumbnail = ({ definition }: { definition: CardDefinition }) => {
   const online = useOnlineStatus()
