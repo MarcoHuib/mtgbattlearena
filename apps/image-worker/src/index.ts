@@ -14,6 +14,7 @@ const MAX_BYTES = 12 * 1024 * 1024
 const BROWSER_CACHE_CONTROL = "public, max-age=86400"
 const EDGE_CACHE_CONTROL = "public, max-age=2592000"
 const SAFE_HOST = "cards.scryfall.io"
+const MAX_REDIRECTS = 3
 
 export class ScryfallImageResolver implements ImageResolver {
   resolve(request: ImageRequest): Promise<ResolvedImage> {
@@ -31,6 +32,24 @@ type Dependencies = {
   fetch: typeof fetch
   timeoutMs?: number
   resolvers?: ReadonlyMap<number, ImageResolver>
+  log?: Pick<Console, "warn" | "error">
+}
+
+const isSafeUpstream = (url: URL): boolean =>
+  url.protocol === "https:" &&
+  url.hostname === SAFE_HOST &&
+  url.port === "" &&
+  url.username === "" &&
+  url.password === ""
+
+const safeLocation = (location: string | null, base: URL) => {
+  if (!location) return null
+  try {
+    const url = new URL(location, base)
+    return { host: url.hostname, path: url.pathname }
+  } catch {
+    return { host: "invalid", path: "invalid" }
+  }
 }
 
 const sharedHeaders = (): Headers =>
@@ -98,13 +117,7 @@ export const createImageHandler =
       faceIndex: face,
       variant,
     })
-    if (
-      resolved.url.protocol !== "https:" ||
-      resolved.url.hostname !== SAFE_HOST ||
-      resolved.url.port !== "" ||
-      resolved.url.username !== "" ||
-      resolved.url.password !== ""
-    )
+    if (!isSafeUpstream(resolved.url))
       return errorResponse(502, "Bad gateway")
 
     const controller = new AbortController()
@@ -114,37 +127,84 @@ export const createImageHandler =
       },
       dependencies.timeoutMs ?? 8_000,
     )
+    let upstreamUrl = resolved.url
     try {
-      const upstream = await dependencies.fetch(resolved.url, {
-        method: request.method,
-        redirect: "manual",
-        signal: controller.signal,
-        headers: {
-          Accept: "image/jpeg",
-          "User-Agent": "MTGBattleArena-Image-CDN/1.0",
-        },
-      })
-      if (upstream.status >= 300 && upstream.status < 400)
-        return errorResponse(502, "Bad gateway")
-      if (!upstream.ok)
+      let upstream: Response | undefined
+      for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+        upstream = await dependencies.fetch(upstreamUrl, {
+          method: request.method,
+          redirect: "manual",
+          signal: controller.signal,
+          headers: {
+            Accept: "image/jpeg",
+            "User-Agent": "MTGBattleArena-Image-CDN/1.0",
+          },
+        })
+        if (upstream.status < 300 || upstream.status >= 400) break
+
+        const location = upstream.headers.get("Location")
+        const diagnosticLocation = safeLocation(location, upstreamUrl)
+        dependencies.log?.warn("Image upstream redirect", {
+          status: upstream.status,
+          host: upstreamUrl.hostname,
+          path: upstreamUrl.pathname,
+          redirectHost: diagnosticLocation?.host ?? null,
+          redirectPath: diagnosticLocation?.path ?? null,
+          redirectCount,
+        })
+        if (!location || redirectCount === MAX_REDIRECTS)
+          return errorResponse(502, "Bad gateway")
+        let redirected: URL
+        try {
+          redirected = new URL(location, upstreamUrl)
+        } catch {
+          return errorResponse(502, "Bad gateway")
+        }
+        if (!isSafeUpstream(redirected))
+          return errorResponse(502, "Bad gateway")
+        upstreamUrl = redirected
+      }
+
+      if (!upstream) return errorResponse(502, "Bad gateway")
+      if (!upstream.ok) {
+        dependencies.log?.warn("Image upstream response rejected", {
+          status: upstream.status,
+          host: upstreamUrl.hostname,
+          path: upstreamUrl.pathname,
+        })
         return errorResponse(
           upstream.status === 404 ? 404 : 502,
           "Image unavailable",
         )
+      }
 
       const contentType = upstream.headers
         .get("Content-Type")
         ?.split(";", 1)[0]
         ?.trim()
         .toLowerCase()
-      if (contentType !== "image/jpeg")
+      if (contentType !== "image/jpeg") {
+        dependencies.log?.warn("Image upstream response rejected", {
+          status: upstream.status,
+          host: upstreamUrl.hostname,
+          path: upstreamUrl.pathname,
+          phase: "content-type",
+        })
         return errorResponse(415, "Unsupported media type")
+      }
 
       const declaredSize = Number(
         upstream.headers.get("Content-Length") ?? 0,
       )
-      if (declaredSize > MAX_BYTES)
+      if (declaredSize > MAX_BYTES) {
+        dependencies.log?.warn("Image upstream response rejected", {
+          status: upstream.status,
+          host: upstreamUrl.hostname,
+          path: upstreamUrl.pathname,
+          phase: "declared-size",
+        })
         return errorResponse(413, "Payload too large")
+      }
 
       const headers = successHeaders(
         contentType,
@@ -154,15 +214,29 @@ export const createImageHandler =
         return new Response(null, { status: 200, headers })
 
       const body = await upstream.arrayBuffer()
-      if (body.byteLength > MAX_BYTES)
+      if (body.byteLength > MAX_BYTES) {
+        dependencies.log?.warn("Image upstream response rejected", {
+          status: upstream.status,
+          host: upstreamUrl.hostname,
+          path: upstreamUrl.pathname,
+          phase: "actual-size",
+        })
         return errorResponse(413, "Payload too large")
+      }
       return new Response(body, { status: 200, headers })
     } catch (error) {
+      const errorName = error instanceof Error ? error.name : "UnknownError"
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      dependencies.log?.error("Image upstream fetch failed", {
+        host: upstreamUrl.hostname,
+        path: upstreamUrl.pathname,
+        errorName,
+        errorMessage,
+      })
+      const aborted = errorName === "AbortError"
       return errorResponse(
-        error instanceof DOMException && error.name === "AbortError" ? 504 : 502,
-        error instanceof DOMException && error.name === "AbortError"
-          ? "Upstream timeout"
-          : "Bad gateway",
+        aborted ? 504 : 502,
+        aborted ? "Upstream timeout" : "Bad gateway",
       )
     } finally {
       clearTimeout(timer)
@@ -171,6 +245,6 @@ export const createImageHandler =
 
 export default {
   fetch(request: Request): Promise<Response> {
-    return createImageHandler({ fetch })(request)
+    return createImageHandler({ fetch, log: console })(request)
   },
 }
