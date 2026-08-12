@@ -7,7 +7,7 @@ Geaccepteerd. Deze ADR introduceerde savegameschema 4; de actuele offline savega
 ## Context
 
 Een Commander-playtest heeft meer handmatige administratie nodig, maar MTG
-Battle Mode blijft een digitale tafel en geen rules engine. Nieuwe interacties
+MTG Battle Arena blijft een digitale tafel en geen rules engine. Nieuwe interacties
 moeten undo/redo, autosave, refresh en offline herstel overleven zonder
 continue pointerbewegingen in Redux te bewaren.
 

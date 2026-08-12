@@ -39,11 +39,11 @@
 ---
 
 > [!NOTE]
-> **MTG Battle Mode is een handmatige digitale tafel, geen Magic rules engine.**
+> **MTG Battle Arena is een handmatige digitale tafel, geen Magic rules engine.**
 > Spelers voeren zelf acties uit zoals kaarten verplaatsen, tappen, leven aanpassen,
 > counters beheren, mulligans uitvoeren en beurten doorlopen.
 
-## ✨ Waarom MTG Battle Mode?
+## ✨ Waarom MTG Battle Arena?
 
 |                             |                                                                                  |
 | --------------------------- | -------------------------------------------------------------------------------- |
@@ -707,7 +707,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
 <br />
 
-MTG Battle Mode is onafhankelijk en onofficieel fancontent onder de Wizards of
+MTG Battle Arena is onafhankelijk en onofficieel fancontent onder de Wizards of
 the Coast Fan Content Policy. Wizards heeft het project niet goedgekeurd of
 onderschreven. Een deel van het gebruikte materiaal is eigendom van Wizards of
 the Coast LLC. © Wizards of the Coast LLC.
