@@ -49,6 +49,31 @@ describe("image CDN boundary", () => {
     )
   })
 
+  it("follows a safe Scryfall redirect and returns the JPEG", async () => {
+    const redirected = `https://cards.scryfall.io/normal/front/6/a/${id}-canonical.jpg`
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { Location: redirected } }),
+      )
+      .mockResolvedValueOnce(jpeg())
+    const log = { warn: vi.fn(), error: vi.fn() }
+    const response = await createImageHandler({ fetch, log })(request())
+    expect(response.status).toBe(200)
+    expect(response.headers.get("Content-Type")).toBe("image/jpeg")
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect((fetch.mock.calls[1]?.[0] as URL).href).toBe(redirected)
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" })
+    expect(log.warn).toHaveBeenCalledWith(
+      "Image upstream redirect",
+      expect.objectContaining({
+        status: 302,
+        host: "cards.scryfall.io",
+        redirectHost: "cards.scryfall.io",
+      }),
+    )
+  })
+
   it.each([
     ["unknown resolver", `/v1/2/${id}/0/normal`],
     ["malformed id", "/v1/1/https:%2F%2Fevil.test/x/0/normal"],
@@ -105,18 +130,23 @@ describe("image CDN boundary", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store")
   })
 
-  it("rejects redirects and resolver output outside Scryfall", async () => {
+  it("rejects a redirect outside Scryfall without fetching it", async () => {
     const redirect = new Response(null, {
       status: 302,
       headers: { Location: "https://evil.test/x" },
     })
+    const fetch = vi.fn(() => Promise.resolve(redirect))
     expect(
       (
         await createImageHandler({
-          fetch: vi.fn(() => Promise.resolve(redirect)),
+          fetch,
         })(request())
       ).status,
     ).toBe(502)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects resolver output outside Scryfall", async () => {
     const evil: ImageResolver = {
       resolve: () =>
         Promise.resolve({ url: new URL("https://evil.test/x") }),
@@ -129,6 +159,22 @@ describe("image CDN boundary", () => {
         })(request())
       ).status,
     ).toBe(502)
+  })
+
+  it("returns 502 and logs safe diagnostics for a fetch exception", async () => {
+    const log = { warn: vi.fn(), error: vi.fn() }
+    const response = await createImageHandler({
+      fetch: vi.fn(() => Promise.reject(new TypeError("network failed"))),
+      log,
+    })(request())
+    expect(response.status).toBe(502)
+    expect(response.headers.get("Cache-Control")).toBe("no-store")
+    expect(log.error).toHaveBeenCalledWith("Image upstream fetch failed", {
+      host: "cards.scryfall.io",
+      path: `/normal/front/6/a/${id}.jpg`,
+      errorName: "TypeError",
+      errorMessage: "network failed",
+    })
   })
 
   it("HEAD returns the same content/cache metadata and no body", async () => {
