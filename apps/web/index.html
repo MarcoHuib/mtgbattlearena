@@ -2,32 +2,66 @@
 <html lang="nl">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>MTG Battle Arena - Digitale Magic: The Gathering-tafel</title>
+
     <meta
       name="description"
-      content="Speel Magic: The Gathering aan een local-first digitale tafel. Importeer decks, speel offline of online en hervat je battle wanneer je wilt."
+      content="Speel Magic: The Gathering met je eigen decks aan een digitale tafel. Importeer decks en speel offline of online met MTG Battle Arena."
     />
+
     <meta name="robots" content="index, follow" />
+
     <link rel="canonical" href="https://mtgbattlearena.nl/" />
+
+    <!-- Favicons -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="/favicon-16x16.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/apple-touch-icon.png"
+    />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="nl_NL" />
     <meta property="og:site_name" content="MTG Battle Arena" />
-    <meta property="og:title" content="MTG Battle Arena — Digitale Magic-tafel" />
+    <meta
+      property="og:title"
+      content="MTG Battle Arena - Digitale Magic: The Gathering-tafel"
+    />
     <meta
       property="og:description"
-      content="Importeer je Magic-decks en speel local-first, offline of online aan één digitale tafel."
+      content="Importeer je Magic: The Gathering-decks en speel offline of online aan één digitale tafel."
     />
     <meta property="og:url" content="https://mtgbattlearena.nl/" />
     <meta
       property="og:image"
       content="https://mtgbattlearena.nl/fantasy-arena-hero.jpg"
     />
+    <meta
+      property="og:image:alt"
+      content="MTG Battle Arena digitale Magic: The Gathering-tafel"
+    />
+
     <meta name="theme-color" content="#07110e" />
+
+    <!-- Website identity for search engines -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -36,26 +70,39 @@
         "url": "https://mtgbattlearena.nl/"
       }
     </script>
+
+    <!-- Only the homepage may be indexed -->
     <script>
       if (window.location.pathname !== "/") {
-        document.querySelector('meta[name="robots"]').content = "noindex, follow"
+        document
+          .querySelector('meta[name="robots"]')
+          .setAttribute("content", "noindex, follow");
+
+        document
+          .querySelector('link[rel="canonical"]')
+          ?.remove();
       }
     </script>
-    <title>MTG Battle Arena — Digitale Magic-tafel</title>
   </head>
+
   <body>
     <div id="root">
       <main>
         <h1>MTG Battle Arena</h1>
+
         <p>
-          Importeer je Magic: The Gathering-decks en speel aan een local-first
-          digitale tafel, volledig offline of samen online.
+          Importeer je Magic: The Gathering-decks en speel aan een digitale
+          tafel, volledig offline of samen online.
         </p>
       </main>
     </div>
-    <noscript data-nosnippet>
-      Schakel JavaScript in om MTG Battle Arena te gebruiken.
+
+    <noscript>
+      <div data-nosnippet>
+        JavaScript is vereist om MTG Battle Arena te gebruiken.
+      </div>
     </noscript>
+
     <script src="/runtime-config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
