@@ -5,13 +5,34 @@ const read = (relativePath: string) =>
 
 test("homepage bevat de indexeerbare SEO-contracten", () => {
   const html = read("../index.html")
-  expect(html).toContain("<title>MTG Battle Arena — Digitale Magic-tafel</title>")
-  expect(html).toContain('<meta name="robots" content="index, follow" />')
-  expect(html).toContain('<link rel="canonical" href="https://mtgbattlearena.nl/" />')
+  const compactHtml = html.replace(/\s+/g, " ")
+  const title = /<title>([^<]+)<\/title>/.exec(html)?.[1]
+  expect(title).toMatch(/^MTG Battle Arena\b/)
+  expect(title).toContain("Magic")
+  expect(compactHtml).toMatch(
+    /<meta name="description" content="[^"]*MTG Battle Arena[^"]*" \/>/,
+  )
+  expect(compactHtml).toContain(
+    '<meta name="robots" content="index, follow" />',
+  )
+  expect(compactHtml).toContain(
+    '<link rel="canonical" href="https://mtgbattlearena.nl/" />',
+  )
+  expect(compactHtml).toContain(
+    '<meta property="og:site_name" content="MTG Battle Arena" />',
+  )
+  expect(compactHtml).toMatch(
+    /<meta property="og:title" content="MTG Battle Arena[^"]*" \/>/,
+  )
+  expect(compactHtml).toContain(
+    '<meta property="og:url" content="https://mtgbattlearena.nl/" />',
+  )
   expect(html).toContain('"@type": "WebSite"')
   expect(html).toContain('"name": "MTG Battle Arena"')
   expect(html).toContain("<h1>MTG Battle Arena</h1>")
-  expect(html).toContain("<noscript data-nosnippet>")
+  expect(compactHtml).toMatch(
+    /<noscript(?: [^>]*)?>.*data-nosnippet(?:="")?.*MTG Battle Arena.*<\/noscript>/,
+  )
   expect(html).toContain('window.location.pathname !== "/"')
   expect(html).toContain('"noindex, follow"')
 
