@@ -14,6 +14,18 @@ test("homepage bevat de indexeerbare SEO-contracten", () => {
   expect(html).toContain("<noscript data-nosnippet>")
   expect(html).toContain('window.location.pathname !== "/"')
   expect(html).toContain('"noindex, follow"')
+
+  const jsonLd = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(
+    html,
+  )?.[1]
+  expect(jsonLd).toBeDefined()
+  expect(JSON.parse(jsonLd!)).toEqual({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "MTG Battle Arena",
+    url: "https://mtgbattlearena.nl/",
+  })
+  expect(html).not.toContain("MTG Battle Mode")
 })
 
 test("robots en sitemap zijn echte publieke statische assets", () => {

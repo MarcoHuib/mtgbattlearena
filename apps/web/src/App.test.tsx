@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, vi } from "vitest"
 import { App } from "./App"
 import * as importDeckApi from "./app/api/importDeck"
+import { navigate } from "./app/router"
 import { importedDeckFixture } from "./utils/importedDeckFixture"
 import { renderWithProviders } from "./utils/test-utils"
 
@@ -23,6 +24,36 @@ beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockImplementation(() => {
     return Promise.resolve(new Response(null, { status: 503 }))
   })
+})
+
+test("robots metadata volgt client-side navigatie van en naar de homepage", async () => {
+  const robots = document.createElement("meta")
+  robots.name = "robots"
+  robots.content = "index, follow"
+  document.head.append(robots)
+
+  try {
+    renderWithProviders(<App />)
+    await waitFor(() => {
+      expect(robots.content).toBe("index, follow")
+    })
+
+    act(() => {
+      navigate("/offline")
+    })
+    await waitFor(() => {
+      expect(robots.content).toBe("noindex, follow")
+    })
+
+    act(() => {
+      navigate("/")
+    })
+    await waitFor(() => {
+      expect(robots.content).toBe("index, follow")
+    })
+  } finally {
+    robots.remove()
+  }
 })
 
 test("importeert twee decks, start een battle en verplaatst via het actiemenu", async () => {
