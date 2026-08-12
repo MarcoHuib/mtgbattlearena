@@ -1,6 +1,6 @@
 {
-  "name": "MTG Battle Mode",
-  "short_name": "Battle Mode",
+  "name": "MTG Battle Arena",
+  "short_name": "Battle Arena",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

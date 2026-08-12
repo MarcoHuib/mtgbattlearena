@@ -1,10 +1,10 @@
-# AGENTS.md — MTG Battle Mode
+# AGENTS.md — MTG Battle Arena
 
 Lees dit bestand volledig voordat je wijzigingen maakt. Dit bestand is leidend voor architectuur, scope, kwaliteit en werkwijze.
 
 ## 1. Projectdoel
 
-Bouw een onofficiële Magic: The Gathering Battle Mode die zowel **volledig lokaal/offline** als **optioneel online multiplayer** kan worden gebruikt.
+Bouw een onofficiële Magic: The Gathering Battle Arena die zowel **volledig lokaal/offline** als **optioneel online multiplayer** kan worden gebruikt.
 
 De applicatie is een digitale tafel en geen automatische Magic-regelsimulator. In offline modus kan één gebruiker meerdere zijden lokaal bedienen. In online modus bestuurt iedere deelnemer zijn eigen speler binnen één gedeelde game.
 

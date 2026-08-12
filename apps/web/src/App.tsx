@@ -39,6 +39,13 @@ export const App = ({ services = defaultServices }: AppProps) => {
   const hydrated = useRef(false)
 
   useEffect(() => {
+    const robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]')
+    const isHomepage = window.location.pathname === "/"
+    if (robots)
+      robots.content = isHomepage ? "index, follow" : "noindex, follow"
+  }, [route])
+
+  useEffect(() => {
     if (hydrated.current) return
     hydrated.current = true
     void dispatch(hydrateApplication())

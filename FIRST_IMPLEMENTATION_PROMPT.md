@@ -2,7 +2,7 @@
 
 Lees `AGENTS.md` volledig voordat je wijzigingen maakt. Dit bestand is leidend.
 
-We bouwen de eerste production-ready verticale slice van **MTG Battle Mode**. Bouw nog geen volledige Magic-regelsimulator en voeg nog geen accounts, cloud sync, online multiplayer of React Native-app toe.
+We bouwen de eerste production-ready verticale slice van **MTG Battle Arena**. Bouw nog geen volledige Magic-regelsimulator en voeg nog geen accounts, cloud sync, online multiplayer of React Native-app toe.
 
 Inspecteer eerst de bestaande repository, package manager, scripts, TypeScript-configuratie, linting, tests, buildconfiguratie en eventuele deploymentbestanden. Geef daarna een kort implementatieplan en voer het direct uit zonder opnieuw toestemming te vragen, behalve wanneer een secret, betaalde externe resource of destructieve handeling nodig is.
 

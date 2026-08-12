@@ -10,14 +10,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Een local-first digitale tafel voor twee Magic-decks."
+      content="Speel Magic: The Gathering aan een local-first digitale tafel. Importeer decks, speel offline of online en hervat je battle wanneer je wilt."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://mtgbattlearena.nl/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="nl_NL" />
+    <meta property="og:site_name" content="MTG Battle Arena" />
+    <meta property="og:title" content="MTG Battle Arena — Digitale Magic-tafel" />
+    <meta
+      property="og:description"
+      content="Importeer je Magic-decks en speel local-first, offline of online aan één digitale tafel."
+    />
+    <meta property="og:url" content="https://mtgbattlearena.nl/" />
+    <meta
+      property="og:image"
+      content="https://mtgbattlearena.nl/fantasy-arena-hero.jpg"
     />
     <meta name="theme-color" content="#07110e" />
-    <title>MTG Battle Mode</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "MTG Battle Arena",
+        "url": "https://mtgbattlearena.nl/"
+      }
+    </script>
+    <script>
+      if (window.location.pathname !== "/") {
+        document.querySelector('meta[name="robots"]').content = "noindex, follow"
+      }
+    </script>
+    <title>MTG Battle Arena — Digitale Magic-tafel</title>
   </head>
   <body>
-    <noscript>Schakel JavaScript in om Battle Mode te gebruiken.</noscript>
-    <div id="root"></div>
+    <noscript data-nosnippet>
+      Schakel JavaScript in om MTG Battle Arena te gebruiken.
+    </noscript>
+    <div id="root">
+      <main>
+        <h1>MTG Battle Arena</h1>
+        <p>
+          Importeer je Magic: The Gathering-decks en speel aan een local-first
+          digitale tafel, volledig offline of samen online.
+        </p>
+      </main>
+    </div>
     <script src="/runtime-config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
