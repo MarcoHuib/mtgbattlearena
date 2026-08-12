@@ -29,11 +29,13 @@ export class ScryfallImageResolver implements ImageResolver {
 }
 
 type Dependencies = {
-  fetch: typeof fetch
+  fetcher: typeof fetch
   timeoutMs?: number
   resolvers?: ReadonlyMap<number, ImageResolver>
   log?: Pick<Console, "warn" | "error">
 }
+
+export const fetcher: typeof fetch = (input, init) => fetch(input, init)
 
 const isSafeUpstream = (url: URL): boolean =>
   url.protocol === "https:" &&
@@ -131,7 +133,7 @@ export const createImageHandler =
     try {
       let upstream: Response | undefined
       for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-        upstream = await dependencies.fetch(upstreamUrl, {
+        upstream = await dependencies.fetcher(upstreamUrl, {
           method: request.method,
           redirect: "manual",
           signal: controller.signal,
@@ -245,6 +247,6 @@ export const createImageHandler =
 
 export default {
   fetch(request: Request): Promise<Response> {
-    return createImageHandler({ fetch, log: console })(request)
+    return createImageHandler({ fetcher, log: console })(request)
   },
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-Geaccepteerd en uitgebreid voor fase 2.
+Geaccepteerd en door latere ADR’s uitgebreid. De actuele savegameversie is schema 7; deckidentiteit volgt ADR 010 en image delivery ADR 011.
 
 ## Context
 
@@ -26,18 +26,17 @@ hetzelfde zijn als een tijdelijke browsercache.
 - Dexie implementeert repositoryinterfaces voor decks, games,
   offlinepakketmanifesten en assetmetadata. Daardoor blijft een andere
   opslagimplementatie mogelijk.
-- Decksnapshots blijven immutable en kunnen door een bestaande savegame worden
-  vastgehouden. Een afzonderlijke Dexie-eigenaarsindex bepaalt welke snapshots
-  in de decklijst van een Firebase-gebruiker of in de apparaatlokale offlinelijst
-  verschijnen. Verwijderen haalt eerst alleen die eigenaarskoppeling weg; data
-  die nog door een game of offlinepakket wordt gebruikt blijft behouden.
-- Bestaande snapshots uit databaseversie 1 krijgen bij migratie bewust de
-  neutrale eigenaar `device`; de oude data bevatte geen betrouwbare Firebase-UID.
-  Een ingelogde gebruiker kan zo'n zichtbaar gemarkeerde legacy-import via
-  Decks beheren expliciet aan het eigen account koppelen.
-- De snapshot-ID bevat een deterministische fingerprint van de geïmporteerde
-  Archidekt-inhoud. Dezelfde import maakt daardoor geen duplicaat, terwijl een
-  gewijzigde deckinhoud een nieuw immutable snapshot oplevert.
+- Deckinhoud blijft immutable per revision en kan door een bestaande savegame
+  worden vastgehouden. Een stabiele `DeckSource` identificeert `(provider,
+  externalId)`; iedere unieke `sourceHash` krijgt een onveranderlijke
+  `DeckRevision`. De hash is daarmee versie/freshness en niet langer de
+  bronidentiteit zelf.
+- De lokale ownerrelatie is expliciet `(ownerId, deckSourceId) -> revisionId`.
+  Een herimport kan alleen de selectie van die owner naar een nieuwe revision
+  verplaatsen; historische revisions, games en offlinepakketten blijven intact.
+- Legacy apparaatlokale snapshots blijven compatibel hydrateerbaar. Migraties
+  mogen eigenaarschap of revision-identiteit niet uit providerdata of oude
+  afbeelding-URL's afleiden.
 - De PWA-serviceworker bewaart de app-shell en opportunistische
   runtime-afbeeldingen. Dat is vervangbare cache.
 - “Download voor offline gebruik” maakt apart een duurzaam manifest en bewaart
@@ -51,7 +50,8 @@ De app kan zonder netwerk hydrateren en spelen zodra app-shell en expliciete
 assets aanwezig zijn. Browseropslag blijft onder beleid van de browser vallen;
 de UI meldt daarom eerlijk of de Storage Persistence API toestemming gaf.
 
-Savegames gebruiken vanaf fase 3 schema 5. De hydrator ondersteunt schema 1–4
-en vult nieuwe velden veilig aan. De Dexie-tabellen zelf hoefden niet
-destructief te wijzigen, omdat het versieerbare savegamerecord als geheel wordt
-opgeslagen.
+Offline savegames gebruiken inmiddels schema 7; de hydrator ondersteunt oudere
+schema’s en migreert ook history-snapshots veilig door. Deckselecties gebruiken
+IndexedDB-versie 6 voor de expliciete owner/source/revision-relatie. De
+ImageRef-compatibiliteitslaag uit ADR 011 normaliseert oude deckrevisies bij
+hydratie zonder revision-ID of sourceHash te veranderen.

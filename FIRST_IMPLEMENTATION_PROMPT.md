@@ -1,4 +1,4 @@
-> **Status:** historische prompt voor de oorspronkelijke offline verticale slice. Gebruik voor de online uitbreiding `ONLINE_MULTIPLAYER_PROMPT.md`. De beperkingen in dit bestand gelden alleen voor deze eerste mijlpaal.
+> **Status:** historische prompt voor de oorspronkelijke offline verticale slice. `ONLINE_MULTIPLAYER_PROMPT.md` is eveneens historische implementatiecontext; de actuele architectuur staat in de ADR’s, met name 006–011. De beperkingen in dit bestand gelden alleen voor deze eerste mijlpaal.
 
 Lees `AGENTS.md` volledig voordat je wijzigingen maakt. Dit bestand is leidend.
 

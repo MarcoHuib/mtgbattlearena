@@ -2,10 +2,11 @@
 
 ## Besluit
 
-De online application/server-data-API krijgt naast de bestaande REST-routes een
-GraphQL-endpoint op `POST /graphql`. GraphQL Yoga draait in de bestaande Game
-Worker. De migratie is incrementeel: REST blijft tijdelijk beschikbaar en de
-realtime gameverbinding blijft WebSocket-gebaseerd.
+De online application/server-data-API gebruikt `POST /graphql` in de bestaande
+Game Worker. GraphQL Yoga draait naast enkele bestaande HTTP-compatibiliteits-
+routes; de first-party webapp gebruikt gegenereerde persisted GraphQL-operaties
+voor lobby- en deckimportdata. De realtime gameverbinding blijft bewust
+WebSocket-gebaseerd.
 
 De browser gebruikt gegenereerde RTK Query-endpoints in de bestaande Redux
 Toolkit-store. Apollo Client is bewust niet toegevoegd: een tweede genormaliseerde
@@ -26,12 +27,16 @@ GraphQL-requeststatus en servercache.
 | `POST /api/online/lobbies/:id/start` | `startGame`                                                                                  | bestaande prepare/init/mark/release-flow                 |
 | `POST /api/online/lobbies/:id/abort` | `abortGame`                                                                                  | bestaande hostsession, Game DO en lobbystatus            |
 | `POST /api/online/socket-ticket`     | `createSocketTicket`                                                                         | `LobbyDurableObject.issueSocketTicket`                   |
-| `GET /api/online/games/:id/snapshot` | REST blijft actief; GraphQL-resolver is niet als first-party productieoperatie geregistreerd | session lookup + `GameDurableObject.getPersonalSnapshot` |
+| `GET /api/online/games/:id/snapshot` | GraphQL-resolver bestaat voor migratie/tests maar is niet als first-party productieoperatie geregistreerd | session lookup + `GameDurableObject.getPersonalSnapshot` |
+| provider-deckimport                    | `deckFromUrl(url, sourceHash)`                                                               | private Import Worker + `LobbyDurableObject.resolveDeckRevision`             |
 
-`GET /api/online/health`, `POST /api/online/games/:id/commands`, de
-WebSocket-upgrade, importproxy en imageproxy blijven HTTP. De commandroute is een
-bestaande fallback; normaal realtime verkeer blijft via WebSockets lopen. Import
-is al achter een domeinadapter geïsoleerd en wordt in een aparte slice geëvalueerd.
+`GET /api/online/health`, `POST /api/online/games/:id/commands` en de
+WebSocket-upgrade blijven HTTP. De commandroute is een bestaande fallback;
+normaal realtime verkeer blijft via WebSockets lopen. De webapp importeert decks
+via GraphQL `deckFromUrl`; een begrensde Archidekt freshness-proxy blijft alleen
+voor bronfingerprinting/compatibiliteit bestaan. Card images zijn volledig uit
+de application-API gehaald en lopen via de aparte publieke Image Worker/CDN uit
+ADR 011.
 
 ## Securitygrenzen
 
@@ -85,5 +90,7 @@ WebSocketstate en raken RTK Query niet.
 
 GraphQL subscriptions zijn niet beschikbaar. Socket-ticketconsumptie,
 WebSocket-upgrade, commandvalidatie, berichtlimieten en broadcasts zijn
-ongewijzigd. Offline routes, IndexedDB, autosave, deckimport en assetcaching zijn
-niet afhankelijk gemaakt van GraphQL of Firebase.
+ongewijzigd. Offline routes, IndexedDB, autosave en assetcaching zijn niet afhankelijk gemaakt
+van GraphQL of Firebase. De online/managed deckimport gebruikt wel GraphQL als
+application-API, terwijl de provideradapter en Image Worker afzonderlijke
+architectuurgrenzen blijven.

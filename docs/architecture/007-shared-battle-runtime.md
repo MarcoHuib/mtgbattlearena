@@ -142,12 +142,12 @@ battlefieldgroepen en zichtbare kaartzijden mogen wel worden gedeeld.
 Een kaartdefinitie bewaart de bekende zijden in `faces` en de bijbehorende
 assets per `faceIndex` in `imageRefs`. Iedere fysieke `CardInstance` bewaart
 zelfstandig `activeFaceIndex`; meerdere exemplaren van dezelfde definitie
-kunnen daardoor onafhankelijk transformeren. De Archidekt-adapter gebruikt
-één `resolveCardFaces`-grens: expliciete face-metadata heeft voorrang,
-Scryfall-facegegevens zijn de tweede bron en alleen voor bekende dubbelzijdige
-layouts mag een back-URL uit een herkenbare HTTPS-URL van
-`card-images.archidekt.com` worden afgeleid. Normale kaarten, meld-layouts en
-oude snapshots met alleen een voorkant blijven enkelzijdig.
+kunnen daardoor onafhankelijk transformeren. De provideradapter normaliseert
+bekende kaartzijdes naar provider-neutrale `faces` plus `ImageRef`s per
+`faceIndex`. Er wordt geen back-URL meer uit een Archidekt- of andere provider-URL
+afgeleid. Alleen wanneer brondata een geldige printing-ID/zijde ondersteunt,
+kan een tweede ImageRef ontstaan. Normale kaarten, meld-layouts en oude snapshots
+met alleen een voorkant blijven enkelzijdig.
 
 De gedeelde `CardView` toont één kaartactiedialoog in beide modi. De actie
 `Kaart omdraaien` roept `BattleRuntimeActions.switchFace` aan. Offline loopt

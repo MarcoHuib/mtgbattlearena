@@ -56,7 +56,9 @@ owner/source-rijen idempotent. Wanneer oude duplicaten verschillende
 `sourceHash`-waarden hebben, blijven het afzonderlijke revisionrecords; alleen
 de zichtbare ownerselectie wordt teruggebracht tot één revision. Bij meerdere
 selecties voor dezelfde owner/source wint de recentste `importedAt`. Bestaande
-games en offlinepakketten worden niet herschreven of verwijderd.
+games en offlinepakketten worden niet herschreven of verwijderd. Legacy
+deckrevisies met oude imagevelden worden bij read idempotent naar `ImageRef`
+genormaliseerd zonder `deckId`, `revisionId` of `sourceHash` te veranderen.
 
 Een toekomstige provider of SYSTEM/demo-bron gebruikt dezelfde source- en
 revisionregels met een eigen providerwaarde. Daardoor kunnen ook demo-gebruikers
@@ -68,10 +70,14 @@ demo-decks zelf vallen buiten deze wijziging.
 De Archidekt-provider herkent uitsluitend `https` op `archidekt.com` en
 `www.archidekt.com`, zonder credentials of afwijkende poort, en accepteert alleen
 het bekende deckpad met positief numeriek ID. Uitgaand verkeer gebruikt vaste
-API-constants en volgt geen redirects; de gebruikers-URL wordt nooit gefetcht.
+API-constants; de gebruikers-URL wordt nooit gefetcht. Redirects worden alleen
+handmatig gevolgd wanneer iedere hop opnieuw HTTPS, een toegestane Archidekt-host
+en het vaste `/api/`-pad behoudt.
 Responses hebben timeout- en groottelimieten en worden vóór mapping met Zod
 gevalideerd. Card-imagebytes lopen uitsluitend via de afzonderlijke grens uit
-[ADR 011](./011-image-delivery-boundary.md); Archidekt is geen imageprovider.
+[ADR 011](./011-image-delivery-boundary.md); Archidekt is geen runtime-imageprovider.
+De adapter publiceert alleen `ImageRef { resolver, imageId, faceIndex, variant }`
+en verwijdert legacy `imageUrl`/provider-URL's uit de domeinweergave.
 
 De GraphQL-query `deckFromUrl` gebruikt de bestaande App Check-, CORS-,
 requestlimit-, foutmaskerings- en persisted-operationketen. Deckimport blijft,
@@ -95,9 +101,9 @@ De cache bevat uitsluitend het gevalideerde `ImportedDeck`, nooit raw provider-
 JSON. Zonder cache wordt de provider opgehaald (`MISS`). Zonder clienthash of met
 een match wordt de bekende DTO zonder providercall geretourneerd (`HIT`). Een
 mismatch is alleen een stale-hint: de backend haalt en valideert opnieuw en
-berekent met dezelfde module zelf de vervangende bronhash (`REFRESHED`). De frontendhash is nooit
-autoritatief. Een mislukte of ongeldige refresh overschrijft de geldige cache
-niet en levert een zichtbare importfout op.
+berekent met dezelfde module zelf de vervangende bronhash (`REFRESHED`). De
+frontendhash is nooit autoritatief. Een mislukte of ongeldige refresh
+overschrijft de geldige cache niet en levert een zichtbare importfout op.
 
 De DTO-cache gebruikt een publieke HTTPS-cachekey onder
 `api.mtgbattlearena.nl/__internal-cache/imported-deck/v2/...`. De `v2` voorkomt

@@ -5,11 +5,16 @@ Firebase Authentication, authorization, rate limits, socket tickets, command
 validation, or the server-authoritative Durable Objects.
 
 ```text
-Browser
+Browser application requests
   -> Firebase Auth ID token + Firebase App Check token
   -> Cloudflare Game Worker
   -> authentication -> App Check -> rate limits -> authorization
   -> Lobby/Game Durable Object or private Import Worker binding
+
+Browser card-image requests
+  -> cdn.mtgbattlearena.nl
+  -> public constrained Image Worker
+  -> cards.scryfall.io
 ```
 
 The web client uses Firebase App Check with
@@ -20,21 +25,25 @@ The web client uses Firebase App Check with
 
 ## Endpoint policy
 
-- Public: `GET /api/online/health`, CORS `OPTIONS`, and cached
-  `/api/import/archidekt/image/*` requests.
-- App Check: public lobby listing, deck/token imports, and every authenticated
-  `/api/online/*` operation.
+- Public: `GET /api/online/health` en CORS `OPTIONS` op de application-API.
+  Kaartafbeeldingen zijn een afzonderlijke publieke CDN-grens en geen Game
+  Worker/App Check-endpoint.
+- App Check: public lobby listing, GraphQL-deckimport, begrensde Archidekt-
+  freshnessrequests en iedere
+  beschermde application-API-operatie volgens de ingestelde enforcementmodus.
 - Auth plus App Check: lobby mutations, game APIs, and
   `POST /api/online/socket-ticket`.
 - WebSocket upgrade: the existing short-lived, single-use ticket remains the
   credential. App Check is checked before ticket issuance and is not repeated
   for each frame.
 
-The image exception is intentional: native `<img>` requests cannot attach a
-custom header. That endpoint accepts only the existing constrained card ID,
-face/hash inputs and retains its upstream allowlist, timeout, response-size,
-content validation, and cache protections. The Import Worker remains private
-behind its Service Binding.
+Native `<img>` requests cannot attach a custom App Check header, so images are
+intentionally outside the Game Worker. `cdn.mtgbattlearena.nl` accepts only the
+versioned ImageRef route, resolver 1, UUID printing IDs, face 0/1 and `normal`.
+The Image Worker has a fixed Scryfall allowlist, safe redirect validation,
+timeout/response-size/JPEG checks and public edge caching. It accepts no Firebase
+identity, cookies or arbitrary upstream URL. The Import Worker remains private
+behind its Service Binding and is not an image proxy.
 
 ## Server verification
 

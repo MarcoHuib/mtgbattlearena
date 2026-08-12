@@ -57,19 +57,25 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
   geweigerd. SPA-routewisselingen sturen na toestemming een handmatige
   `page_view`; vóór toestemming wordt de Analytics SDK niet geladen.
 - Cloudflare Access en Cloudflare RBAC worden niet voor spelers gebruikt.
-- Een Cloudflare Worker in TypeScript beheert de publieke HTTPS-API,
-  Firebase-tokenvalidatie en WebSocket-upgrades.
-- `api.mtgbattlearena.nl` is de publieke REST-gateway. De online Worker stuurt
-  `/api/import/archidekt/*` intern via een Cloudflare service binding door naar
-  de afzonderlijke import-Worker.
-- De Import Worker heeft voor zowel Production als Beta `workers_dev` en
-  preview-URL's uitgeschakeld en heeft geen publieke route. Alleen de
-  environment-specifieke `IMPORT` Service Binding kan hem bereiken; CORS geldt
-  daarbij uitsluitend als browsercompatibiliteit/defense-in-depth, niet als
-  authenticatie.
+- De TypeScript Game Worker beheert de publieke application-API,
+  Firebase-tokenvalidatie, GraphQL Yoga, legacy/compatibiliteits-HTTP-routes en
+  WebSocket-upgrades.
+- `api.mtgbattlearena.nl` host `POST /graphql` als primaire first-party
+  application/server-data-API. Productie en staging accepteren voor de webapp
+  uitsluitend geregistreerde SHA-256 persisted operations. Bestaande REST-routes
+  blijven waar nodig als compatibiliteitslaag; realtime gameverkeer blijft
+  WebSocket-gebaseerd.
+- Autoritatieve deckimport (`deckFromUrl`) roept via de environment-specifieke
+  `IMPORT` Service Binding de afzonderlijke Import Worker aan. De Import Worker
+  heeft in Production en Beta `workers_dev` en preview-URL's uitgeschakeld en
+  geen publieke route. Archidekt blijft uitsluitend deck-/tokenbron.
+- Kaartafbeeldingen lopen niet via de Game of Import Worker. De browser gebruikt
+  alleen `https://cdn.mtgbattlearena.nl/v1/...`; de publieke Image Worker
+  valideert provider-neutrale `ImageRef`s en haalt uitsluitend toegestane
+  Scryfall-imagebytes op.
 - `ws.mtgbattlearena.nl` accepteert uitsluitend de WebSocket-upgrade. De
   API-hostnaam accepteert geen socket-upgrade en de WebSocket-hostnaam
-  publiceert geen REST-routes.
+  publiceert geen application-API-routes.
 - Eén SQLite-backed `LobbyDurableObject` bewaart lobby’s, deelnemers,
   zichtbaarheid, statussen en gamecodes.
 - Iedere wedstrijd heeft precies één SQLite-backed `GameDurableObject` met de
@@ -154,7 +160,9 @@ Het Durable Object bewaart de volledige state en serialiseert per verbinding een
 - een speler ontvangt alleen zijn eigen hand en expliciet aan hem getoonde kaarten;
 - van verborgen zones van anderen worden alleen toegestane aantallen gestuurd;
 - spectators ontvangen standaard alleen publieke informatie;
-- verborgen kaarten bevatten geen naam, Scryfall-ID, afbeelding-URL of andere afleidbare metadata.
+- verborgen kaarten bevatten geen naam, `ImageRef`, provider-ID of andere
+  afleidbare metadata. Zichtbare kaarten mogen uitsluitend de provider-neutrale
+  publieke ImageRef ontvangen.
 
 Online Redux is uitsluitend de ontvangen clientview plus lokale UI-state. Een lokaal gemanipuleerde Redux-store verandert de server niet.
 
@@ -405,7 +413,10 @@ standaard-Wranglerconfiguratie blijft Production (`mtg-battle-mode-online` met
 `mtg-battle-mode-import`); `[env.staging]` maakt Beta
 (`mtg-battle-mode-online-staging` met `mtg-battle-mode-import-staging`). De
 staging service binding wordt expliciet opnieuw gedefinieerd en kan daardoor
-niet stilzwijgend naar de Production Import Worker wijzen.
+niet stilzwijgend naar de Production Import Worker wijzen. De Image Worker heeft
+ook een afzonderlijke staging deployment, maar die heeft bewust geen publieke
+route of preview-URL; de huidige publieke kaart-CDN is het Production custom
+domain `cdn.mtgbattlearena.nl`.
 
 Lobby- en Game-bindings staan eveneens expliciet onder `[env.staging]`. Ze
 verwijzen zonder `script_name` naar de staging Game Worker en gebruiken daarmee
