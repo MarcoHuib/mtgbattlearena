@@ -1,35 +1,62 @@
 # Legal & compliance
 
-Laatst beoordeeld: 12 augustus 2026.
+Laatst beoordeeld: 13 augustus 2026.
 
-Deze map beschrijft de juridische en licentiegrenzen van MTG Battle Arena. De documenten zijn bedoeld om duidelijk te maken welke onderdelen door de projecteigenaar worden geleverd, welke rechten bij derden blijven en welke externe voorwaarden van toepassing kunnen zijn.
+Deze map beschrijft de juridische en licentiegrenzen van MTG Battle Arena. De
+documenten maken onderscheid tussen eigen open-sourcecode, materiaal van derden
+en externe diensten waarvoor afzonderlijke voorwaarden of project-specifieke
+toestemming gelden.
 
 > [!IMPORTANT]
-> Deze documenten zijn geen juridisch advies en kunnen geen garantie geven dat een derde nooit een claim zal indienen. Contractuele voorwaarden en intellectuele-eigendomsrechten van derden blijven altijd leidend. Bij twijfel of vóór commerciële exploitatie is beoordeling door een gespecialiseerde jurist verstandig.
+> Deze documenten zijn geen juridisch advies en geven geen garantie tegen claims
+> of wijzigingen in voorwaarden. De actuele voorwaarden en rechten van derden
+> blijven leidend. Bij commerciële exploitatie, wezenlijke wijzigingen in het
+> gebruik van providerdata of twijfel over een toestemming is beoordeling door
+> een gespecialiseerde jurist verstandig.
 
 ## Documenten
 
-- [`FAN_CONTENT_AND_IP.md`](FAN_CONTENT_AND_IP.md) — Wizards of the Coast, Magic-IP, kaartafbeeldingen en fancontent.
-- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — afbakening van Archidekt, Scryfall, Firebase, Cloudflare en overige derden.
-- [`LICENSE_BOUNDARIES.md`](LICENSE_BOUNDARIES.md) — scheiding tussen eigen broncode en content/rechten van derden.
-- [`ARCHIDEKT_INTEGRATION.md`](ARCHIDEKT_INTEGRATION.md) — specifieke contractuele aandachtspunten rond de Archidekt-import.
-- [`TAKEDOWN_POLICY.md`](TAKEDOWN_POLICY.md) — procedure voor meldingen over auteursrecht, merken en andere rechten.
+- [`FAN_CONTENT_AND_IP.md`](FAN_CONTENT_AND_IP.md) — Wizards of the Coast,
+  Magic-IP, kaartafbeeldingen en fancontent.
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — afbakening van externe
+  diensten en content.
+- [`LICENSE_BOUNDARIES.md`](LICENSE_BOUNDARIES.md) — scheiding tussen de
+  Apache-2.0-code en rechten/voorwaarden van derden.
+- [`PROVIDER_INTEGRATIONS.md`](PROVIDER_INTEGRATIONS.md) — publieke juridische
+  grens voor Archidekt-, ManaBox- en Moxfield-deckimport.
+- [`ARCHIDEKT_INTEGRATION.md`](ARCHIDEKT_INTEGRATION.md) — compatibiliteitslink
+  naar de algemene providergrens.
+- [`TAKEDOWN_POLICY.md`](TAKEDOWN_POLICY.md) — procedure voor meldingen over
+  auteursrecht, merken, data en integratiegedrag.
 
 ## Kernprincipes
 
-1. MTG Battle Arena is een onafhankelijk, onofficieel fanproject en is niet goedgekeurd, gesponsord of ondersteund door Wizards of the Coast, Archidekt of Scryfall.
-2. De applicatie verkoopt of sublicentieert geen Magic-kaartafbeeldingen, Magic-merken of andere rechten van derden.
-3. Externe content blijft eigendom van de betreffende rechthebbenden en valt niet onder een eventuele softwarelicentie van deze repository.
-4. Card images worden uitsluitend gebruikt om de digitale tafel te tonen; de applicatie biedt geen generieke image-proxy, printgenerator, bulk-image-export of kaartafbeeldingspakket aan. De publieke Image Worker is een strikt begrensde CDN/proxy voor kaartweergave.
-5. Copyright-, handelsmerk- en andere notices die onderdeel zijn van kaartafbeeldingen worden niet verwijderd of gewijzigd.
-6. Toegang tot fancontent mag niet afhankelijk worden gemaakt van betaling. Eventuele toekomstige advertenties, sponsoring of donaties mogen de gratis toegang niet blokkeren.
-7. Een verzoek van een rechthebbende om content te verwijderen of een integratie te stoppen wordt serieus onderzocht en waar nodig snel uitgevoerd.
+1. MTG Battle Arena is een onafhankelijk, onofficieel fanproject. Geen genoemde
+   derde is door alleen de integratie sponsor, partner of goedkeurder van het
+   project.
+2. De repository verleent uitsluitend rechten op materiaal waarvoor de
+   projecteigenaar/contributors die rechten kunnen verlenen.
+3. Provider-specifieke toestemming of toegang staat los van de Apache License
+   2.0 en wordt niet aan forks of downstreamgebruikers gesublicentieerd.
+4. Deckimports zijn user-triggered. De applicatie crawlt of indexeert geen
+   externe deckplatforms en bouwt geen concurrerende providerdataset op.
+5. Niet-openbare providerinformatie, vertrouwelijke toegangsmiddelen en
+   provider-specifieke interne implementatiedetails worden niet in de publieke
+   repository of clientcode gepubliceerd.
+6. De productie-implementatie respecteert providervoorwaarden, afgesproken
+   gebruiksgrenzen en provider-imposed rate limits zonder die operationele
+   details publiek te documenteren.
+7. Een verzoek van een rechthebbende of provider om gebruik te beperken,
+   wijzigen of stoppen wordt serieus onderzocht en waar nodig snel uitgevoerd.
 
-## Officiële bronnen
+## Officiële publieke bronnen
 
 - Wizards of the Coast Fan Content Policy: https://company.wizards.com/en/legal/fancontentpolicy
 - Wizards of the Coast Terms: https://company.wizards.com/en/legal/terms
 - Archidekt Terms of Service: https://archidekt.com/terms
+- ManaBox Terms of Service: https://manabox.app/termsofservice
+- Moxfield Terms of Service: https://moxfield.com/help/terms
 - Scryfall API/documentatie: https://scryfall.com/docs/api
 
-Deze bronnen kunnen wijzigen. Controleer ze periodiek en behandel de actuele versie altijd als leidend.
+Deze publieke bronnen kunnen wijzigen. Project-specifieke correspondentie wordt
+privé bewaard en is bewust geen onderdeel van deze repository.

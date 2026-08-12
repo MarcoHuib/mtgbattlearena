@@ -144,8 +144,7 @@ assets per `faceIndex` in `imageRefs`. Iedere fysieke `CardInstance` bewaart
 zelfstandig `activeFaceIndex`; meerdere exemplaren van dezelfde definitie
 kunnen daardoor onafhankelijk transformeren. De provideradapter normaliseert
 bekende kaartzijdes naar provider-neutrale `faces` plus `ImageRef`s per
-`faceIndex`. Er wordt geen back-URL meer uit een Archidekt- of andere provider-URL
-afgeleid. Alleen wanneer brondata een geldige printing-ID/zijde ondersteunt,
+`faceIndex`. Er wordt geen back-URL uit een deckprovider-URL afgeleid. Alleen wanneer brondata een geldige printing-ID/zijde ondersteunt,
 kan een tweede ImageRef ontstaan. Normale kaarten, meld-layouts en oude snapshots
 met alleen een voorkant blijven enkelzijdig.
 

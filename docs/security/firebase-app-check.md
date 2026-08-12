@@ -28,8 +28,7 @@ The web client uses Firebase App Check with
 - Public: `GET /api/online/health` en CORS `OPTIONS` op de application-API.
   Kaartafbeeldingen zijn een afzonderlijke publieke CDN-grens en geen Game
   Worker/App Check-endpoint.
-- App Check: public lobby listing, GraphQL-deckimport, begrensde Archidekt-
-  freshnessrequests en iedere
+- App Check: public lobby listing, GraphQL-deckimport en begrensde provider-importrequests en iedere
   beschermde application-API-operatie volgens de ingestelde enforcementmodus.
 - Auth plus App Check: lobby mutations, game APIs, and
   `POST /api/online/socket-ticket`.

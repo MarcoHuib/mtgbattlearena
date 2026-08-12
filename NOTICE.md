@@ -4,24 +4,22 @@ MTG Battle Arena's root `LICENSE` applies only to original software and original
 documentation for which the project contributors have the right to grant the
 Apache License 2.0.
 
-The Apache License 2.0 permits use, modification, distribution, and commercial
-use of that original software, subject to its license conditions. Redistributions
-and derivative works must preserve the applicable license notices and any
-required attribution notices from the project's `NOTICE` file.
-
-It does **not** grant rights to Magic: The Gathering material, card images,
-artwork, card frames, symbols, trademarks, Scryfall or Archidekt content, or
-other third-party material. Those materials remain subject to the rights,
-licenses, terms, and policies of their respective owners.
+The Apache License 2.0 does **not** grant rights to Magic: The Gathering
+material, card images, artwork, card frames, symbols, trademarks, data supplied
+by external deck providers, or any other third-party material. Those materials
+remain subject to the rights, licenses, terms, policies and permissions of their
+respective owners.
 
 MTG Battle Arena is an unofficial fan project and is not approved, endorsed,
-sponsored, or published by Wizards of the Coast.
+sponsored or published by Wizards of the Coast. Archidekt, ManaBox, Moxfield,
+Scryfall and other named services are independent third parties and do not, by
+being supported or referenced, endorse this project.
 
-Use of the MTG Battle Arena source code under the Apache License 2.0 does not
-grant permission to use Wizards of the Coast intellectual property, Scryfall
-content, Archidekt content, or any other third-party assets beyond the rights
-separately granted by their respective owners.
+Some external integrations are operated under project-specific written
+permission or access arrangements. Those permissions are separate from the
+Apache License 2.0 and are not sublicensed or transferred through this public
+repository. Confidential access material and non-public provider implementation
+details are intentionally excluded from the public source tree.
 
 See `docs/legal/` for the detailed software-license boundaries, fan-content
-terms, third-party notices, Archidekt integration considerations, and takedown
-policy.
+terms, provider-integration boundaries, third-party notices and takedown policy.

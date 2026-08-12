@@ -33,8 +33,8 @@ GraphQL-requeststatus en servercache.
 `GET /api/online/health`, `POST /api/online/games/:id/commands` en de
 WebSocket-upgrade blijven HTTP. De commandroute is een bestaande fallback;
 normaal realtime verkeer blijft via WebSockets lopen. De webapp importeert decks
-via GraphQL `deckFromUrl`; een begrensde Archidekt freshness-proxy blijft alleen
-voor bronfingerprinting/compatibiliteit bestaan. Card images zijn volledig uit
+via GraphQL `deckFromUrl`; provider-specifieke broncontrole blijft achter de
+afgeschermde importgrens. Card images zijn volledig uit
 de application-API gehaald en lopen via de aparte publieke Image Worker/CDN uit
 ADR 011.
 

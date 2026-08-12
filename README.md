@@ -48,7 +48,7 @@
 |                             |                                                                                  |
 | --------------------------- | -------------------------------------------------------------------------------- |
 | 📴 **Local-first**          | Start en hervat battles zonder account of backend.                               |
-| 🃏 **Archidekt import**     | Importeer openbare decks en werk met lokale snapshots.                           |
+| 🃏 **Deck import**          | Importeer ondersteunde openbare deckreferenties naar lokale snapshots.          |
 | 💾 **Autosave & recovery**  | Game-state, undo/redo en deckdata blijven lokaal beschikbaar.                    |
 | 📦 **Offline ready**        | PWA + expliciete offlinepakketten met kaartdata en afbeeldingen.                 |
 | 👥 **2–6 spelers**          | Commander-ready multiplayer met vier spelers als belangrijke use-case.           |
@@ -72,7 +72,7 @@
 | Onderdeel                         | Status             |
 | --------------------------------- | ------------------ |
 | Offline battle voor 2–6 spelers   | 🟢 **Ready**       |
-| Archidekt-import                  | 🟢 **Ready**       |
+| Provider-neutrale deckimport      | 🟢 **Ready**       |
 | Autosave, hervatten en undo/redo  | 🟢 **Ready**       |
 | Offlinepakket en PWA              | 🟢 **Ready**       |
 | Commander-zones en statustracking | 🟢 **Ready**       |
@@ -176,7 +176,7 @@ Open daarna de URL die Vite in de terminal toont.
                            │ Provider-neutral import│
                            │ Game Worker → binding  │
                            │ → private Import Worker│
-                           │ → Archidekt            │
+                           │ → provider adapters    │
                            └────────────────────────┘
 ```
 
@@ -189,7 +189,7 @@ Open daarna de URL die Vite in de terminal toont.
 apps/
 ├── web/             React, Redux, IndexedDB, PWA en Playwright
 ├── game-worker/     Firebase-validatie, WebSockets en Durable Objects
-├── import-worker/   Afgeschermde Archidekt deckimportproxy
+├── import-worker/   Afgeschermde provider-neutrale deckimportgrens
 └── image-worker/    Publieke cache-first card-image CDN-grens
 
 packages/
@@ -208,9 +208,9 @@ runtime-gevalideerde protocol.
 - **Offline:** Redux is authoritative.
 - **Online:** de server is authoritative; GraphQL/RTK Query verzorgt application-data
   en WebSockets verzorgen de realtime persoonlijke gameview.
-- **Import:** Archidekt is uitsluitend deck/importbron. De Game Worker roept de
-  private Import Worker via een Service Binding aan en publiceert provider-neutrale
-  `ImportedDeck`-data.
+- **Import:** externe deckproviders blijven achter een server-side, provider-neutrale
+  importgrens. Niet-openbare providerimplementaties worden niet in de publieke
+  repository of client gedistribueerd.
 - **Afbeeldingen:** clients gebruiken alleen provider-neutrale `ImageRef`s en
   `https://cdn.mtgbattlearena.nl`; de publieke Image Worker haalt uitsluitend
   toegestane Scryfall-assets op.
@@ -233,6 +233,7 @@ runtime-gevalideerde protocol.
 - [GraphQL application API](docs/architecture/009-graphql-application-api.md)
 - [Provider-agnostische deckimport](docs/architecture/010-provider-agnostic-deck-import.md)
 - [Card-image delivery boundary](docs/architecture/011-image-delivery-boundary.md)
+- [Vertrouwelijke provideradapters](docs/architecture/012-confidential-provider-adapters.md)
 
 </details>
 
@@ -619,9 +620,9 @@ npm run deploy:cloudflare:image
 ```
 
 De Import Worker is bewust geen generieke fetchproxy en verwerkt uitsluitend
-begrensde Archidekt deck-/tokenbrondata. Kaartafbeeldingen lopen niet via
-Archidekt of de Import Worker: de browser gebruikt `cdn.mtgbattlearena.nl`, waarna
-de Image Worker alleen gevalideerde Scryfall-image requests afhandelt.
+expliciet ondersteunde, user-triggered deckimports. Provider-specifieke
+niet-openbare implementatiedetails worden niet in deze publieke documentatie
+uitgeschreven. Kaartafbeeldingen lopen via de afzonderlijke imagegrens.
 
 </details>
 
@@ -636,16 +637,17 @@ de Image Worker alleen gevalideerde Scryfall-image requests afhandelt.
 
 <br />
 
-| Dienst             | Gebruik                                        |
-| ------------------ | ---------------------------------------------- |
-| **Archidekt**      | Openbare deck-/tokenbron voor provider-neutrale import |
-| **Scryfall**       | Upstream voor kaartafbeeldingen achter de Image Worker |
-| **Firebase**       | Authenticatie, gebruikersidentiteit en Hosting |
-| **Cloudflare**     | Game-, Import- en Image Workers, WebSockets, Durable Objects en edge caching |
-| **GitHub Actions** | CI en gescheiden Beta-/Production-deployments  |
+| Dienst             | Gebruik                                                   |
+| ------------------ | --------------------------------------------------------- |
+| **Deckproviders**  | User-triggered, provider-neutrale deckimport              |
+| **Scryfall**       | Kaartafbeeldingen achter de afzonderlijke imagegrens      |
+| **Firebase**       | Authenticatie, gebruikersidentiteit en Hosting            |
+| **Cloudflare**     | Server-, realtime- en edgefunctionaliteit                 |
+| **GitHub Actions** | CI en gescheiden Beta-/Production-deployments             |
 
-Archidekt, Scryfall, Firebase, Cloudflare en Wizards of the Coast zijn geen
-sponsors van dit project en hebben het project niet beoordeeld of goedgekeurd.
+Archidekt, ManaBox, Moxfield, Scryfall, Firebase, Cloudflare en Wizards of the
+Coast zijn onafhankelijke derden. Ondersteuning of gebruik van hun diensten
+betekent geen sponsorship, partnership of endorsement.
 
 Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
@@ -662,7 +664,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
 ### ✅ Gerealiseerd
 
-- [x] Openbare Archidekt-decks importeren en normaliseren
+- [x] Provider-neutrale deckimport en normalisatie
 - [x] Local-first battle met autosave en hervatten
 - [x] Undo/redo, Commander-zones, counters, tokens en statustracking
 - [x] Expliciete offlinepakketten en PWA-app-shell
@@ -698,6 +700,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 | [`docs/ci-cd.md`](docs/ci-cd.md)                                   | CI/CD, security checks en deployments                       |
 | [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md)     | Historische context van de online multiplayeruitbreiding     |
 | [`FIRST_IMPLEMENTATION_PROMPT.md`](FIRST_IMPLEMENTATION_PROMPT.md) | Context van de oorspronkelijke offline implementatie        |
+| [`docs/legal/PROVIDER_INTEGRATIONS.md`](docs/legal/PROVIDER_INTEGRATIONS.md) | Publieke grens voor externe deckproviders                    |
 | [`docs/legal/`](docs/legal/)                                       | Privacy, voorwaarden en third-party notices                 |
 
 ---
@@ -716,9 +719,10 @@ Magic: The Gathering, kaartnamen, symbolen, illustraties en overige bijbehorende
 materialen zijn eigendom van Wizards of the Coast LLC en/of hun respectieve
 rechthebbenden.
 
-De namen Archidekt en Scryfall en de bijbehorende diensten en handelsmerken
-behoren toe aan hun respectieve eigenaren. De integraties zijn onofficieel en
-houden geen samenwerking, sponsoring of goedkeuring in.
+De namen Archidekt, ManaBox, Moxfield en Scryfall en de bijbehorende diensten
+en handelsmerken behoren toe aan hun respectieve eigenaren. Integraties zijn
+onofficieel en houden geen samenwerking, sponsoring of goedkeuring in.
+Projectspecifieke providerrechten worden niet via deze repository overgedragen.
 
 </details>
 

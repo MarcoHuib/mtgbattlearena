@@ -1,59 +1,83 @@
 # License boundaries
 
-Laatst beoordeeld: 12 augustus 2026.
+Laatst beoordeeld: 13 augustus 2026.
 
 ## 1. Eigen software versus materiaal van derden
 
-Een softwarelicentie voor MTG Battle Arena kan uitsluitend rechten verlenen op materiaal waarvoor de projecteigenaar zelf voldoende rechten bezit.
+De root `LICENSE` bevat de **Apache License 2.0**. Die licentie kan alleen rechten
+verlenen op materiaal waarvoor de projecteigenaar of contributors voldoende
+rechten hebben.
 
-Daarom vallen de volgende categorieën **niet automatisch** onder een eventuele open-sourcelicentie van de repository:
+Daarom vallen onder andere de volgende categorieën **niet automatisch** onder de
+Apache License 2.0 van deze repository:
 
 - Magic: The Gathering-kaartafbeeldingen, artwork, kaartframes en symbolen;
-- Magic-kaartnamen, kaartteksten en andere door Wizards beschermde content voor zover daarop rechten rusten;
-- Wizards-, Magic-, Scryfall- en Archidekt-logo's en handelsmerken;
-- data of content van Archidekt, Scryfall of andere derden waarvoor afzonderlijke voorwaarden gelden;
+- Magic-kaartnamen, kaartteksten en andere beschermde Wizards-content voor zover
+  daarop rechten rusten;
+- logo's en handelsmerken van Wizards, Scryfall, Archidekt, ManaBox, Moxfield en
+  andere derden;
+- providerdata en andere third-party content waarvoor afzonderlijke voorwaarden
+  gelden;
+- niet-openbare providerinterfaces, projectspecifieke toegang of toestemming;
 - broncode van third-party dependencies, behalve onder hun eigen licenties.
 
 ## 2. Softwarelicentie
 
-Voor de originele broncode van MTG Battle Arena is de **MIT License** een eenvoudige, gangbare open-sourcelicentie. De root van de repository hoort daarvoor een ongewijzigd `LICENSE`-bestand met de standaard MIT-tekst te bevatten.
+De originele broncode en originele documentatie waarop het project de benodigde
+rechten bezit, worden onder de **Apache License 2.0** aangeboden zoals opgenomen
+in het rootbestand [`LICENSE`](../../LICENSE).
 
-MIT staat onder meer gebruik, wijziging, distributie, sublicentie en verkoop van de **eigen gelicentieerde software** toe. Die rechten kunnen alleen worden verleend voor materiaal waarop de projecteigenaar of contributors zelf voldoende rechten hebben.
+De Apache License 2.0 staat onder haar voorwaarden onder meer gebruik,
+wijziging, distributie en commercieel gebruik van de **gelicentieerde eigen
+software** toe. Die rechten verruimen geen rechten op materiaal of diensten van
+derden.
 
-Daarom geeft de MIT License **geen** rechten op:
+Een downstreamgebruiker kan dus de Apache-2.0-code gebruiken zonder daarmee
+automatisch het recht te verkrijgen om Magic-IP, providerdata of een
+niet-openbare providerintegratie op dezelfde wijze te gebruiken.
 
-- Wizards/Magic-IP;
-- kaartafbeeldingen, artwork, kaartframes, symbolen of merken;
-- Archidekt- of Scryfall-content;
-- third-party dependencies buiten hun eigen licenties;
-- andere materialen waarvan de rechten niet bij de projecteigenaar of contributor liggen.
+## 3. Provider-specifieke toestemming is geen open-sourcelicentie
 
-Een downstream gebruiker die de MIT-code commercieel gebruikt, krijgt daarmee dus niet automatisch het recht om Wizards-fancontent of andere third-party content commercieel te gebruiken. Voor die materialen blijven de afzonderlijke rechten en voorwaarden van de betreffende rechthebbenden gelden.
+MTG Battle Arena heeft voor bepaalde deckproviders projectspecifieke schriftelijke
+bevestiging of toegang voor de beschreven integratie. Die afspraken:
 
-> [!IMPORTANT]
-> Een echte OSI-open-sourcelicentie zoals MIT mag commercieel gebruik van de software niet verbieden. Als het project de **eigen code** uitsluitend niet-commercieel beschikbaar wil stellen, is MIT niet geschikt en is zo'n licentie niet meer een standaard OSI-open-sourcelicentie.
+- staan los van de Apache License 2.0;
+- worden niet als onderdeel van de repository gesublicentieerd;
+- maken vertrouwelijke toegangsmiddelen of niet-openbare providerkennis niet
+  openbaar;
+- geven forks of onafhankelijke deployments niet automatisch dezelfde rechten.
 
-## 3. Aanbevolen carve-out naast de softwarelicentie
+Zie [`PROVIDER_INTEGRATIONS.md`](PROVIDER_INTEGRATIONS.md).
 
-Behoud in README en deze legal-documentatie een duidelijke scopeverklaring, bijvoorbeeld:
+## 4. Public/private codegrens
 
-> De softwarelicentie van deze repository is uitsluitend van toepassing op originele broncode en originele documentatie van het project, tenzij anders vermeld. Zij verleent geen rechten op Magic: The Gathering-materiaal, kaartafbeeldingen, handelsmerken, third-party datasets of andere content van derden. Die materialen blijven onderworpen aan de rechten en voorwaarden van hun respectieve eigenaren.
+Provider-neutrale interfaces, domeinmodellen en eigen applicatielogica mogen in
+de publieke repository staan. Provider-specifieke onderdelen die volgens een
+afspraak vertrouwelijk of niet-openbaar moeten blijven, worden niet met de
+publieke broncode gedistribueerd.
 
-Deze tekst vervangt de daadwerkelijke softwarelicentie niet; hij verduidelijkt alleen de scope.
+Het feit dat een production build aanvullende, rechtmatig verkregen private
+componenten kan gebruiken, verandert de licentie van de publieke Apache-2.0-code
+niet en verleent geen licentie op die aanvullende componenten of providerrechten.
 
-## 4. Contributors
+## 5. Contributors
 
-Als externe contributors worden toegelaten, moet duidelijk zijn dat zij alleen code/content mogen bijdragen waarvoor zij de noodzakelijke rechten hebben. Contributors mogen geen ongeautoriseerde artworkbestanden, commerciële assets, proprietary code of andere beschermde materialen toevoegen.
+Contributors mogen alleen code en content bijdragen waarvoor zij de noodzakelijke
+rechten hebben. Voeg geen geheime providerinformatie, private correspondentie,
+proprietary code, ongeautoriseerde artworkbestanden of andere beschermde
+materialen toe aan pull requests, issues, fixtures of testdata.
 
-Voor een groter project kan een `CONTRIBUTING.md` met een Developer Certificate of Origin (DCO) of een afzonderlijke contributorregeling nuttig zijn.
+## 6. Builds en distributie
 
-## 5. Builds en distributie
+Een build kan eigen software combineren met runtimeverwijzingen naar content of
+diensten van derden. Dat verandert de afzonderlijke juridische status van die
+onderdelen niet.
 
-Een gecompileerde build kan eigen softwarecode combineren met runtimeverwijzingen naar third-party content. Het feit dat die onderdelen technisch samen worden weergegeven, verandert hun afzonderlijke juridische status niet.
-
-Vermijd daarom:
+Vermijd daarom onder meer:
 
 - het bundelen van een permanente kaartafbeeldingscollectie in releases;
-- het presenteren van third-party artwork als onderdeel van de softwarelicentie;
+- het presenteren van third-party artwork/data als onder de Apache License 2.0;
+- het publiceren van vertrouwelijke providerinformatie in source maps, fixtures,
+  logs, build artifacts of clientbundles;
 - het herlicentiëren of sublicentiëren van third-party content;
-- het verwijderen van verplichte dependency- of copyrightnotices.
+- het verwijderen van verplichte dependency-, copyright- of attributionnotices.
