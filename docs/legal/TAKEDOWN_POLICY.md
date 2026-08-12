@@ -1,6 +1,6 @@
 # Takedown & rights complaints policy
 
-Laatst beoordeeld: 12 augustus 2026.
+Laatst beoordeeld: 13 augustus 2026.
 
 MTG Battle Arena wil rechten van derden respecteren. Een rechthebbende of vertegenwoordiger kan verzoeken om onderzoek naar content, merken, kaartafbeeldingen, data of integratiegedrag dat mogelijk inbreuk maakt op rechten of voorwaarden.
 
@@ -28,7 +28,7 @@ Na ontvangst van een voldoende concrete melding kan de projecteigenaar onder mee
 
 Een duidelijk verzoek van Wizards of the Coast om gebruik van Wizards-IP onder de Fan Content Policy te stoppen of te beperken moet met voorrang worden behandeld.
 
-Een verzoek van Scryfall, Archidekt, Cloudflare, Firebase/Google of een andere dienstverlener over overtreding van hun gebruiksvoorwaarden moet eveneens snel worden beoordeeld en kan leiden tot onmiddellijke beperking van de betreffende integratie.
+Een verzoek van Scryfall, een deckprovider, Cloudflare, Firebase/Google of een andere dienstverlener over voorwaarden, vertrouwelijkheid of integratiegedrag moet eveneens snel worden beoordeeld en kan leiden tot onmiddellijke beperking van de betreffende integratie.
 
 ## Geen erkenning van aansprakelijkheid
 

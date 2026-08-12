@@ -1,6 +1,6 @@
 # ADR 011 — Card-image delivery and caching boundary
 
-Archidekt is uitsluitend een deck/importbron. De adapter zet de expliciete
+Deckproviders zijn uitsluitend importbronnen. De importlaag zet een expliciete
 Scryfall printing-ID om naar MTG Battle Arena's provider-neutrale `ImageRef`:
 
 ```ts
@@ -43,7 +43,7 @@ aan resolver-, security- of contentsemantiek onmiddellijk gelden.
 `apps/image-worker` accepteert alleen GET/HEAD, v1, resolver 1, UUID printing-ID's,
 face 0/1 en variant `normal`. Resolver 1 construeert uit die identiteit uitsluitend
 `https://cards.scryfall.io/normal/{front|back}/{prefix}/{uuid}.jpg`; er is geen
-Archidekt-URL-rewrite en geen metadatarequest per afbeelding. Protocol, host,
+deckprovider-URL-rewrite en geen metadatarequest per afbeelding. Protocol, host,
 credentials en poort worden opnieuw gecontroleerd. Upstream redirects worden
 met `redirect: "manual"` maximaal drie hops gevolgd; vóór iedere hop wordt
 opnieuw HTTPS + exact `cards.scryfall.io` + geen credentials/custom port

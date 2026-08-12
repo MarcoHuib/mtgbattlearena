@@ -68,7 +68,8 @@ De bestaande applicatie is local-first en moet zonder account of netwerk volledi
 - Autoritatieve deckimport (`deckFromUrl`) roept via de environment-specifieke
   `IMPORT` Service Binding de afzonderlijke Import Worker aan. De Import Worker
   heeft in Production en Beta `workers_dev` en preview-URL's uitgeschakeld en
-  geen publieke route. Archidekt blijft uitsluitend deck-/tokenbron.
+  geen publieke route. Externe deckproviders blijven uitsluitend importbronnen en
+  provider-specifieke niet-openbare details blijven buiten de publieke grens.
 - Kaartafbeeldingen lopen niet via de Game of Import Worker. De browser gebruikt
   alleen `https://cdn.mtgbattlearena.nl/v1/...`; de publieke Image Worker
   valideert provider-neutrale `ImageRef`s en haalt uitsluitend toegestane

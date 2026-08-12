@@ -1,5 +1,17 @@
 # CI/CD
 
+## Public documentation boundary for private provider integrations
+
+De publieke pipeline-documentatie beschrijft bewust niet hoe vertrouwelijke
+provideraccess technisch is opgeslagen, benoemd of gekoppeld. Niet-openbare
+provideradapters en hun operationele configuratie vallen buiten deze repository.
+
+CI/CD mag geen providercredentials, private providerfixtures, raw responses of
+interne providerdetails in logs, artifacts, source maps of clientbundles
+publiceren. De exacte productieconfiguratie wordt in private operationele
+documentatie beheerd.
+
+
 `main` is de single source of truth voor iedere release. Development gebeurt
 lokaal; pull requests naar `main` valideren code zonder credentials of
 deployment. Na merge promoot één workflow dezelfde release eerst naar Beta en
@@ -205,7 +217,8 @@ De Image Worker is juist de publieke assetgrens. Production heeft het custom
 domain `cdn.mtgbattlearena.nl` en Workers Caching vóór Worker-executie; staging
 heeft `workers_dev = false`, `preview_urls = false`, geen route en caching uit.
 De frontend gebruikt provider-neutrale ImageRef-URL's naar de publieke CDN en
-kent geen Archidekt- of Scryfall-upstream-URL's.
+kent geen deckprovider-upstreamdetails; image-upstreamdetails blijven beperkt tot
+de afzonderlijke imagegrens.
 
 Wranglerbindings en migrations blijven expliciet per environment gedefinieerd.
 De gedeelde releasebron verandert niets aan de scheiding van Lobby- en

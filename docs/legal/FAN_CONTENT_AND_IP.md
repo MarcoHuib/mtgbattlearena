@@ -1,6 +1,6 @@
 # Fan content, Magic-IP en kaartafbeeldingen
 
-Laatst beoordeeld: 12 augustus 2026.
+Laatst beoordeeld: 13 augustus 2026.
 
 ## Status van het project
 
