@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it, vi } from "vitest"
-import { createImageHandler, type ImageResolver } from "../src/index"
+import {
+  createImageHandler,
+  fetcher,
+  type ImageResolver,
+} from "../src/index"
 
 const id = "6a9c39e4-a8cf-42dd-8d0e-45634b335546"
 const request = (path = `/v1/1/${id}/0/normal`, method = "GET") =>
@@ -26,7 +30,7 @@ describe("image CDN boundary", () => {
       void input
       return Promise.resolve(jpeg())
     })
-    const response = await createImageHandler({ fetch })(request())
+    const response = await createImageHandler({ fetcher: fetch })(request())
     expect(response.status).toBe(200)
     expect(response.headers.get("Content-Type")).toBe("image/jpeg")
     expect(response.headers.get("Cache-Control")).toBe(
@@ -58,7 +62,7 @@ describe("image CDN boundary", () => {
       )
       .mockResolvedValueOnce(jpeg())
     const log = { warn: vi.fn(), error: vi.fn() }
-    const response = await createImageHandler({ fetch, log })(request())
+    const response = await createImageHandler({ fetcher: fetch, log })(request())
     expect(response.status).toBe(200)
     expect(response.headers.get("Content-Type")).toBe("image/jpeg")
     expect(fetch).toHaveBeenCalledTimes(2)
@@ -82,7 +86,7 @@ describe("image CDN boundary", () => {
     ["query input", `/v1/1/${id}/0/normal?url=https://evil.test`],
     ["old misleading extension", `/v1/1/${id}/0/normal.webp`],
   ])("rejects %s without long-lived caching", async (_name, path) => {
-    const response = await createImageHandler({ fetch: vi.fn() })(request(path))
+    const response = await createImageHandler({ fetcher: vi.fn() })(request(path))
     expect(response.status).toBe(404)
     expect(response.headers.get("Cache-Control")).toBe("no-store")
     expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe(
@@ -103,7 +107,7 @@ describe("image CDN boundary", () => {
       }),
     ]) {
       const response = await createImageHandler({
-        fetch: vi.fn(() => Promise.resolve(upstream)),
+        fetcher: vi.fn(() => Promise.resolve(upstream)),
       })(request())
       expect(response.ok).toBe(false)
       expect(response.headers.get("Cache-Control")).toBe("no-store")
@@ -123,7 +127,7 @@ describe("image CDN boundary", () => {
         }),
     )
     const response = await createImageHandler({
-      fetch: fetch as typeof globalThis.fetch,
+      fetcher: fetch as typeof globalThis.fetch,
       timeoutMs: 1,
     })(request())
     expect(response.status).toBe(504)
@@ -139,7 +143,7 @@ describe("image CDN boundary", () => {
     expect(
       (
         await createImageHandler({
-          fetch,
+          fetcher: fetch,
         })(request())
       ).status,
     ).toBe(502)
@@ -154,7 +158,7 @@ describe("image CDN boundary", () => {
     expect(
       (
         await createImageHandler({
-          fetch: vi.fn(),
+          fetcher: vi.fn(),
           resolvers: new Map([[1, evil]]),
         })(request())
       ).status,
@@ -164,7 +168,7 @@ describe("image CDN boundary", () => {
   it("returns 502 and logs safe diagnostics for a fetch exception", async () => {
     const log = { warn: vi.fn(), error: vi.fn() }
     const response = await createImageHandler({
-      fetch: vi.fn(() => Promise.reject(new TypeError("network failed"))),
+      fetcher: vi.fn(() => Promise.reject(new TypeError("network failed"))),
       log,
     })(request())
     expect(response.status).toBe(502)
@@ -177,9 +181,26 @@ describe("image CDN boundary", () => {
     })
   })
 
+  it("calls global fetch through a this-independent injected wrapper", async () => {
+    const nativeFetch = vi.fn(function (this: unknown) {
+      if (this !== undefined)
+        throw new TypeError("Illegal invocation: incorrect this reference")
+      return Promise.resolve(jpeg())
+    })
+    vi.stubGlobal("fetch", nativeFetch)
+    try {
+      const response = await createImageHandler({ fetcher })(request())
+      expect(response.status).toBe(200)
+      expect(nativeFetch).toHaveBeenCalledOnce()
+      expect(nativeFetch.mock.instances[0]).toBeUndefined()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("HEAD returns the same content/cache metadata and no body", async () => {
     const response = await createImageHandler({
-      fetch: vi.fn(() => Promise.resolve(jpeg())),
+      fetcher: vi.fn(() => Promise.resolve(jpeg())),
     })(request(undefined, "HEAD"))
     expect(response.status).toBe(200)
     expect(response.headers.get("Content-Type")).toBe("image/jpeg")
