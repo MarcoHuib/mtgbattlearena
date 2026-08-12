@@ -80,6 +80,9 @@
 | Server-authoritative game-core    | 🟢 **Ready**       |
 | CI-validatie op pull requests     | 🔵 **Automated**   |
 | Release promotion vanaf `main`    | 🔵 **Automated**   |
+| GraphQL + persisted operations     | 🟢 **Ready**       |
+| Provider-neutrale deckrevisions    | 🟢 **Ready**       |
+| Publieke card-image CDN Worker     | 🟢 **Ready**       |
 | Verdere online game-acties        | 🟡 **In progress** |
 
 <details>
@@ -155,28 +158,26 @@ Open daarna de URL die Vite in de terminal toont.
 </div>
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│                         React Web                            │
-│                Vite · Redux Toolkit · PWA                   │
-└───────────────────────┬──────────────────────────────────────┘
-                        │
-          ┌─────────────┴─────────────┐
-          │                           │
-          ▼                           ▼
-┌─────────────────────┐     ┌─────────────────────────────┐
-│   OFFLINE RUNTIME   │     │       ONLINE RUNTIME        │
-│                     │     │                             │
-│ Redux / game-core   │     │ Firebase Authentication     │
-│ IndexedDB           │     │ Cloudflare Game Worker      │
-│ PWA / asset cache   │     │ Durable Objects + SQLite    │
-└─────────────────────┘     └──────────────┬──────────────┘
-                                          │
-                                          ▼
-                              ┌─────────────────────────┐
-                              │ Personal server views   │
-                              │ Versioned commands      │
-                              │ WebSocket reconnect     │
-                              └─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                            React Web                                │
+│                   Vite · Redux Toolkit · PWA                       │
+└──────────────┬──────────────────────┬──────────────────────┬────────┘
+               │                      │                      │
+               ▼                      ▼                      ▼
+┌─────────────────────┐   ┌────────────────────────┐   ┌──────────────────────┐
+│   OFFLINE RUNTIME   │   │     ONLINE RUNTIME     │   │    CARD IMAGES       │
+│ Redux / game-core   │   │ Firebase Authentication│   │ cdn.mtgbattlearena.nl│
+│ IndexedDB           │   │ Game Worker + GraphQL  │   │ Image Worker         │
+│ PWA / asset cache   │   │ WebSocket + DO/SQLite  │   │ Scryfall upstream    │
+└─────────────────────┘   └────────────┬───────────┘   └──────────────────────┘
+                                      │
+                                      ▼
+                           ┌────────────────────────┐
+                           │ Provider-neutral import│
+                           │ Game Worker → binding  │
+                           │ → private Import Worker│
+                           │ → Archidekt            │
+                           └────────────────────────┘
 ```
 
 <details>
@@ -205,8 +206,14 @@ De webapp en Game Worker delen dezelfde pure `game-core` en hetzelfde
 runtime-gevalideerde protocol.
 
 - **Offline:** Redux is authoritative.
-- **Online:** de server is authoritative en Redux bevat alleen de persoonlijke clientview.
-- **Import:** externe Archidekt-data loopt via een begrensde Worker/BFF.
+- **Online:** de server is authoritative; GraphQL/RTK Query verzorgt application-data
+  en WebSockets verzorgen de realtime persoonlijke gameview.
+- **Import:** Archidekt is uitsluitend deck/importbron. De Game Worker roept de
+  private Import Worker via een Service Binding aan en publiceert provider-neutrale
+  `ImportedDeck`-data.
+- **Afbeeldingen:** clients gebruiken alleen provider-neutrale `ImageRef`s en
+  `https://cdn.mtgbattlearena.nl`; de publieke Image Worker haalt uitsluitend
+  toegestane Scryfall-assets op.
 
 </details>
 
@@ -222,6 +229,10 @@ runtime-gevalideerde protocol.
 - [Speler- en matchstatus](docs/architecture/005-player-and-match-status.md)
 - [Online multiplayer](docs/architecture/006-online-multiplayer.md)
 - [Gedeelde offline/online speeltafel](docs/architecture/007-shared-battle-runtime.md)
+- [Roll for first player](docs/architecture/008-roll-for-first-player.md)
+- [GraphQL application API](docs/architecture/009-graphql-application-api.md)
+- [Provider-agnostische deckimport](docs/architecture/010-provider-agnostic-deck-import.md)
+- [Card-image delivery boundary](docs/architecture/011-image-delivery-boundary.md)
 
 </details>
 
@@ -337,6 +348,7 @@ runtime-gevalideerde protocol.
 <th align="left">Frontend</th>
 <th align="left">API</th>
 <th align="left">WebSocket</th>
+<th align="left">Card CDN</th>
 <th align="center">Deployment</th>
 <th align="center">Build</th>
 </tr>
@@ -346,6 +358,7 @@ runtime-gevalideerde protocol.
 <td><code>beta.mtgbattlearena.nl</code></td>
 <td><code>api.beta.mtgbattlearena.nl</code></td>
 <td><code>ws.beta.mtgbattlearena.nl</code></td>
+<td><code>cdn.mtgbattlearena.nl</code><br /><sub>staging Image Worker zelf heeft geen publieke route</sub></td>
 <td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&label=beta+promotion&logo=githubactions" alt="Beta promotion"></a></td>
 <td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Fdeployments%3Fenvironment%3Dstaging%26task%3Drelease-metadata%26per_page%3D1&query=%24%5B0%5D.description&label=Beta&color=informational" alt="Laatste succesvolle Beta release"></a></td>
 </tr>
@@ -355,6 +368,7 @@ runtime-gevalideerde protocol.
 <td><code>mtgbattlearena.nl</code></td>
 <td><code>api.mtgbattlearena.nl</code></td>
 <td><code>ws.mtgbattlearena.nl</code></td>
+<td><code>cdn.mtgbattlearena.nl</code></td>
 <td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/MarcoHuib/mtgbattlearena/deploy-release.yml?branch=main&label=production+promotion&logo=githubactions" alt="Production promotion"></a></td>
 <td align="center"><a href="https://github.com/MarcoHuib/mtgbattlearena/actions/workflows/deploy-release.yml"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FMarcoHuib%2Fmtgbattlearena%2Fdeployments%3Fenvironment%3Dproduction%26task%3Drelease-metadata%26per_page%3D1&query=%24%5B0%5D.description&label=Production&color=informational" alt="Laatste succesvolle Production release"></a></td>
 </tr>
@@ -380,15 +394,15 @@ Pull request → main
 │ Detect changed scope │
 └──────────┬───────────┘
            │
-     ┌─────┼───────────────┐
-     │     │               │
-     ▼     ▼               ▼
- Frontend  Game Worker     Import Worker
-     │     │               │
-     ├─ lint               ├─ lint
-     ├─ typecheck          └─ Wrangler dry-run
-     ├─ tests
-     └─ PWA build
+     ┌─────┼───────────────┬──────────────┐
+     │     │               │              │
+     ▼     ▼               ▼              ▼
+ Frontend  Game Worker     Import Worker   Image Worker
+     │     │               │              │
+     ├─ lint               ├─ lint         ├─ lint
+     ├─ typecheck          ├─ validation   ├─ typecheck
+     ├─ tests              └─ dry-run      ├─ tests
+     └─ PWA build                         └─ dry-run
            │
            ▼
     Dependency Review
@@ -413,7 +427,14 @@ Pull request → main
 
 ### Import Worker
 
+- ESLint en private-configvalidatie
+- Cloudflare staging- en production-dry-run
+
+### Image Worker
+
 - ESLint
+- Image Worker-typecheck
+- Image Worker-tests
 - Cloudflare bundle/dry-run
 
 ### Dependency Review
@@ -438,13 +459,15 @@ feature/* → PR naar main → CI
 BUILD · Release #X
 ├── Frontend
 ├── Game Worker
-└── Import Worker
+├── Import Worker
+└── Image Worker
        │
        ▼
 BETA · Release #X
 ├── Frontend
 ├── Game Worker
-└── Import Worker
+├── Import Worker
+└── Image Worker
        │
        ▼
 APPROVAL · GitHub Environment production
@@ -453,17 +476,20 @@ APPROVAL · GitHub Environment production
 PRODUCTION · Release #X
 ├── Frontend
 ├── Game Worker
-└── Import Worker
+├── Import Worker
+└── Image Worker
 ```
 
 De ene releaseworkflow is **change-aware**:
 
 - frontendwijzigingen → **Firebase Hosting**;
 - importwijzigingen → **Cloudflare Import Worker**;
+- imagewijzigingen → **Cloudflare Image Worker**;
 - gamewijzigingen → **Cloudflare Game Worker**;
 - gedeelde packagewijzigingen kunnen meerdere deployables raken;
-- wanneer beide Workers wijzigen, wacht de Game Worker op een succesvolle
-  Import Worker-deployment.
+- wanneer Import en Game Worker beide wijzigen, wacht de Game Worker op een
+  succesvolle Import Worker-deployment; de Image Worker is een zelfstandige
+  deployable.
 - de frontend wordt één keer gebouwd en als immutable artifact door Beta en
   Production gebruikt;
 - runtimeconfiguratie bepaalt per Hosting-site de API- en WebSocket-endpoints;
@@ -483,8 +509,8 @@ Beta gebruikt:
 - Cloudflare Wrangler `--env staging`;
 - `api.beta.mtgbattlearena.nl`;
 - `ws.beta.mtgbattlearena.nl`;
-- afzonderlijke Beta Workers en Durable Objects via Wrangler environment
-  `staging`.
+- afzonderlijke Beta Game-, Import- en Image Workers via Wrangler environment `staging`;
+- de staging Image Worker heeft bewust geen publieke route of preview-URL; de publieke kaart-CDN blijft `cdn.mtgbattlearena.nl`.
 
 Firebase Authentication wordt bewust gedeeld met Production.
 
@@ -494,7 +520,8 @@ Production gebruikt:
 
 - GitHub Environment `production`;
 - Firebase Hosting voor `mtgbattlearena.nl`;
-- productieconfiguratie van beide Cloudflare Workers;
+- productieconfiguratie van de Game-, Import- en Image Worker;
+- `cdn.mtgbattlearena.nl` als publieke Image Worker custom domain;
 - Production Durable Objects.
 
 Beide omgevingen worden vanuit dezelfde `main`-commit en hetzelfde
@@ -522,6 +549,9 @@ Voor de volledige technische uitleg:
 | `npm run dev`                             | Start de webapp met Vite              |
 | `npm run dev:worker:game`                 | Start de Game Worker lokaal           |
 | `npm run dev:worker:import`               | Start de Import Worker lokaal         |
+| `npm run dev:worker:image`                | Start de Image Worker lokaal          |
+| `npm run test:image-worker`                | Test de Image Worker                  |
+| `npm run image-worker:type-check`          | Typecheck de Image Worker             |
 | `npm run build`                           | Bouw de environment-neutrale PWA      |
 | `npm run build:staging`                   | Compatibele alias voor dezelfde PWA   |
 | `npm run preview`                         | Preview de productiebuild             |
@@ -532,8 +562,9 @@ Voor de volledige technische uitleg:
 | `npm run test:integration`                | Online integratietests                |
 | `npm run test:e2e`                        | Kritieke Playwright-flow              |
 | `npm run deploy:cloudflare:check`         | Cloudflare dry-run                    |
+| `npm run deploy:cloudflare:check:image`     | Image Worker production dry-run       |
 | `npm run deploy:cloudflare:check:staging` | Cloudflare staging dry-run            |
-| `npm run deploy:cloudflare`               | Deploy beide Workers                  |
+| `npm run deploy:cloudflare`               | Deploy alle drie Cloudflare Workers   |
 | `npm run deploy:firebase`                 | Deploy Firebase Hosting               |
 | `npm run deploy:firebase:hosting:staging` | Deploy uitsluitend de vaste Beta-site |
 | `npm run deploy:all`                      | Deploy Cloudflare + Firebase          |
@@ -584,10 +615,13 @@ Workers afzonderlijk deployen:
 ```sh
 npm run deploy:cloudflare:import
 npm run deploy:cloudflare:game
+npm run deploy:cloudflare:image
 ```
 
-De Import Worker is bewust geen generieke fetchproxy en accepteert alleen de
-afgeschermde routes die nodig zijn voor openbare Archidekt-deckdata en assets.
+De Import Worker is bewust geen generieke fetchproxy en verwerkt uitsluitend
+begrensde Archidekt deck-/tokenbrondata. Kaartafbeeldingen lopen niet via
+Archidekt of de Import Worker: de browser gebruikt `cdn.mtgbattlearena.nl`, waarna
+de Image Worker alleen gevalideerde Scryfall-image requests afhandelt.
 
 </details>
 
@@ -604,10 +638,10 @@ afgeschermde routes die nodig zijn voor openbare Archidekt-deckdata en assets.
 
 | Dienst             | Gebruik                                        |
 | ------------------ | ---------------------------------------------- |
-| **Archidekt**      | Openbare decklijsten importeren                |
-| **Scryfall**       | Kaartmetadata en kaartafbeeldingen             |
+| **Archidekt**      | Openbare deck-/tokenbron voor provider-neutrale import |
+| **Scryfall**       | Upstream voor kaartafbeeldingen achter de Image Worker |
 | **Firebase**       | Authenticatie, gebruikersidentiteit en Hosting |
-| **Cloudflare**     | Workers, WebSockets en Durable Objects         |
+| **Cloudflare**     | Game-, Import- en Image Workers, WebSockets, Durable Objects en edge caching |
 | **GitHub Actions** | CI en gescheiden Beta-/Production-deployments  |
 
 Archidekt, Scryfall, Firebase, Cloudflare en Wizards of the Coast zijn geen
@@ -638,6 +672,9 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 - [x] Persoonlijke online openingshand en mulligan
 - [x] GitHub Actions CI met change detection
 - [x] Geautomatiseerde release promotion vanaf `main`: Beta → Production
+- [x] GraphQL Yoga + RTK Query met SHA-256 persisted operations
+- [x] Provider-neutrale deck sources/revisions met lokale ownerselectie
+- [x] Publieke Image Worker/CDN op `cdn.mtgbattlearena.nl` met Scryfall als afgeschermde upstream
 
 ### 🚧 Volgende uitbreidingen
 
@@ -659,7 +696,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 | [`AGENTS.md`](AGENTS.md)                                           | Architectuur, scope, kwaliteit en regels voor coding agents |
 | [`docs/architecture/`](docs/architecture/)                         | Architecture Decision Records                               |
 | [`docs/ci-cd.md`](docs/ci-cd.md)                                   | CI/CD, security checks en deployments                       |
-| [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md)     | Context voor de online multiplayeruitbreiding               |
+| [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md)     | Historische context van de online multiplayeruitbreiding     |
 | [`FIRST_IMPLEMENTATION_PROMPT.md`](FIRST_IMPLEMENTATION_PROMPT.md) | Context van de oorspronkelijke offline implementatie        |
 | [`docs/legal/`](docs/legal/)                                       | Privacy, voorwaarden en third-party notices                 |
 

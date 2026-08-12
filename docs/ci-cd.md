@@ -21,11 +21,11 @@ feature/* → PR naar main → CI → merge naar main
                          Production · Build #X
 ```
 
-| Omgeving    | GitHub Environment | Bron                        | Frontend                         | API / WebSocket                                                            |
-| ----------- | ------------------ | --------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
-| Development | geen               | lokaal                      | Vite dev server                  | lokale Workers/proxy                                                       |
-| Beta        | `staging`          | release uit `main`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` |
-| Production  | `production`       | dezelfde release uit `main` | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           |
+| Omgeving    | GitHub Environment | Frontend                         | API / WebSocket                                                            | Card CDN |
+| ----------- | ------------------ | -------------------------------- | -------------------------------------------------------------------------- | -------- |
+| Development | geen               | Vite dev server                  | lokale Workers/proxy                                                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets |
+| Beta        | `staging`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` | publieke CDN blijft `https://cdn.mtgbattlearena.nl`; staging Image Worker heeft geen publieke route |
+| Production  | `production`       | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           | `https://cdn.mtgbattlearena.nl` |
 
 De branch `staging` is niet meer nodig voor CI/CD. De naam `staging` blijft
 uitsluitend bestaan als GitHub Environment, Firebase Hosting-target en Wrangler
@@ -40,6 +40,7 @@ maar alle vereiste checknamen blijven altijd zichtbaar:
 - `CI / Frontend`
 - `CI / Game Worker`
 - `CI / Import Worker`
+- `CI / Image Worker`
 - `CI / Dependency Review`
 
 Geraakte projecten krijgen lint, typecheck, tests, PWA-build en/of Wrangler
@@ -58,28 +59,29 @@ zodat releases niet racen of een lopende promotie onderbreken.
 Handmatig starten: **Actions → Deploy Release → Run workflow → main**. Zo'n run
 selecteert bewust alle deployables en doorloopt opnieuw Beta vóór Production.
 
-De workflow heeft drie symmetrische componentlijnen:
+De workflow heeft vier change-aware componentlijnen:
 
-| Fase       | Frontend                | Game Worker                | Import Worker                |
-| ---------- | ----------------------- | -------------------------- | ---------------------------- |
-| Build      | `Build / Frontend`      | `Build / Game Worker`      | `Build / Import Worker`      |
-| Beta       | `Beta / Frontend`       | `Beta / Game Worker`       | `Beta / Import Worker`       |
-| Production | `Production / Frontend` | `Production / Game Worker` | `Production / Import Worker` |
+| Fase       | Frontend                | Game Worker                | Import Worker                | Image Worker                |
+| ---------- | ----------------------- | -------------------------- | ---------------------------- | --------------------------- |
+| Build      | `Build / Frontend`      | `Build / Game Worker`      | `Build / Import Worker`      | `Build / Image Worker`      |
+| Beta       | `Beta / Frontend`       | `Beta / Game Worker`       | `Beta / Import Worker`       | `Beta / Image Worker`       |
+| Production | `Production / Frontend` | `Production / Game Worker` | `Production / Import Worker` | `Production / Image Worker` |
 
-`Build / Complete` vereist alle drie buildresultaten. Iedere Production-job
+`Build / Complete` vereist alle vier buildresultaten. Iedere Production-job
 vereist vervolgens een succesvolle `Beta / Complete`. Die aggregatiejob
 controleert expliciet dat iedere geraakte Beta-deployment is geslaagd. Een
-mislukte Frontend-, Import Worker- of Game Worker-deployment laat de aggregatie
-falen en voorkomt dat Production beschikbaar wordt.
+mislukte Frontend-, Import Worker-, Image Worker- of Game Worker-deployment laat
+de aggregatie falen en voorkomt dat Production beschikbaar wordt.
 
-Alle drie Production-releasejobs zijn gekoppeld aan GitHub Environment
+Alle vier Production-releasejobs zijn gekoppeld aan GitHub Environment
 `production`. Met Required reviewers geconfigureerd toont GitHub na succesvolle
 Beta-promotie de ingebouwde wachtstatus voor approval. Er staat bewust geen
 zelfgebouwd approvalmechanisme in YAML of scripts.
 
-Wanneer beide Workers geraakt zijn, wordt binnen iedere omgeving eerst de
-Import Worker en daarna de Game Worker gedeployed. Hiermee blijft de bestaande
-service-bindingvolgorde behouden.
+Wanneer Import Worker en Game Worker beide geraakt zijn, wordt binnen iedere
+omgeving eerst de Import Worker en daarna de Game Worker gedeployed. Hiermee
+blijft de Service Binding-volgorde behouden. De Image Worker heeft geen binding
+naar de Game/Import Worker en kan als zelfstandige componentlijn promoveren.
 
 ## Build once, deploy many
 
@@ -112,8 +114,9 @@ lokale ontwikkeling als fallback ondersteund.
 ## Releaseversie
 
 `github.run_number` is het release-/buildnummer voor de volledige workflow.
-Wrangler ontvangt dezelfde waarde als `RELEASE_VERSION` voor beide Workers en
-de frontend-runtimeconfig bevat `releaseVersion`.
+Frontend, Game Worker en Import Worker gebruiken dit als `releaseVersion`/
+`RELEASE_VERSION`. De Image Worker wordt uit exact dezelfde commit en promotie
+uitgerold, maar heeft momenteel geen runtime-`RELEASE_VERSION`-variabele nodig.
 
 Na een succesvolle Beta-promotie publiceert een job een GitHub Deployment-record
 voor `staging` met task `release-metadata` en beschrijving `Build #X`.
@@ -181,20 +184,28 @@ Pas de deployment branch policy van GitHub Environment `staging` aan: alleen
 
 ## Cloudflare-isolatie
 
-| Component       | Beta                             | Production                           |
-| --------------- | -------------------------------- | ------------------------------------ |
-| Import Worker   | `mtg-battle-mode-import-staging` | `mtg-battle-mode-import`             |
-| Game Worker     | `mtg-battle-mode-online-staging` | `mtg-battle-mode-online`             |
-| Wrangler        | `--env staging`                  | top-levelconfiguratie via `--env=""` |
-| Import binding  | staging Import Worker            | Production Import Worker             |
-| Durable Objects | eigen staging namespaces         | Production namespaces                |
+| Component       | Beta                                  | Production                            |
+| --------------- | ------------------------------------- | ------------------------------------- |
+| Import Worker   | `mtg-battle-mode-import-staging`      | `mtg-battle-mode-import`              |
+| Game Worker     | `mtg-battle-mode-online-staging`      | `mtg-battle-mode-online`              |
+| Image Worker    | `mtg-battle-mode-images-staging`      | `mtg-battle-mode-images`              |
+| Image route     | geen publieke route / preview-URL     | `cdn.mtgbattlearena.nl` custom domain |
+| Wrangler        | `--env staging`                       | top-levelconfiguratie                 |
+| Import binding  | staging Import Worker                 | Production Import Worker              |
+| Durable Objects | eigen staging namespaces              | Production namespaces                 |
 
 De Import Workers hebben in beide omgevingen expliciet `workers_dev = false`
 en `preview_urls = false`. Zij hebben dus geen publiek `workers.dev`- of
 preview-adres en geen eigen publieke route. Alleen de bijbehorende Game Worker
 kan ze via de Cloudflare Service Binding `IMPORT` bereiken. De browser gebruikt
-uitsluitend de publieke Game Worker-origin uit `IMPORT_API_URL`; CORS op de
+voor import de publieke Game Worker-origin uit `IMPORT_API_URL`; CORS op de
 Import Worker blijft defense-in-depth en is geen authenticatiemechanisme.
+
+De Image Worker is juist de publieke assetgrens. Production heeft het custom
+domain `cdn.mtgbattlearena.nl` en Workers Caching vóór Worker-executie; staging
+heeft `workers_dev = false`, `preview_urls = false`, geen route en caching uit.
+De frontend gebruikt provider-neutrale ImageRef-URL's naar de publieke CDN en
+kent geen Archidekt- of Scryfall-upstream-URL's.
 
 Wranglerbindings en migrations blijven expliciet per environment gedefinieerd.
 De gedeelde releasebron verandert niets aan de scheiding van Lobby- en
@@ -212,7 +223,9 @@ Gebruik nooit de Global API Key.
 - `apps/web/**`, runtimeconfigscript en Firebaseconfiguratie raken de frontend.
 - `apps/game-worker/**` raakt de Game Worker.
 - `apps/import-worker/**` raakt de Import Worker.
-- `packages/**` en root-TypeScriptconfiguratie raken frontend en Game Worker.
+- `apps/image-worker/**` raakt de Image Worker.
+- `packages/**` en root-TypeScriptconfiguratie raken frontend, Game Worker,
+  Import Worker en Image Worker.
 - `package.json`, `package-lock.json` en de releaseworkflow raken alle
   deployables.
 - Een handmatige release vanaf `main` selecteert alle deployables.
@@ -228,6 +241,7 @@ PR’s hoeven alleen naar `main`. Behoud deze vereiste checks:
 - `CI / Frontend`
 - `CI / Game Worker`
 - `CI / Import Worker`
+- `CI / Image Worker`
 - `CI / Dependency Review`
 - `Analyze (javascript-typescript)` voor CodeQL
 
@@ -249,9 +263,10 @@ gebruikt uitsluitend de bestaande GitHub Environment-protection.
 5. Behoud de bestaande Environment secrets; er zijn geen nieuwe secrets nodig.
 6. Controleer dat beide Firebase Hosting-targets en custom domains nog correct
    gekoppeld zijn.
-7. Controleer na de eerste release in Cloudflare dat beide Workerparen hetzelfde
-   `RELEASE_VERSION` tonen en dat de staging Game Worker uitsluitend aan de
-   staging Import Worker bindt.
+7. Controleer na de eerste release in Cloudflare dat de staging Game Worker
+   uitsluitend aan de staging Import Worker bindt, dat de Production Image
+   Worker aan `cdn.mtgbattlearena.nl` hangt en dat de staging Image Worker geen
+   publieke route heeft.
 8. De oude workflows `Deploy Beta` en `Deploy Production` verdwijnen. Pas
    eventuele externe workflow-notificaties aan naar `Deploy Release`.
 
@@ -266,8 +281,12 @@ gebruikt uitsluitend de bestaande GitHub Environment-protection.
   betreffende site en de `no-store` responseheader.
 - **Artifact ontbreekt:** controleer `Build / Frontend`; Beta en
   Production gebruiken artifactnaam `frontend-release-<run_number>`.
-- **Workerrelease verschilt:** controleer `RELEASE_VERSION` in de Wrangler
-  deploylog en Workerbindings.
+- **Workerrelease verschilt:** controleer `RELEASE_VERSION` voor Game/Import,
+  de commit/deployrun voor de Image Worker en de bijbehorende Workerbindings/routes.
+- **CDN geeft 502:** tail de Image Worker en controleer de veilige upstream-
+  diagnostics. De Scryfall-fetch gebruikt handmatige allowlisted redirects en
+  een wrapper rond de globale Cloudflare `fetch` om `Illegal invocation` door
+  een verkeerde `this`-binding te voorkomen.
 - **Badge loopt achter:** het releaserecord wordt pas gepubliceerd nadat de hele
   betreffende omgeving succesvol is gepromoveerd; Shields kan kort cachen.
 

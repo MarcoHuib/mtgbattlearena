@@ -2,7 +2,7 @@
 
 ## Status
 
-Geaccepteerd.
+Geaccepteerd. Deze ADR introduceerde savegameschema 4; de actuele offline savegameversie is schema 7.
 
 ## Context
 

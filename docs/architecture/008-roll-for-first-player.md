@@ -76,7 +76,7 @@ migratie als reeds afgeronde startspelerflow gemarkeerd, zodat bestaande games
 niet opnieuw hoeven te gooien. Nieuwe onafgeronde worpen worden normaal met de
 game opgeslagen.
 
-Online authoritative snapshots gebruiken schema 5. De volledige rollstate zit
+Deze ADR introduceerde online authoritative schema 5. De actuele authoritative state gebruikt schema 6; de v5→v6-migratie normaliseert uitsluitend legacy image metadata en laat de volledige rollstate en gameplaysemantiek intact. De volledige rollstate zit
 in SQLite-snapshots en persoonlijke reconnectsnapshots. Een disconnect
 verwijdert een deelnemer niet uit een reeds gestarte wedstrijd: diens plek en
 worp blijven bestaan en de flow wacht op reconnect. Bij permanent vertrek kan

@@ -1,3 +1,5 @@
+> **Status:** historische implementatieprompt. De online basis is inmiddels gerealiseerd. Voor de actuele architectuur zijn `docs/architecture/006-online-multiplayer.md`, `009-graphql-application-api.md`, `010-provider-agnostic-deck-import.md`, `011-image-delivery-boundary.md` en `docs/ci-cd.md` leidend.
+
 Lees `AGENTS.md` en `docs/architecture/006-online-multiplayer.md` volledig; deze bestanden zijn leidend. Inspecteer daarna de bestaande repository en implementeer de online uitbreiding incrementeel zonder de bestaande offline gameflow, autosave, undo/redo, Archidekt-import of offlinepakketten te breken.
 
 Voer in deze opdracht uit:
