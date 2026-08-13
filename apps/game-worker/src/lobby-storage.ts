@@ -444,7 +444,10 @@ export class SqliteLobbyStore implements LobbyStore {
         gameId,
       )
       .toArray()
-      .map(row => this.toDeckRecord(row))
+      .flatMap(row => {
+        const record = this.toDeckRecord(row)
+        return record ? [record] : []
+      })
   }
 
   upsertDeck(record: LobbyDeckRecord) {
@@ -657,12 +660,21 @@ export class SqliteLobbyStore implements LobbyStore {
     )
   }
 
-  private toDeckRecord(row: LobbyDeckRow): LobbyDeckRecord {
-    return {
-      gameId: row.gameId,
-      uid: row.uid,
-      submission: onlineDeckSubmissionSchema.parse(JSON.parse(row.deckJson)),
-      registeredAt: row.registeredAt,
+  private toDeckRecord(row: LobbyDeckRow): LobbyDeckRecord | null {
+    try {
+      const submission = onlineDeckSubmissionSchema.safeParse(
+        JSON.parse(row.deckJson),
+      )
+      return submission.success
+        ? {
+            gameId: row.gameId,
+            uid: row.uid,
+            submission: submission.data,
+            registeredAt: row.registeredAt,
+          }
+        : null
+    } catch {
+      return null
     }
   }
 }

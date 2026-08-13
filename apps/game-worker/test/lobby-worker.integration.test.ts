@@ -550,6 +550,66 @@ describe("Lobby Durable Object RPC", () => {
     database.close()
   })
 
+  test("opent een bestaande lobby ook met een ongeldig legacy deckrecord", () => {
+    const database = new DatabaseSync(":memory:")
+    const storage = sqliteStorage(database)
+    const store = new SqliteLobbyStore(storage)
+    const createdAt = "2026-08-13T10:00:00.000Z"
+    store.createLobbyWithHost(
+      {
+        id: "legacy-game",
+        code: "LEGACY",
+        title: "Bestaande lobby",
+        hostUid: "legacy-owner",
+        hostDisplayName: "Owner",
+        format: "Commander",
+        visibility: "public",
+        status: "waiting",
+        playerCount: 1,
+        maxPlayers: 4,
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        gameId: "legacy-game",
+        uid: "legacy-owner",
+        playerId: "legacy-player",
+        role: "player",
+        displayName: "Owner",
+        seatNumber: 0,
+        joinedAt: createdAt,
+      },
+      Date.parse(createdAt),
+    )
+    database
+      .prepare(
+        `INSERT INTO lobby_decks (game_id, uid, deck_json, registered_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(
+        "legacy-game",
+        "legacy-owner",
+        JSON.stringify({ deckName: "Oud deck", legacyCards: [] }),
+        createdAt,
+      )
+    const lobby = new LobbyDurableObject(
+      { ...state, storage },
+      {} as Env,
+      store,
+      new MemorySocketTicketRepository(),
+    )
+
+    expect(
+      lobby.getLobbyRoom("legacy-game", identity("legacy-owner")),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        participants: [{ deckReady: false, deckName: null }],
+      },
+    })
+    database.close()
+  })
+
   test("handhaaft wachtende-lobbyquota per geverifieerde UID", () => {
     let now = Date.parse("2026-08-10T10:00:00.000Z")
     const store = new MemoryLobbyStore()
