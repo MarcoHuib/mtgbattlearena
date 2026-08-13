@@ -597,6 +597,7 @@ describe("Lobby Durable Object RPC", () => {
       {} as Env,
       store,
       new MemorySocketTicketRepository(),
+      () => Date.parse(createdAt),
     )
 
     expect(
