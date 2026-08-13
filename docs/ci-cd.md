@@ -11,6 +11,18 @@ interne providerdetails in logs, artifacts, source maps of clientbundles
 publiceren. De exacte productieconfiguratie wordt in private operationele
 documentatie beheerd.
 
+De publieke repository blijft zelfstandig buildbaar zonder private providerpackage
+of projectspecifieke providercredential. Pull-request-CI en forks krijgen geen
+private provideraccess. Een trusted officiële release mag later een private
+server-side adapter koppelen, maar dat mag de standaard `npm ci`, lint, typecheck,
+tests of build niet afhankelijk maken van private registrytoegang.
+
+Gevoelige runtimecredentials horen in de server-side secret store van de Worker.
+Wanneer GitHub Actions een secret moet provisionen, komt de waarde uitsluitend uit
+een GitHub Secret/Environment Secret, nooit uit een gewone Repository Variable, en
+mag de workflow de waarde niet naar stdout, artifacts of gegenereerde clientconfig
+schrijven.
+
 
 `main` is de single source of truth voor iedere release. Development gebeurt
 lokaal; pull requests naar `main` valideren code zonder credentials of
@@ -193,6 +205,30 @@ handmatig als Environment Variable te worden beheerd.
 
 Pas de deployment branch policy van GitHub Environment `staging` aan: alleen
 `main` hoeft nog toegestaan te zijn. Doe hetzelfde voor `production`.
+
+### Gepland in Feature 1 — Firestore Deck Library
+
+ADR 016 voegt Firestore toe voor duurzame clouddecks. Implementeer dit niet als
+een verborgen handmatige consolewijziging. Wanneer Feature 1 wordt uitgevoerd:
+
+- voeg Firestore Security Rules als versiebeheerbaar bestand aan de repository toe;
+- voeg alleen noodzakelijke Firestore indexes/configuratie toe;
+- test Rules in CI/emulator voordat deployment mogelijk is;
+- deploy Rules/config via dezelfde Beta → Production-promotie als de code die
+erop vertrouwt;
+- activeer App Check voor directe Firestore webreads pas nadat Beta bewezen werkt;
+- houd Firestore-data zelf buiten build artifacts en CI-fixtures.
+
+Runtime serverwrites naar Firestore mogen niet de bestaande Firebase Hosting-
+deploymentcredential hergebruiken alleen omdat die al beschikbaar is. Kies een
+afzonderlijke least-privilege servercredential/IAM-identiteit wanneer server-IAM
+nodig is en bewaar die uitsluitend als Cloudflare runtime secret. Als GitHub
+Actions die credential provisiont, mag de waarde alleen uit een protected GitHub
+Environment Secret komen en nooit in runtime-config of logs terechtkomen.
+
+De webapp krijgt geen service-accountcredential. Directe webtoegang gebruikt
+Firebase Authentication + Security Rules + App Check en is in het doelmodel
+read-only voor authoritative clouddeckrecords.
 
 ## Cloudflare-isolatie
 

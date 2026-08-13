@@ -111,10 +111,14 @@ particular isolation guarantee cannot exist.
 6. Do not enable Firebase Authentication App Check enforcement yet. That
    preview/native-Firebase switch is separate from this custom-backend rollout.
 
-The application does not directly use Firestore, Realtime Database, or Firebase
-Storage, so no native-service enforcement is configured. Existing CSP headers
-already permit the Firebase/Google endpoints used by Auth and App Check; no
-wildcards, `unsafe-eval`, COOP weakening, or other header relaxation was added.
+At present the deployed application does not directly use Firestore, Realtime
+Database, or Firebase Storage, so no native-service enforcement is configured.
+Roadmap Feature 1 introduces direct owner-scoped Firestore reads for the Deck
+Library. Before that becomes production-authoritative, configure Firestore
+Security Rules and App Check enforcement/test coverage as described in
+`docs/security/firestore-deck-library.md`. Realtime Database and Firebase Storage
+remain outside this scope. Existing CSP changes must stay narrowly scoped; do not
+add wildcards, `unsafe-eval` or unrelated COOP weakening.
 
 ## Rollout and troubleshooting
 

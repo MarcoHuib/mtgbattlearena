@@ -94,3 +94,7 @@ ongewijzigd. Offline routes, IndexedDB, autosave en assetcaching zijn niet afhan
 van GraphQL of Firebase. De online/managed deckimport gebruikt wel GraphQL als
 application-API, terwijl de provideradapter en Image Worker afzonderlijke
 architectuurgrenzen blijven.
+
+## Geplande Deck Library-migratie
+
+ADR 013/016 verplaatsen providerimport uit de online lobby naar de Firestore-backed Deck Library. In het doelbeeld importeert/update de gebruiker via `/decks` en registreert de lobby uitsluitend een reeds opgeslagen `deckKey`. De huidige `deckFromUrl(url, sourceHash)`-operatie documenteert de bestaande implementatie; Roadmap Feature 1 migreert die flow en verwijdert `sourceHash` uit de actieve GraphQL-/frontend-/persistencecontracten met compatibiliteitstests. Online game-start accepteert daarna geen provider-URL of client-authored deckcontent meer.

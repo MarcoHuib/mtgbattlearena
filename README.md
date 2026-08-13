@@ -73,9 +73,6 @@
 | --------------------------------- | ------------------ |
 | Offline battle voor 2–6 spelers   | 🟢 **Ready**       |
 | Provider-neutrale deckimport      | 🟢 **Ready**       |
-| Archidekt-deckimport              | 🟢 **Ready**       |
-| ManaBox-deckprovider              | ⚪ **Planned**     |
-| Moxfield-deckprovider             | ⚪ **Planned**     |
 | Autosave, hervatten en undo/redo  | 🟢 **Ready**       |
 | Offlinepakket en PWA              | 🟢 **Ready**       |
 | Commander-zones en statustracking | 🟢 **Ready**       |
@@ -86,6 +83,9 @@
 | GraphQL + persisted operations     | 🟢 **Ready**       |
 | Provider-neutrale deckrevisions    | 🟢 **Ready**       |
 | Publieke card-image CDN Worker     | 🟢 **Ready**       |
+| Deck Library + importwizard        | ⚪ **Planned**     |
+| Moxfield FIFO + provider           | ⚪ **Planned**     |
+| ManaBox private providerpackage    | ⚪ **Planned**     |
 | Verdere online game-acties        | 🟡 **In progress** |
 
 <details>
@@ -196,13 +196,14 @@ apps/
 └── image-worker/    Publieke cache-first card-image CDN-grens
 
 packages/
+├── deck-source/     Publieke bronidentiteit en huidige compatibiliteitshelpers
 ├── game-core/       Pure game-state en domeinlogica
 └── game-protocol/   Zod-commands, snapshots, events en errors
 
 docs/
 ├── architecture/    Architecture Decision Records
-├── legal/           Privacy, voorwaarden en third-party notices
-└── reference/       Visuele referenties
+├── codex/           Opeenvolgende implementatieopdrachten voor coding agents
+└── legal/           Privacy, voorwaarden en third-party notices
 ```
 
 De webapp en Game Worker delen dezelfde pure `game-core` en hetzelfde
@@ -237,6 +238,9 @@ runtime-gevalideerde protocol.
 - [Provider-agnostische deckimport](docs/architecture/010-provider-agnostic-deck-import.md)
 - [Card-image delivery boundary](docs/architecture/011-image-delivery-boundary.md)
 - [Vertrouwelijke provideradapters](docs/architecture/012-confidential-provider-adapters.md)
+- [Deck Library en expliciete provider-refresh](docs/architecture/013-deck-library-and-explicit-refresh.md)
+- [Geserialiseerde Moxfield-importqueue](docs/architecture/014-moxfield-queued-imports.md)
+- [Private providerpackage en forkgrens](docs/architecture/015-private-provider-package.md)
 
 </details>
 
@@ -580,7 +584,10 @@ Voor de volledige technische uitleg:
 
 <br />
 
-Firebase Authentication verzorgt uitsluitend de online identiteit.
+Op dit moment verzorgt Firebase Authentication de online identiteit en Firebase
+Hosting de webhosting. Roadmap Feature 1 voegt Cloud Firestore toe als duurzame,
+owner-scoped Deck Library; actieve multiplayerstate blijft in Cloudflare Durable
+Objects.
 
 Firebase App Check met reCAPTCHA Enterprise vormt daarnaast een extra
 client-attestationlaag voor browserrequests naar de Cloudflare backend. De
@@ -642,9 +649,9 @@ uitgeschreven. Kaartafbeeldingen lopen via de afzonderlijke imagegrens.
 
 | Dienst             | Gebruik                                                   |
 | ------------------ | --------------------------------------------------------- |
-| **Deckproviders**  | Archidekt actief; ManaBox en Moxfield gepland             |
+| **Deckproviders**  | User-triggered, provider-neutrale deckimport              |
 | **Scryfall**       | Kaartafbeeldingen achter de afzonderlijke imagegrens      |
-| **Firebase**       | Authenticatie, gebruikersidentiteit en Hosting            |
+| **Firebase**       | Auth + Hosting; Firestore Deck Library gepland in Feature 1 |
 | **Cloudflare**     | Server-, realtime- en edgefunctionaliteit                 |
 | **GitHub Actions** | CI en gescheiden Beta-/Production-deployments             |
 
@@ -668,7 +675,6 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 ### ✅ Gerealiseerd
 
 - [x] Provider-neutrale deckimport en normalisatie
-- [x] Archidekt als eerste ondersteunde externe deckprovider
 - [x] Local-first battle met autosave en hervatten
 - [x] Undo/redo, Commander-zones, counters, tokens en statustracking
 - [x] Expliciete offlinepakketten en PWA-app-shell
@@ -684,13 +690,21 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
 ### 🚧 Volgende uitbreidingen
 
-- [ ] ManaBox als aanvullende user-triggered deckprovider
-- [ ] Moxfield als aanvullende user-triggered deckprovider
-- [ ] Vertrouwelijke provideradapters via een afgeschermde server-side packagegrens, waar providerafspraken dat vereisen
+De eerstvolgende deck/providerroadmap wordt als vier afzonderlijke features uitgevoerd:
+
+- [ ] **Feature 1:** Firestore Deck Library met providerwizard, CRUD zonder `sourceHash`, duplicate-detectie, handmatige Update en online selectie-only
+- [ ] **Feature 2:** globale Moxfield FIFO/rate-limit infrastructuur, eerst volledig tegen mocks
+- [ ] **Feature 3:** Moxfield-provider server-side aansluiten via de bewezen queue en geheime runtimecredential
+- [ ] **Feature 4:** ManaBox via een private server-side providerpackage zonder dat forks daarvan afhankelijk worden
+
+Daarna blijven onder andere gepland:
+
 - [ ] Verdere online kaart- en tafelacties
 - [ ] Commander damage en aanvullende multiplayerstatus volledig online
 - [ ] Verdere hardening van reconnect- en recoveryflows
 - [ ] Privacyverzoeken en bewaartermijnen technisch afronden
+
+Zie [`ROADMAP.md`](ROADMAP.md) voor scope, volgorde, security-invarianten en Definition of Done per feature.
 
 </details>
 
@@ -703,9 +717,11 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 | Document                                                           | Doel                                                        |
 | ------------------------------------------------------------------ | ----------------------------------------------------------- |
 | [`AGENTS.md`](AGENTS.md)                                           | Architectuur, scope, kwaliteit en regels voor coding agents |
-| [`docs/architecture/`](docs/architecture/)                         | Architecture Decision Records                               |
+| [`ROADMAP.md`](ROADMAP.md)                                         | Vier volgende features voor Deck Library en providers       |
+| [`docs/codex/`](docs/codex/)                                       | Kleine, versiebeheerbare prompts per roadmapfeature          |
+| [`docs/architecture/`](docs/architecture/)                         | Architecture Decision Records, incl. Firestore/loadverdeling        |
 | [`docs/ci-cd.md`](docs/ci-cd.md)                                   | CI/CD, security checks en deployments                       |
-| [`docs/legal/PROVIDER_INTEGRATIONS.md`](docs/legal/PROVIDER_INTEGRATIONS.md) | Publieke grens voor externe deckproviders                    |
+| [`docs/legal/PROVIDER_INTEGRATIONS.md`](docs/legal/PROVIDER_INTEGRATIONS.md) | Publieke grens voor externe deckproviders                   |
 | [`docs/legal/`](docs/legal/)                                       | Privacy, voorwaarden en third-party notices                 |
 
 ---

@@ -48,6 +48,22 @@ Publieke documenten mogen wel de functionele en juridische grens noemen, zoals
 het feit dat toestemming bestaat, dat crawling niet is toegestaan, dat toegang
 kan worden ingetrokken en dat provider-defined gebruikslimieten worden nageleefd.
 
+
+## Geplande private-packagevorm
+
+Voor providers waarvoor ook de technische adapterkennis niet openbaar mag worden,
+kiest het project bij voorkeur voor een private server-side repository/package in
+plaats van een extra publieke Worker. De publieke repository behoudt alleen een
+provider-neutraal contract en een veilige unavailable/capabilitygrens.
+
+Een belangrijke open-source invariant is dat een fork zonder private toegang nog
+steeds normaal `npm ci`, lint, typecheck, tests en build kan uitvoeren. Een private
+provider mag daarom niet als verplichte gewone dependency in de publieke lockfile
+worden opgenomen wanneer dat forks of PR-CI zou breken. Alleen een trusted officiële
+releasecontext mag zo'n private component server-side koppelen.
+
+Zie [ADR 015](./015-private-provider-package.md) voor het voorgestelde doelmodel.
+
 ## Operationele verantwoordelijkheid
 
 De exacte technische maatregelen waarmee production deployments vertrouwelijke

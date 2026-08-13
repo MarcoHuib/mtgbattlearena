@@ -10,7 +10,7 @@ De applicatie is een digitale tafel en geen automatische Magic-regelsimulator. I
 
 De kernervaring:
 
-1. Openbare Archidekt-deck-URL’s invoeren, importeren en normaliseren.
+1. Decks via een centrale Deck Library beheren en ondersteunde, user-triggered providerimports normaliseren.
 2. Zonder account een lokale battle starten en volledig offline kunnen hervatten.
 3. Kaarten handmatig tussen zones verplaatsen en spelstatussen bijhouden.
 4. De game automatisch lokaal opslaan en expliciet downloaden voor offline gebruik, inclusief kaartafbeeldingen.
@@ -121,8 +121,10 @@ Gebruik voor de online uitbreiding bij voorkeur:
 * gedeelde TypeScript-contracten met runtimevalidatie, bijvoorbeeld Zod.
 
 Gebruik geen D1, Firebase Realtime Database of Cloudflare Access/RBAC voor
-spelers. Firebase Authentication is uitsluitend de identity provider; de
-Worker en Durable Objects bepalen zelf host-, speler- en spectatorrollen.
+spelers/game-state. Firebase Authentication blijft de identity provider. Volgens
+ADR 016 wordt Cloud Firestore in Roadmap Feature 1 uitsluitend toegevoegd als
+duurzame, owner-scoped Deck Library; het wordt geen lobby- of actieve gamestore.
+De Worker en Durable Objects bepalen zelf host-, speler- en spectatorrollen.
 
 ## 4. Gewenste repositorystructuur
 
@@ -137,7 +139,7 @@ packages/
   game-core/
   game-protocol/
   store/
-  archidekt-client/
+  deck-source/
   persistence/
   shared-ui/
 ```
@@ -150,8 +152,8 @@ Betekenis:
 * `packages/game-core`: pure TypeScript-domeinlogica.
 * `packages/game-protocol`: gedeelde, runtime-gevalideerde commands en serverberichten zonder geheime serverstate.
 * `packages/store`: Redux Toolkit-configuratie, slices en selectors.
-* `packages/archidekt-client`: URL-parser, externe response-schema’s en normalisatie.
-* `packages/persistence`: interfaces en implementaties voor savegames, decks en offlinepakketten.
+* `packages/deck-source`: publieke bronidentiteit en provider-neutrale/compatibiliteitshelpers; niet-openbare providerimplementaties horen hier niet.
+* `packages/persistence`: interfaces en implementaties voor savegames, lokale/offline data en de owner-scoped Deck Library; Firestoretoegang blijft achter een repository/port en niet in Reactcomponenten.
 * `packages/shared-ui`: alleen echt platformneutrale tokens en eenvoudige presentatielogica; geen geforceerde volledige UI-deling.
 
 De huidige repository volgt deze grens met `apps/web`, `apps/import-worker`,
@@ -350,60 +352,145 @@ Online state heeft een andere bron van waarheid dan offline state:
 * na reconnect vraagt de client een verse persoonlijke snapshot en verwerkt daarna versioned events;
 * offline savegames en online metadata gebruiken afzonderlijke repositoryinterfaces.
 
-## 8. Archidekt-import
+## 8. Deckimport en Deck Library
 
-### 8.1 Ondersteunde invoer
+De actuele productrichting staat in [`ROADMAP.md`](ROADMAP.md) en ADR 013–015.
+Nieuwe providerfeatures worden als afzonderlijke slices uitgevoerd. Implementeer
+geen volgende provider vooruitlopend op de bijbehorende `docs/codex/`-opdracht.
 
-Start met openbare Archidekt-deck-URL’s.
+### 8.1 Provider-neutrale importgrens
 
-Accepteer varianten met of zonder deckslug, zolang een geldig numeriek deck-ID kan worden herkend.
+De webapp mag niet rechtstreeks afhankelijk zijn van externe providerresponses.
+Een gebruiker levert een ondersteunde deckreferentie aan; server-side code
+selecteert de expliciete provider, valideert de externe response en retourneert
+uitsluitend het eigen `ImportedDeck`-contract.
 
-Private decks en Archidekt-authenticatie vallen buiten de MVP.
+De importgrens:
 
-### 8.2 Proxy/BFF
+* accepteert alleen expliciet ondersteunde providers en referenties;
+* is geen generieke URL-fetchproxy;
+* gebruikt providerpassende allowlists, time-outs en responsegroottelimieten;
+* valideert externe data runtime;
+* maskeert interne upstreamfouten richting client;
+* logt geen credentials, private responses of vertrouwelijke providerdetails;
+* respecteert provider-defined gebruiks- en requestlimieten server-side;
+* crawlt, indexeert of bulk-downloadt geen externe deckplatforms.
 
-De webapp mag niet overal rechtstreeks afhankelijk zijn van de externe Archidekt-response.
+Archidekt is de huidige publieke werkende provider. Private decks en
+Archidekt-authenticatie vallen buiten scope tenzij expliciet gevraagd.
 
-Gebruik bij voorkeur een kleine Cloudflare Worker of vergelijkbare serverloze proxy:
+### 8.2 Deck Library als beheerplek
+
+`/decks` wordt de centrale plek waar een gebruiker:
+
+* opgeslagen decks bekijkt;
+* een deck via een providerwizard toevoegt;
+* een deck bewust met **Update** opnieuw bij de provider ophaalt;
+* een deck uit de eigen library verwijdert.
+
+Voor clouddecks is Firestore volgens ADR 016 de duurzame source of truth. Gebruik
+kleine owner-scoped metadata los van volledige huidige deckcontent zodat een
+librarylijst niet onnodig alle kaartdata leest. IndexedDB blijft de lokale/offline
+grens en is geen tweede cloud source of truth. Cloudflare houdt geen permanente
+D1/DO-schaduwkopie van dezelfde Deck Library bij.
+
+Authoritative Create/Update/Delete lopen via de beschermde application-API. De
+browser mag owner-scoped Firestore reads doen onder Firebase Auth, Security Rules
+en App Check, maar krijgt geen vrije authoritative writeflow.
+
+### 8.3 Eenvoudige CRUD en geen `sourceHash`
+
+De Deck Library gebruikt expliciete CRUD-semantiek:
 
 ```text
-GET /api/import/archidekt/:deckId
+Create/Import -> provider ophalen -> normaliseren -> opslaan
+Read          -> opgeslagen library/content lezen
+Update        -> bewuste knopdruk -> provider opnieuw ophalen -> vervangen
+Delete        -> actuele library-entry/content verwijderen
 ```
 
-De proxy:
+Een normale tweede import van dezelfde externe bron onder dezelfde owner mag geen
+extra deck maken. Gebruik de stabiele identiteit
+`uid + provider + externalDeckKey`, bij voorkeur via een deterministische
+Firestore-veilige `deckKey`. Dit is geen contenthash. Retourneer een stabiele
+duplicate-fout zoals `DECK_ALREADY_IMPORTED`. De authoritatieve check hoort op de
+persistence/applicationgrens en niet alleen in React.
 
-* valideert het deck-ID;
-* gebruikt time-outs;
-* beperkt responsegrootte;
-* voorkomt open-proxygedrag;
-* past caching toe waar verantwoord;
-* vertaalt externe fouten naar een stabiel intern foutformaat;
-* retourneert bij voorkeur al een intern importcontract.
+`sourceHash`/fingerprints verdwijnen in Feature 1 uit de actieve frontend-, API-,
+persistence-, import- en domeincontracten. Inventariseer alle bestaande
+migraties/tests/indexen eerst en migreer ze gecontroleerd, maar behoud de hash
+niet als nieuwe productregel. Er komt geen vervangende client-side
+fingerprint/freshnesscall.
 
-Sla geen secrets in de frontend op.
+### 8.4 Expliciete Update, Firestore en online deckselectie
 
-### 8.3 Adapter
+Een provider wordt niet automatisch gepolld. Alleen een bewuste **Update** haalt
+opnieuw providerdata op. Bij fout blijft de vorige geldige Firestoremetadata +
+content intact. Bestaande/lopende games behouden hun reeds vastgelegde snapshot.
 
-Verberg het externe schema achter een adapter:
+Nieuwe online gameflows selecteren uitsluitend reeds opgeslagen decks. Een
+online lobby importeert, update of verwijdert geen providerdeck. Heeft de
+gebruiker geen deck, toon een empty state met link naar `/decks`.
 
-```text
-Archidekt response
-  -> runtime-validatie
-  -> Archidekt adapter
-  -> ImportedDeck
-  -> DeckSnapshot
-  -> Game setup
+Bij game-start stuurt de client alleen een library `deckKey`. De server valideert
+ownership en leest de authoritative huidige snapshot uit Firestore voordat het
+Game Durable Object wordt geïnitialiseerd. Accepteer geen client-crafted volledige
+deckinhoud als authoritative online snapshot. Na initialisatie is Firestore niet
+nodig voor normale gameplay.
+
+De bestaande offline setup blijft local-first. Ontwerp de cloud Deck Library zo
+dat een expliciete lokale cache/kopie later mogelijk is zonder Firestore tot
+vereiste voor offline gameplay te maken.
+
+### 8.5 Moxfield veiligheidsgrens
+
+Moxfield wordt pas na de Deck Library toegevoegd. Alle toekomstige Moxfield
+Import- en Update-operaties moeten via één globale, server-side FIFO-coördinator
+per environment lopen. De queue-invarianten uit ADR 014 zijn bindend en worden
+eerst volledig tegen mocks getest.
+
+De projectspecifieke toegangsinformatie is een gevoelige servercredential:
+
+* nooit in frontendcode, runtime-config of repository;
+* nooit loggen of in errors opnemen;
+* alleen server-side uit een Worker Secret of gelijkwaardige secret store lezen;
+* wanneer provisioning via GitHub Actions nodig is, alleen vanuit een GitHub
+  Secret en nooit vanuit een gewone Repository Variable;
+* geen productiecodepad mag de globale queue omzeilen.
+
+### 8.6 Vertrouwelijke provideradapters
+
+Sommige providers vereisen dat niet-openbare technische details buiten deze
+publieke repository blijven. ADR 012 en ADR 015 zijn dan leidend.
+
+Voor ManaBox betekent dit dat de volledige niet-openbare adapter in een private
+server-side repository/package hoort. Niet alleen een basis-URL, maar ook
+requestconstructie, responseschema's, mapping, captures en private fixtures
+blijven buiten deze repository.
+
+De publieke repository moet zonder private provideraccess zelfstandig kunnen:
+
+```sh
+npm ci
+npm run lint
+npm run type-check
+npm test
+npm run build
 ```
 
-Verspreid geen paden uit de externe JSON door componenten of reducers.
+Een private providerpackage mag dus geen verplichte dependency worden die forks
+of PR-CI zonder private credentials breekt. De standaard publieke build gebruikt
+een veilige unavailable/capabilitygrens; alleen een trusted officiële release mag
+de private server-side adapter koppelen.
 
-### 8.4 Deck snapshots
+### 8.7 Deck snapshots
 
-Na import wordt een lokale, onveranderlijke snapshot gemaakt.
+Na import wordt providerdata genormaliseerd en als eigen revision/snapshot
+opgeslagen. Een providerresponse of provider-specifiek objectmodel wordt nooit de
+bron van waarheid voor een actieve game.
 
-Een bestaande of lopende game verandert nooit automatisch wanneer het brondeck later op Archidekt wijzigt.
-
-Bied later alleen een expliciete actie aan om opnieuw te importeren.
+Een ontbrekende provider, timeout of mislukte Update mag de laatst geldige
+opgeslagen deckinhoud niet beschadigen.
 
 ## 9. Kaartafbeeldingen en assets
 
@@ -716,7 +803,7 @@ Bouw niet automatisch mee met de online uitbreiding:
 * cloudsync van volledige offline savegames;
 * deckeditor;
 * private Archidekt-authenticatie;
-* Moxfield-import;
+* providerimplementaties buiten de expliciet actieve `docs/codex/`-slice;
 * App Store/Play Store-publicatie;
 * volledige React Native-interface;
 * monetisatie.
@@ -728,10 +815,11 @@ Openbare lobby’s, deelnemen met code, Firebase-login en realtime games met 2�
 Voordat je implementeert:
 
 1. Lees dit bestand volledig.
-2. Inspecteer de bestaande repository, package manager, scripts, configuratie en tests.
-3. Benoem kort welke bestaande keuzes je behoudt of corrigeert.
-4. Geef een beknopt implementatieplan.
-5. Voer het plan daarna uit zonder opnieuw toestemming te vragen.
+2. Als de opdracht naar een bestand in `docs/codex/` verwijst, lees ook dat bestand, `ROADMAP.md` en alle daarin genoemde ADR's volledig.
+3. Inspecteer de bestaande repository, package manager, scripts, configuratie en tests.
+4. Benoem kort welke bestaande keuzes je behoudt of corrigeert.
+5. Geef een beknopt implementatieplan.
+6. Voer het plan daarna uit zonder opnieuw toestemming te vragen.
 
 Vraag alleen om menselijke invoer wanneer:
 
