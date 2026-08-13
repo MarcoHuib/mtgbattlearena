@@ -118,6 +118,8 @@ export const CreateCloudDeckDocument = new TypedDocumentString(`
     name
     format
     commanderSummary
+    thumbnailImageRef
+    colorIdentity
     cardCount
     createdAt
     updatedAt
@@ -134,6 +136,8 @@ export const UpdateCloudDeckDocument = new TypedDocumentString(`
     name
     format
     commanderSummary
+    thumbnailImageRef
+    colorIdentity
     cardCount
     createdAt
     updatedAt

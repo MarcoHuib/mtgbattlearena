@@ -13,6 +13,7 @@ export type Scalars = {
 export type CloudDeckMetadata = {
   __typename?: 'CloudDeckMetadata';
   cardCount: Scalars['Int']['output'];
+  colorIdentity?: Maybe<Array<Scalars['String']['output']>>;
   commanderSummary?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['String']['output'];
   deckKey: Scalars['ID']['output'];
@@ -21,6 +22,7 @@ export type CloudDeckMetadata = {
   name: Scalars['String']['output'];
   provider: DeckSource;
   sourceUrl: Scalars['String']['output'];
+  thumbnailImageRef?: Maybe<Scalars['JSON']['output']>;
   updatedAt: Scalars['String']['output'];
 };
 

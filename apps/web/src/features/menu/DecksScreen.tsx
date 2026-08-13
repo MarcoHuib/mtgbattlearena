@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
 } from "react"
 import type { CloudDeckMetadata } from "@mtg/game-core/types"
+import { getCardImageUrl } from "@mtg/game-core/images"
 import { AppLink } from "../../app/router"
 import { AppShell } from "../../components/AppShell"
 import {
@@ -18,7 +19,7 @@ import {
   createFirestoreCloudDeckRepository,
   type CloudDeckRepository,
 } from "../decks/cloudDeckRepository"
-import { readFirebaseConfig } from "../online/firebaseAuth"
+import { readRuntimeFirebaseConfig } from "../online/firebaseAuth"
 import type { AuthService } from "../online/types"
 
 type DecksScreenProps = {
@@ -28,8 +29,25 @@ type DecksScreenProps = {
 type WizardStep = "closed" | "provider" | "reference" | "importing" | "success"
 type ImportState = "idle" | "loading" | "error"
 
-const firebaseConfig = readFirebaseConfig(import.meta.env)
+const firebaseConfig = readRuntimeFirebaseConfig()
 const steps = ["Provider", "Deck", "Import", "Klaar"] as const
+const manaLabels = {
+  W: "Wit",
+  U: "Blauw",
+  B: "Zwart",
+  R: "Rood",
+  G: "Groen",
+} as const
+
+const thumbnailUrl = (deck: CloudDeckMetadata) => {
+  try {
+    return deck.thumbnailImageRef
+      ? getCardImageUrl(deck.thumbnailImageRef)
+      : null
+  } catch {
+    return null
+  }
+}
 
 const dateLabel = (value: string) =>
   new Intl.DateTimeFormat("nl-NL", { dateStyle: "medium" }).format(
@@ -399,29 +417,58 @@ export const DecksScreen = ({
                 tabIndex={-1}
               >
                 <div className="deck-tile__glow" aria-hidden="true" />
-                <div className="deck-tile__top">
-                  <span className="deck-provider-badge">Archidekt</span>
-                  <span className="deck-format">{deck.format ?? "Deck"}</span>
+                <div className="deck-tile__cover">
+                  {thumbnailUrl(deck) ? (
+                    <img
+                      src={thumbnailUrl(deck) ?? undefined}
+                      alt={`Illustratie van ${deck.commanderSummary ?? deck.name}`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div
+                      className="deck-tile__cover-fallback"
+                      aria-hidden="true"
+                    >
+                      <span>{deck.name.slice(0, 1)}</span>
+                    </div>
+                  )}
+                  <div className="deck-tile__cover-shade" aria-hidden="true" />
+                  <div className="deck-tile__top">
+                    <span className="deck-provider-badge">Archidekt</span>
+                    <span className="deck-format">{deck.format ?? "Deck"}</span>
+                  </div>
+                  <div className="deck-tile__cover-meta">
+                    <span>{deck.cardCount} kaarten</span>
+                    <span>{dateLabel(deck.updatedAt)}</span>
+                  </div>
                 </div>
                 <div className="deck-tile__identity">
-                  <span className="deck-tile__monogram" aria-hidden="true">
-                    {deck.name.slice(0, 1)}
-                  </span>
                   <div>
                     <h2>{deck.name}</h2>
                     <p>{deck.commanderSummary ?? "Geen commander opgegeven"}</p>
                   </div>
                 </div>
-                <dl>
-                  <div>
-                    <dt>Kaarten</dt>
-                    <dd>{deck.cardCount}</dd>
-                  </div>
-                  <div>
-                    <dt>Laatste update</dt>
-                    <dd>{dateLabel(deck.updatedAt)}</dd>
-                  </div>
-                </dl>
+                <div
+                  className="deck-color-identity"
+                  aria-label={
+                    deck.colorIdentity?.length
+                      ? `Kleuridentiteit: ${deck.colorIdentity.map(color => manaLabels[color]).join(", ")}`
+                      : "Kleuridentiteit: kleurloos"
+                  }
+                >
+                  {(deck.colorIdentity?.length
+                    ? deck.colorIdentity
+                    : ["C"]
+                  ).map(color => (
+                    <span
+                      className={`deck-color deck-color--${color.toLowerCase()}`}
+                      key={color}
+                      aria-hidden="true"
+                    >
+                      {color === "C" ? "◇" : color}
+                    </span>
+                  ))}
+                </div>
                 <div className="deck-tile__actions">
                   <AppLink
                     className="deck-action deck-action--primary"

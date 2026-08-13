@@ -28,14 +28,14 @@ export type CreateCloudDeckMutationVariables = Exact<{
 }>;
 
 
-export type CreateCloudDeckMutation = { createCloudDeck: { deckKey: string, provider: Schema.DeckSource, externalDeckKey: string, sourceUrl: string, name: string, format: string | null, commanderSummary: string | null, cardCount: number, createdAt: string, updatedAt: string } };
+export type CreateCloudDeckMutation = { createCloudDeck: { deckKey: string, provider: Schema.DeckSource, externalDeckKey: string, sourceUrl: string, name: string, format: string | null, commanderSummary: string | null, thumbnailImageRef: unknown, colorIdentity: Array<string> | null, cardCount: number, createdAt: string, updatedAt: string } };
 
 export type UpdateCloudDeckMutationVariables = Exact<{
   deckKey: string | number;
 }>;
 
 
-export type UpdateCloudDeckMutation = { updateCloudDeck: { deckKey: string, provider: Schema.DeckSource, externalDeckKey: string, sourceUrl: string, name: string, format: string | null, commanderSummary: string | null, cardCount: number, createdAt: string, updatedAt: string } };
+export type UpdateCloudDeckMutation = { updateCloudDeck: { deckKey: string, provider: Schema.DeckSource, externalDeckKey: string, sourceUrl: string, name: string, format: string | null, commanderSummary: string | null, thumbnailImageRef: unknown, colorIdentity: Array<string> | null, cardCount: number, createdAt: string, updatedAt: string } };
 
 export type DeleteCloudDeckMutationVariables = Exact<{
   deckKey: string | number;

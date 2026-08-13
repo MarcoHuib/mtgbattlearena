@@ -90,6 +90,33 @@ export const setupSlice = createSlice({
       const slot = state.players[action.payload.playerId]
       if (slot) slot.name = action.payload.name
     },
+    setDeckLoading(state, action: PayloadAction<PlayerId>) {
+      const slot = state.players[action.payload]
+      if (!slot) return
+      slot.status = "loading"
+      slot.error = null
+    },
+    setDeckForPlayer(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; deck: DeckSnapshot }>,
+    ) {
+      const slot = state.players[action.payload.playerId]
+      if (!slot) return
+      slot.deck = action.payload.deck
+      slot.url = ""
+      slot.status = "ready"
+      slot.error = null
+      if (!slot.name.trim()) slot.name = action.payload.deck.name
+    },
+    setDeckSelectionError(
+      state,
+      action: PayloadAction<{ playerId: PlayerId; message: string }>,
+    ) {
+      const slot = state.players[action.payload.playerId]
+      if (!slot) return
+      slot.status = "error"
+      slot.error = action.payload.message
+    },
     addPlayer(state) {
       if (state.playerOrder.length >= 6) return
       const number = state.nextPlayerNumber
@@ -151,6 +178,9 @@ export const {
   addPlayer,
   clearSetup,
   removePlayer,
+  setDeckForPlayer,
+  setDeckLoading,
+  setDeckSelectionError,
   setDeckUrl,
   setPlayerName,
 } = setupSlice.actions

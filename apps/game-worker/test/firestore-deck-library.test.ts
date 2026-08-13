@@ -27,13 +27,25 @@ test("splitst kleine lijstmetadata van provider-neutrale content", () => {
         id: "commander",
         name: "Atraxa",
         faces: [{ name: "Atraxa" }],
-        imageRefs: [],
+        imageRefs: [
+          {
+            resolver: 1,
+            imageId: "00000000-0000-4000-8000-000000000001",
+            faceIndex: 0,
+            variant: "normal",
+          },
+        ],
+        colorIdentity: ["W", "U", "B", "G"],
       },
     ],
   })
   expect(record.metadata).toMatchObject({
     externalDeckKey: "42",
     commanderSummary: "Atraxa",
+    thumbnailImageRef: {
+      imageId: "00000000-0000-4000-8000-000000000001",
+    },
+    colorIdentity: ["W", "U", "B", "G"],
     cardCount: 1,
   })
   expect(record.metadata).not.toHaveProperty("cards")

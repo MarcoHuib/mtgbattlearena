@@ -1,8 +1,11 @@
 import type {
+  CardImageRef,
   CloudDeckContent,
   CloudDeckMetadata,
   ImportedDeck,
+  ManaColor,
 } from "@mtg/game-core/types"
+import { normalizeCardImageRef } from "@mtg/game-core/images"
 
 export type FirestoreCredentials = {
   client_email: string
@@ -77,6 +80,23 @@ const accessToken = async (credentials: FirestoreCredentials) => {
 const stringValue = (value: string) => ({ stringValue: value })
 const optionalString = (value?: string) =>
   value === undefined ? undefined : stringValue(value)
+const optionalJson = (value: unknown) =>
+  value === undefined ? undefined : stringValue(JSON.stringify(value))
+const parseThumbnail = (value: string): CardImageRef | undefined => {
+  const parsed: unknown = JSON.parse(value)
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
+  return normalizeCardImageRef(parsed)
+}
+const parseColorIdentity = (value: string): ManaColor[] => {
+  const parsed: unknown = JSON.parse(value)
+  const colors = new Set<ManaColor>(["W", "U", "B", "R", "G"])
+  return Array.isArray(parsed)
+    ? parsed.filter(
+        (color): color is ManaColor =>
+          typeof color === "string" && colors.has(color as ManaColor),
+      )
+    : []
+}
 
 const documentFields = (record: DeckLibraryRecord) => ({
   metadata: {
@@ -86,6 +106,8 @@ const documentFields = (record: DeckLibraryRecord) => ({
     name: stringValue(record.metadata.name),
     format: optionalString(record.metadata.format),
     commanderSummary: optionalString(record.metadata.commanderSummary),
+    thumbnailImageRef: optionalJson(record.metadata.thumbnailImageRef),
+    colorIdentity: optionalJson(record.metadata.colorIdentity),
     cardCount: { integerValue: String(record.metadata.cardCount) },
     createdAt: { timestampValue: record.metadata.createdAt },
     updatedAt: { timestampValue: record.metadata.updatedAt },
@@ -111,6 +133,24 @@ export const recordFromImportedDeck = (
           ?.name,
     )
     .filter((name): name is string => Boolean(name))
+  const commanderDefinitions = deck.cards
+    .filter(card => card.isCommander)
+    .flatMap(card => {
+      const definition = deck.definitions.find(
+        candidate => candidate.id === card.definitionId,
+      )
+      return definition ? [definition] : []
+    })
+  const thumbnailImageRef = commanderDefinitions
+    .flatMap(definition => definition.imageRefs)
+    .at(0)
+  const colorIdentity = [
+    ...new Set(
+      commanderDefinitions.flatMap(
+        definition => definition.colorIdentity ?? [],
+      ),
+    ),
+  ]
   return {
     metadata: {
       deckKey,
@@ -122,6 +162,8 @@ export const recordFromImportedDeck = (
       ...(commanderNames.length
         ? { commanderSummary: commanderNames.join(" & ") }
         : {}),
+      ...(thumbnailImageRef ? { thumbnailImageRef } : {}),
+      ...(colorIdentity.length ? { colorIdentity } : {}),
       cardCount: deck.cards.reduce((total, card) => total + card.quantity, 0),
       createdAt,
       updatedAt: deck.importedAt,
@@ -275,6 +317,20 @@ export class FirestoreDeckLibrary {
           : {}),
         ...(field.commanderSummary?.stringValue
           ? { commanderSummary: field.commanderSummary.stringValue }
+          : {}),
+        ...(field.thumbnailImageRef?.stringValue
+          ? {
+              thumbnailImageRef: parseThumbnail(
+                field.thumbnailImageRef.stringValue,
+              ),
+            }
+          : {}),
+        ...(field.colorIdentity?.stringValue
+          ? {
+              colorIdentity: parseColorIdentity(
+                field.colorIdentity.stringValue,
+              ),
+            }
           : {}),
         cardCount: Number(field.cardCount?.integerValue ?? 0),
         createdAt: field.createdAt?.timestampValue ?? "",

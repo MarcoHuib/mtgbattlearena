@@ -76,6 +76,7 @@ export const App = ({ services = defaultServices }: AppProps) => {
   } else if (route === "/offline") {
     content = (
       <SetupScreen
+        auth={services.auth}
         onBattleStarted={() => {
           navigate("/offline/battle")
         }}
@@ -91,6 +92,7 @@ export const App = ({ services = defaultServices }: AppProps) => {
         />
       ) : (
         <SetupScreen
+          auth={services.auth}
           onBattleStarted={() => {
             navigate("/offline/battle")
           }}

@@ -18,6 +18,7 @@ import {
   type User,
 } from "firebase/auth"
 import type { FirebaseAuthPort } from "./services"
+import { runtimeConfig, type RuntimeConfig } from "../../runtimeConfig"
 
 const firebaseEnvironmentKeys = [
   "VITE_FIREBASE_API_KEY",
@@ -191,6 +192,24 @@ export const readFirebaseConfig = (
     },
   }
 }
+
+export const readRuntimeFirebaseConfig = (
+  config: Pick<
+    RuntimeConfig,
+    | "firebaseApiKey"
+    | "firebaseAuthDomain"
+    | "firebaseProjectId"
+    | "firebaseAppId"
+    | "firebaseMeasurementId"
+  > = runtimeConfig,
+): FirebaseConfigResult =>
+  readFirebaseConfig({
+    VITE_FIREBASE_API_KEY: config.firebaseApiKey,
+    VITE_FIREBASE_AUTH_DOMAIN: config.firebaseAuthDomain,
+    VITE_FIREBASE_PROJECT_ID: config.firebaseProjectId,
+    VITE_FIREBASE_APP_ID: config.firebaseAppId,
+    VITE_FIREBASE_MEASUREMENT_ID: config.firebaseMeasurementId,
+  })
 
 export const firebaseAppName = "mtg-battle-mode-online"
 

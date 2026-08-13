@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
 import type { CloudDeckMetadata } from "@mtg/game-core/types"
+import { getCardImageUrl } from "@mtg/game-core/images"
 import { AppLink } from "../../app/router"
 import { AppShell } from "../../components/AppShell"
 import { createFirestoreCloudDeckRepository } from "../decks/cloudDeckRepository"
-import { readFirebaseConfig } from "./firebaseAuth"
+import { readRuntimeFirebaseConfig } from "./firebaseAuth"
 import type { LobbyRoom, OnlineGameService } from "./types"
 import { lobbyRoomSchema } from "./types"
 import { useLobbyQuery } from "../../app/api/remoteGraphqlApi"
@@ -16,10 +17,27 @@ type LobbyRoomScreenProps = {
   onLeave: () => void
 }
 
-const lobbyFirebaseConfig = readFirebaseConfig(import.meta.env)
+const lobbyFirebaseConfig = readRuntimeFirebaseConfig()
 const lobbyDeckRepository = lobbyFirebaseConfig.configured
   ? createFirestoreCloudDeckRepository(lobbyFirebaseConfig.options)
   : null
+const lobbyManaLabels = {
+  W: "Wit",
+  U: "Blauw",
+  B: "Zwart",
+  R: "Rood",
+  G: "Groen",
+} as const
+
+const deckThumbnail = (deck: CloudDeckMetadata) => {
+  try {
+    return deck.thumbnailImageRef
+      ? getCardImageUrl(deck.thumbnailImageRef)
+      : null
+  } catch {
+    return null
+  }
+}
 
 export const LobbyRoomScreen = ({
   gameId,
@@ -145,7 +163,9 @@ export const LobbyRoomScreen = ({
       })
       .catch(() => {
         if (!disposed) {
-          setMessage("Lokale decks konden niet worden geladen.")
+          setMessage(
+            "Je Deck Library kon niet worden geladen. Probeer het opnieuw.",
+          )
         }
       })
     return () => {
@@ -183,7 +203,7 @@ export const LobbyRoomScreen = ({
   const registerDeck = async () => {
     const deck = decks.find(candidate => candidate.deckKey === selectedDeckId)
     if (!deck) {
-      setMessage("Kies eerst een lokaal deck.")
+      setMessage("Kies eerst een deck uit je Deck Library.")
       return
     }
     setDeckBusy(true)
@@ -378,44 +398,118 @@ export const LobbyRoomScreen = ({
                     authoritative game.
                   </p>
                 </div>
-                <div className="lobby-deck-picker">
-                  <label>
-                    Opgeslagen deck
-                    <select
-                      value={selectedDeckId}
-                      disabled={deckBusy}
-                      onChange={event => {
-                        setSelectedDeckId(event.target.value)
-                      }}
-                    >
-                      <option value="">Kies een deck…</option>
-                      {decks.map(deck => (
-                        <option key={deck.deckKey} value={deck.deckKey}>
-                          {deck.name} · {deck.cardCount} kaarten
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {selectedDeck ? (
-                    <div className="lobby-deck-picker__actions">
-                      <button
-                        className="button button--primary"
-                        type="button"
-                        disabled={deckBusy}
-                        onClick={() => void registerDeck()}
-                      >
-                        {deckBusy
-                          ? "Even wachten…"
-                          : viewer.deckReady &&
-                              viewer.deckName === selectedDeck?.name
-                            ? "Deck opnieuw registreren"
-                            : "Deck gereed"}
-                      </button>
+                {decks.length ? (
+                  <div
+                    className="lobby-deck-picker"
+                    role="radiogroup"
+                    aria-label="Opgeslagen deck"
+                  >
+                    <div className="lobby-deck-options">
+                      {decks.map(deck => {
+                        const selected = deck.deckKey === selectedDeckId
+                        const image = deckThumbnail(deck)
+                        return (
+                          <button
+                            className={`lobby-deck-option ${selected ? "is-selected" : ""}`}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={deckBusy}
+                            key={deck.deckKey}
+                            onClick={() => {
+                              setSelectedDeckId(deck.deckKey)
+                            }}
+                          >
+                            <span className="lobby-deck-option__art">
+                              {image ? (
+                                <img src={image} alt="" loading="lazy" />
+                              ) : (
+                                <span aria-hidden="true">
+                                  {deck.name.slice(0, 1)}
+                                </span>
+                              )}
+                            </span>
+                            <span className="lobby-deck-option__content">
+                              <strong>{deck.name}</strong>
+                              <small>
+                                {deck.commanderSummary ??
+                                  deck.format ??
+                                  "Opgeslagen deck"}
+                              </small>
+                              <span className="lobby-deck-option__meta">
+                                <span>{deck.cardCount} kaarten</span>
+                                <span
+                                  className="lobby-deck-colors"
+                                  aria-label={
+                                    deck.colorIdentity?.length
+                                      ? `Kleuridentiteit: ${deck.colorIdentity.map(color => lobbyManaLabels[color]).join(", ")}`
+                                      : "Kleuridentiteit: kleurloos"
+                                  }
+                                >
+                                  {(deck.colorIdentity?.length
+                                    ? deck.colorIdentity
+                                    : ["C" as const]
+                                  ).map(color => (
+                                    <i
+                                      className={`deck-color deck-color--${color.toLowerCase()}`}
+                                      key={color}
+                                      aria-hidden="true"
+                                    >
+                                      {color === "C" ? "◇" : color}
+                                    </i>
+                                  ))}
+                                </span>
+                              </span>
+                            </span>
+                            <span
+                              className="lobby-deck-option__check"
+                              aria-hidden="true"
+                            >
+                              ✓
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
-                  ) : null}
-                </div>
+                    {selectedDeck ? (
+                      <div className="lobby-deck-picker__actions">
+                        <div>
+                          <strong>{selectedDeck.name}</strong>
+                          <small>
+                            {viewer.deckReady &&
+                            viewer.deckName === selectedDeck.name
+                              ? "Dit deck staat gereed voor de battle."
+                              : "Bevestig je keuze om je seat gereed te zetten."}
+                          </small>
+                        </div>
+                        <button
+                          className="button button--primary lobby-deck-confirm"
+                          type="button"
+                          disabled={deckBusy}
+                          onClick={() => void registerDeck()}
+                        >
+                          <span aria-hidden="true">
+                            {viewer.deckReady &&
+                            viewer.deckName === selectedDeck.name
+                              ? "✓"
+                              : "→"}
+                          </span>
+                          {deckBusy
+                            ? "Deck wordt klaargezet…"
+                            : viewer.deckReady &&
+                                viewer.deckName === selectedDeck.name
+                              ? "Gereed voor battle"
+                              : "Dit deck gebruiken"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {!decks.length ? (
-                  <div className="lobby-deck-empty">
+                  <div
+                    className="lobby-deck-empty"
+                    aria-label="Opgeslagen deck"
+                  >
                     <p>Er staat nog geen deck onder dit account.</p>
                     <p>
                       <AppLink to="/decks">
