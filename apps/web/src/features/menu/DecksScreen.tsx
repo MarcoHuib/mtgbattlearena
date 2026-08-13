@@ -19,7 +19,7 @@ import {
   createFirestoreCloudDeckRepository,
   type CloudDeckRepository,
 } from "../decks/cloudDeckRepository"
-import { readFirebaseConfig } from "../online/firebaseAuth"
+import { readRuntimeFirebaseConfig } from "../online/firebaseAuth"
 import type { AuthService } from "../online/types"
 
 type DecksScreenProps = {
@@ -29,7 +29,7 @@ type DecksScreenProps = {
 type WizardStep = "closed" | "provider" | "reference" | "importing" | "success"
 type ImportState = "idle" | "loading" | "error"
 
-const firebaseConfig = readFirebaseConfig(import.meta.env)
+const firebaseConfig = readRuntimeFirebaseConfig()
 const steps = ["Provider", "Deck", "Import", "Klaar"] as const
 const manaLabels = {
   W: "Wit",

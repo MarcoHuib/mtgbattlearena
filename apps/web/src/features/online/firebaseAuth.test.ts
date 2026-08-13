@@ -2,6 +2,7 @@ import {
   describeFirebaseAuthError,
   FederatedAccountLinker,
   readFirebaseConfig,
+  readRuntimeFirebaseConfig,
 } from "./firebaseAuth"
 
 describe("Firebase webconfig", () => {
@@ -39,6 +40,26 @@ describe("Firebase webconfig", () => {
         "VITE_FIREBASE_PROJECT_ID",
         "VITE_FIREBASE_APP_ID",
       ],
+    })
+  })
+
+  test("gebruikt productie-runtimeconfig voor Firebase en Firestore", () => {
+    expect(
+      readRuntimeFirebaseConfig({
+        firebaseApiKey: "runtime-key",
+        firebaseAuthDomain: "beta.example.test",
+        firebaseProjectId: "runtime-project",
+        firebaseAppId: "runtime-app",
+        firebaseMeasurementId: "",
+      }),
+    ).toMatchObject({
+      configured: true,
+      options: {
+        apiKey: "runtime-key",
+        authDomain: "beta.example.test",
+        projectId: "runtime-project",
+        appId: "runtime-app",
+      },
     })
   })
 
