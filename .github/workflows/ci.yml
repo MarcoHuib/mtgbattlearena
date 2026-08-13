@@ -108,6 +108,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Set up Java for Firestore emulator
+        if: needs.changes.outputs.frontend == 'true'
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Install dependencies
         if: needs.changes.outputs.frontend == 'true'
         run: npm ci

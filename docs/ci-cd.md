@@ -142,7 +142,8 @@ lokale keten voor Archidekt Create/Update. Voorheen startte het rootcommando
 alleen Vite; de nieuwe Deck Library gebruikt echter GraphQL-mutaties en kon met
 een lege `VITE_ONLINE_API_URL` de Game Worker niet bereiken.
 
-Vereisten zijn Node.js 22+, npm en Java voor de Firebase Emulator Suite. De
+Vereisten zijn Node.js 22+, npm en JDK 21 of nieuwer voor de Firebase Emulator
+Suite. De
 developer kopieert `apps/web/.env.example` naar de genegeerde
 `apps/web/.env.local` en vult de publieke Firebase Web App-config in voor Auth.
 `VITE_FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` stuurt uitsluitend development-
@@ -231,6 +232,8 @@ handmatige consolewijziging:
 
 - `firestore.rules` staat onder versiebeheer;
 - CI voert `npm run test:firestore-rules` tegen de emulator uit;
+- de frontend-CI-job installeert daarvoor expliciet Temurin JDK 21; de Rules-
+  tests gebruiken alleen de lokale emulator en vereisen geen Firebase-login;
 - de releaseworkflow deployt dezelfde Rules bij zowel Beta- als
   Production-promotie;
 - activeer App Check voor directe Firestore webreads pas nadat Beta bewezen werkt;

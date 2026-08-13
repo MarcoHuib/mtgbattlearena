@@ -118,7 +118,7 @@ Magic-regels.
 
 ## 🚀 Quick Start
 
-**Vereisten:** Node.js 22+, npm en een Java-runtime voor de lokale Firestore
+**Vereisten:** Node.js 22+, npm en JDK 21 of nieuwer voor de lokale Firestore
 Emulator.
 
 ```sh
