@@ -608,6 +608,38 @@ describe("Lobby Durable Object RPC", () => {
         participants: [{ deckReady: false, deckName: null }],
       },
     })
+    expect(
+      lobby.registerDeck("legacy-game", identity("legacy-owner"), {
+        deckSnapshotId: "cloud:deck-1:current",
+        deckName: "Nieuw deck",
+        cards: [
+          {
+            definitionId: "commander",
+            name: "Commander",
+            faces: [{ name: "Commander" }],
+            imageRefs: [
+              {
+                resolver: 1,
+                imageId: "00000000-0000-4000-8000-000000000001",
+                faceIndex: 0,
+                variant: "normal",
+              },
+            ],
+            quantity: 1,
+            isCommander: true,
+          },
+        ],
+        tokens: [],
+      }),
+    ).toEqual({ ok: true, value: null })
+    expect(
+      lobby.getLobbyRoom("legacy-game", identity("legacy-owner")),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        participants: [{ deckReady: true, deckName: "Nieuw deck" }],
+      },
+    })
     database.close()
   })
 

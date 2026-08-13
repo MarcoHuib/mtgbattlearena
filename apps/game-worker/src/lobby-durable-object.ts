@@ -367,7 +367,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
       // De lobby bewaart alleen de selectie-identiteit en presentatienaam.
       // De Game Worker leest de authoritative content owner-scoped uit
       // Firestore vlak voordat het Game Durable Object wordt geïnitialiseerd.
-      submission: { ...parsed.data, cards: [], tokens: [] },
+      submission: {
+        deckSnapshotId: parsed.data.deckSnapshotId,
+        deckName: parsed.data.deckName,
+      },
       registeredAt: new Date().toISOString(),
     })
     return { ok: true, value: null }

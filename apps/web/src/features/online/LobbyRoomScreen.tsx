@@ -39,6 +39,11 @@ const deckThumbnail = (deck: CloudDeckMetadata) => {
   }
 }
 
+const deckConfirmationDelays = [0, 250, 500, 1_000] as const
+
+const wait = (milliseconds: number) =>
+  new Promise(resolve => window.setTimeout(resolve, milliseconds))
+
 export const LobbyRoomScreen = ({
   gameId,
   deckOwnerId,
@@ -211,12 +216,18 @@ export const LobbyRoomScreen = ({
     try {
       await onlineGames.registerDeck(gameId, deck.deckKey)
       if (usesGraphQLQuery) {
-        const refreshed = await lobbyQuery.refetch().unwrap()
-        const confirmedRoom = lobbyRoomSchema.parse(refreshed.lobby)
-        const confirmedViewer = confirmedRoom.participants.find(
-          participant => participant.isViewer,
-        )
-        if (!confirmedViewer?.deckReady)
+        let confirmed = false
+        for (const delay of deckConfirmationDelays) {
+          if (delay) await wait(delay)
+          const refreshed = await lobbyQuery.refetch().unwrap()
+          const confirmedRoom = lobbyRoomSchema.parse(refreshed.lobby)
+          confirmed = Boolean(
+            confirmedRoom.participants.find(participant => participant.isViewer)
+              ?.deckReady,
+          )
+          if (confirmed) break
+        }
+        if (!confirmed)
           throw new Error(
             "De server heeft je deck nog niet als gereed bevestigd. Probeer het opnieuw.",
           )
