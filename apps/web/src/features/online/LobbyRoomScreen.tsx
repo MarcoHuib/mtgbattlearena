@@ -52,7 +52,7 @@ export const LobbyRoomScreen = ({
     { id: gameId },
     {
       skip: !usesGraphQLQuery,
-      pollingInterval: 10_000,
+      pollingInterval: 2_000,
       refetchOnFocus: true,
     },
   )
@@ -210,7 +210,19 @@ export const LobbyRoomScreen = ({
     setMessage("Deck registreren…")
     try {
       await onlineGames.registerDeck(gameId, deck.deckKey)
-      await loadRoom()
+      if (usesGraphQLQuery) {
+        const refreshed = await lobbyQuery.refetch().unwrap()
+        const confirmedRoom = lobbyRoomSchema.parse(refreshed.lobby)
+        const confirmedViewer = confirmedRoom.participants.find(
+          participant => participant.isViewer,
+        )
+        if (!confirmedViewer?.deckReady)
+          throw new Error(
+            "De server heeft je deck nog niet als gereed bevestigd. Probeer het opnieuw.",
+          )
+      } else {
+        await loadRoom()
+      }
       setMessage(`${deck.name} staat gereed voor deze battle.`)
     } catch (error) {
       setMessage(
@@ -236,7 +248,8 @@ export const LobbyRoomScreen = ({
           : "De battle kon niet worden gestart.",
       )
       setStarting(false)
-      await loadRoom()
+      if (usesGraphQLQuery) await lobbyQuery.refetch()
+      else await loadRoom()
     }
   }
 
