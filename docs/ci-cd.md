@@ -150,6 +150,9 @@ developer kopieert `apps/web/.env.example` naar de genegeerde
 reads naar de emulator. De Game Worker accepteert `FIRESTORE_EMULATOR_HOST`
 alleen wanneer `APP_ENV=development` en uitsluitend voor localhost; staging en
 production falen gesloten. Er is lokaal geen service-accountcredential nodig.
+De twee lokale Wrangler-processen gebruiken afzonderlijke inspectorpoorten
+(`9230` voor Game en `9231` voor Import), zodat beide workers gelijktijdig
+kunnen starten.
 
 `npm run dev:web` blijft beschikbaar voor snelle frontend-only ontwikkeling,
 maar ondersteunt geen echte cloudlibrarymutaties.

@@ -121,6 +121,14 @@ Magic-regels.
 **Vereisten:** Node.js 22+, npm en JDK 21 of nieuwer voor de lokale Firestore
 Emulator.
 
+Op macOS met Homebrew kun je de vereiste runtime installeren en registreren met:
+
+```sh
+brew install openjdk@21
+sudo ln -sfn "$(brew --prefix)/opt/openjdk@21/libexec/openjdk.jdk" /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+java -version
+```
+
 ```sh
 git clone https://github.com/MarcoHuib/mtgbattlearena.git
 cd mtgbattlearena
