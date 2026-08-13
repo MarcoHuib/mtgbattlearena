@@ -796,7 +796,7 @@ De volgende productmijlpaal voegt online functionaliteit toe zonder de bestaande
 7. Online games ondersteunen 2–6 spelers en standaard 4 voor Commander.
 8. Eerst mocks en duidelijke adapters; daarna echte Cloudflare- en Firebase-integratie zonder frontendcomponenten direct aan SDK’s te koppelen.
 
-De specifieke online besluiten staan in `docs/architecture/006-online-multiplayer.md`. Gebruik voor de eerstvolgende coding-agentopdracht `ONLINE_MULTIPLAYER_PROMPT.md`.
+De specifieke online besluiten en de actuele implementatiegrenzen staan in `docs/architecture/006-online-multiplayer.md` en de daaropvolgende ADR’s. Deze ADR’s en `AGENTS.md` zijn leidend voor verdere wijzigingen.
 
 ## Visuele richting
 
