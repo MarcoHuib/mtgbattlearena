@@ -80,8 +80,25 @@ const accessToken = async (credentials: FirestoreCredentials) => {
 const stringValue = (value: string) => ({ stringValue: value })
 const optionalString = (value?: string) =>
   value === undefined ? undefined : stringValue(value)
-const optionalJson = (value: unknown) =>
-  value === undefined ? undefined : stringValue(JSON.stringify(value))
+const imageRefValue = (value?: CardImageRef) =>
+  value === undefined
+    ? undefined
+    : {
+        mapValue: {
+          fields: {
+            ...(value.resolver !== undefined
+              ? { resolver: { integerValue: String(value.resolver) } }
+              : {}),
+            ...(value.imageId ? { imageId: stringValue(value.imageId) } : {}),
+            faceIndex: { integerValue: String(value.faceIndex) },
+            variant: stringValue(value.variant),
+          },
+        },
+      }
+const colorIdentityValue = (value?: ManaColor[]) =>
+  value === undefined
+    ? undefined
+    : { arrayValue: { values: value.map(stringValue) } }
 const parseThumbnail = (value: string): CardImageRef | undefined => {
   const parsed: unknown = JSON.parse(value)
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
@@ -97,6 +114,38 @@ const parseColorIdentity = (value: string): ManaColor[] => {
       )
     : []
 }
+type FirestoreValue = {
+  stringValue?: string
+  integerValue?: string
+  timestampValue?: string
+  mapValue?: { fields?: Record<string, FirestoreValue> }
+  arrayValue?: { values?: FirestoreValue[] }
+}
+const thumbnailFromFirestore = (
+  value: FirestoreValue | undefined,
+): CardImageRef | undefined => {
+  if (value?.stringValue) return parseThumbnail(value.stringValue)
+  const fields = value?.mapValue?.fields
+  if (!fields) return
+  return normalizeCardImageRef({
+    resolver: Number(fields.resolver?.integerValue),
+    imageId: fields.imageId?.stringValue,
+    faceIndex: Number(fields.faceIndex?.integerValue),
+    variant: fields.variant?.stringValue as "normal" | undefined,
+  })
+}
+const colorsFromFirestore = (
+  value: FirestoreValue | undefined,
+): ManaColor[] => {
+  if (value?.stringValue) return parseColorIdentity(value.stringValue)
+  const colors = new Set<ManaColor>(["W", "U", "B", "R", "G"])
+  return (value?.arrayValue?.values ?? [])
+    .map(item => item.stringValue)
+    .filter(
+      (color): color is ManaColor =>
+        typeof color === "string" && colors.has(color as ManaColor),
+    )
+}
 
 const documentFields = (record: DeckLibraryRecord) => ({
   metadata: {
@@ -106,8 +155,8 @@ const documentFields = (record: DeckLibraryRecord) => ({
     name: stringValue(record.metadata.name),
     format: optionalString(record.metadata.format),
     commanderSummary: optionalString(record.metadata.commanderSummary),
-    thumbnailImageRef: optionalJson(record.metadata.thumbnailImageRef),
-    colorIdentity: optionalJson(record.metadata.colorIdentity),
+    thumbnailImageRef: imageRefValue(record.metadata.thumbnailImageRef),
+    colorIdentity: colorIdentityValue(record.metadata.colorIdentity),
     cardCount: { integerValue: String(record.metadata.cardCount) },
     createdAt: { timestampValue: record.metadata.createdAt },
     updatedAt: { timestampValue: record.metadata.updatedAt },
@@ -292,10 +341,7 @@ export class FirestoreDeckLibrary {
     if (!metadataResponse.ok || !contentResponse.ok)
       throw new Error("FIRESTORE_READ_FAILED")
     const metadataDocument = (await metadataResponse.json()) as {
-      fields: Record<
-        string,
-        { stringValue?: string; integerValue?: string; timestampValue?: string }
-      >
+      fields: Record<string, FirestoreValue>
     }
     const contentDocument = (await contentResponse.json()) as {
       fields: { snapshot?: { stringValue?: string } }
@@ -318,19 +364,15 @@ export class FirestoreDeckLibrary {
         ...(field.commanderSummary?.stringValue
           ? { commanderSummary: field.commanderSummary.stringValue }
           : {}),
-        ...(field.thumbnailImageRef?.stringValue
+        ...(thumbnailFromFirestore(field.thumbnailImageRef)
           ? {
-              thumbnailImageRef: parseThumbnail(
-                field.thumbnailImageRef.stringValue,
+              thumbnailImageRef: thumbnailFromFirestore(
+                field.thumbnailImageRef,
               ),
             }
           : {}),
-        ...(field.colorIdentity?.stringValue
-          ? {
-              colorIdentity: parseColorIdentity(
-                field.colorIdentity.stringValue,
-              ),
-            }
+        ...(colorsFromFirestore(field.colorIdentity).length
+          ? { colorIdentity: colorsFromFirestore(field.colorIdentity) }
           : {}),
         cardCount: Number(field.cardCount?.integerValue ?? 0),
         createdAt: field.createdAt?.timestampValue ?? "",

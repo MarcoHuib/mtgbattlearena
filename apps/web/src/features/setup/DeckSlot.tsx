@@ -1,7 +1,6 @@
 import { useState } from "react"
 import type { SyntheticEvent } from "react"
 import { commanderDefinitions, deckCardCount } from "@mtg/game-core/decks"
-import { getCardImageUrl } from "@mtg/game-core/images"
 import type { PlayerId } from "@mtg/game-core/types"
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 import {
@@ -11,6 +10,7 @@ import {
   setPlayerName,
 } from "./setupSlice"
 import type { OfflineDeckChoice } from "./SetupScreen"
+import { cloudDeckThumbnailUrl } from "../decks/cloudDeckRepository"
 
 const manaLabels: Record<string, string> = {
   W: "Wit",
@@ -117,9 +117,7 @@ export const DeckSlot = ({
           >
             {deckChoices.map(deck => {
               const selected = selectedDeckKey === deck.deckKey
-              const imageUrl = deck.thumbnailImageRef
-                ? getCardImageUrl(deck.thumbnailImageRef)
-                : null
+              const imageUrl = cloudDeckThumbnailUrl(deck)
               return (
                 <button
                   key={deck.deckKey}

@@ -1,4 +1,5 @@
 import type { CloudDeckContent, CloudDeckMetadata } from "@mtg/game-core/types"
+import { getCardImageUrl, publicImageRef } from "@mtg/game-core/images"
 import {
   collection,
   doc,
@@ -16,6 +17,69 @@ import { getOrInitializeFirebaseApp } from "../online/firebaseAuth"
 export type CloudDeckRepository = {
   list(uid: string): Promise<CloudDeckMetadata[]>
   getContent(uid: string, deckKey: string): Promise<CloudDeckContent | null>
+}
+
+export const cloudDeckThumbnailUrl = (deck: CloudDeckMetadata) => {
+  try {
+    return deck.thumbnailImageRef
+      ? getCardImageUrl(deck.thumbnailImageRef)
+      : null
+  } catch {
+    return null
+  }
+}
+
+const parsedJson = (value: unknown): unknown => {
+  if (typeof value !== "string") return value
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+const manaColors = new Set(["W", "U", "B", "R", "G"] as const)
+
+export const normalizeCloudDeckMetadata = (
+  deckKey: string,
+  data: Record<string, unknown>,
+): CloudDeckMetadata => {
+  const thumbnailValue = parsedJson(data.thumbnailImageRef)
+  const thumbnailImageRef =
+    thumbnailValue && typeof thumbnailValue === "object"
+      ? publicImageRef(thumbnailValue)
+      : undefined
+  const colorValue = parsedJson(data.colorIdentity)
+  const colorIdentity = Array.isArray(colorValue)
+    ? colorValue.filter(
+        (color): color is "W" | "U" | "B" | "R" | "G" =>
+          typeof color === "string" &&
+          manaColors.has(color as "W" | "U" | "B" | "R" | "G"),
+      )
+    : []
+  const timestamp = (value: unknown) =>
+    value instanceof Timestamp
+      ? value.toDate().toISOString()
+      : typeof value === "string"
+        ? value
+        : ""
+  return {
+    deckKey,
+    provider: data.provider === "archidekt" ? "archidekt" : "archidekt",
+    externalDeckKey:
+      typeof data.externalDeckKey === "string" ? data.externalDeckKey : "",
+    sourceUrl: typeof data.sourceUrl === "string" ? data.sourceUrl : "",
+    name: typeof data.name === "string" ? data.name : "Onbekend deck",
+    ...(typeof data.format === "string" ? { format: data.format } : {}),
+    ...(typeof data.commanderSummary === "string"
+      ? { commanderSummary: data.commanderSummary }
+      : {}),
+    ...(thumbnailImageRef ? { thumbnailImageRef } : {}),
+    ...(colorIdentity.length ? { colorIdentity } : {}),
+    cardCount: typeof data.cardCount === "number" ? data.cardCount : 0,
+    createdAt: timestamp(data.createdAt),
+    updatedAt: timestamp(data.updatedAt),
+  }
 }
 
 export const createFirestoreCloudDeckRepository = (
@@ -37,27 +101,9 @@ export const createFirestoreCloudDeckRepository = (
           orderBy("updatedAt", "desc"),
         ),
       )
-      return snapshot.docs.map(document => {
-        const data = document.data() as Omit<
-          CloudDeckMetadata,
-          "deckKey" | "createdAt" | "updatedAt"
-        > & {
-          createdAt: Timestamp | string
-          updatedAt: Timestamp | string
-        }
-        return {
-          ...data,
-          deckKey: document.id,
-          createdAt:
-            data.createdAt instanceof Timestamp
-              ? data.createdAt.toDate().toISOString()
-              : data.createdAt,
-          updatedAt:
-            data.updatedAt instanceof Timestamp
-              ? data.updatedAt.toDate().toISOString()
-              : data.updatedAt,
-        }
-      })
+      return snapshot.docs.map(document =>
+        normalizeCloudDeckMetadata(document.id, document.data()),
+      )
     },
     async getContent(uid, deckKey) {
       const snapshot = await getDoc(
