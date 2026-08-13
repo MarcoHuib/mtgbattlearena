@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./fixtures"
 import { importedDeckFixture } from "../src/utils/importedDeckFixture"
 
 const mockImports = async (page: Page) => {

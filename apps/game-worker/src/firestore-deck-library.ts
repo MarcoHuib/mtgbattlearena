@@ -138,8 +138,26 @@ export const recordFromImportedDeck = (
 export class FirestoreDeckLibrary {
   constructor(
     private readonly projectId: string,
-    private readonly credentials: FirestoreCredentials,
+    private readonly credentials?: FirestoreCredentials,
+    private readonly emulatorOrigin?: string,
   ) {}
+
+  private async requestHeaders(contentType = false) {
+    const headers = new Headers()
+    if (contentType) headers.set("Content-Type", "application/json")
+    if (!this.emulatorOrigin) {
+      if (!this.credentials) throw new Error("FIRESTORE_AUTH_FAILED")
+      headers.set(
+        "Authorization",
+        `Bearer ${await accessToken(this.credentials)}`,
+      )
+    }
+    return headers
+  }
+
+  private apiOrigin() {
+    return this.emulatorOrigin ?? "https://firestore.googleapis.com"
+  }
 
   private document(uid: string, deckKey: string, content = false) {
     const segments = ["users", uid, "decks", deckKey]
@@ -148,15 +166,11 @@ export class FirestoreDeckLibrary {
   }
 
   private async commit(writes: unknown[]) {
-    const token = await accessToken(this.credentials)
     const response = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(this.projectId)}/databases/(default)/documents:commit`,
+      `${this.apiOrigin()}/v1/projects/${encodeURIComponent(this.projectId)}/databases/(default)/documents:commit`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: await this.requestHeaders(true),
         body: JSON.stringify({ writes }),
       },
     )
@@ -220,13 +234,13 @@ export class FirestoreDeckLibrary {
   }
 
   async get(uid: string, deckKey: string): Promise<DeckLibraryRecord | null> {
-    const token = await accessToken(this.credentials)
+    const headers = await this.requestHeaders()
     const [metadataResponse, contentResponse] = await Promise.all(
       [false, true].map(content =>
         fetch(
-          `https://firestore.googleapis.com/v1/${this.document(uid, deckKey, content)}`,
+          `${this.apiOrigin()}/v1/${this.document(uid, deckKey, content)}`,
           {
-            headers: { Authorization: `Bearer ${token}` },
+            headers,
           },
         ),
       ),

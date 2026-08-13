@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 import { importedDeckFixture } from "../src/utils/importedDeckFixture"
 
 const pixel = Buffer.from(
@@ -10,6 +10,7 @@ test("herstelt een gedownloade battle volledig offline", async ({
   page,
   context,
 }) => {
+  test.setTimeout(60_000)
   await page.route("**/graphql", async route => {
     const body = route.request().postDataJSON() as {
       variables?: { url?: string }
@@ -815,6 +816,9 @@ test("herstelt een gedownloade battle volledig offline", async ({
   expect(exileBox?.y).toBeGreaterThan(
     (graveyardBox?.y ?? 0) + (graveyardBox?.height ?? 0),
   )
+  const graveyardTopCard = graveyard.locator(".card")
+  const graveyardTopCardName =
+    (await graveyardTopCard.getAttribute("data-card-name")) ?? ""
 
   await playerOneBoard
     .getByRole("button", { name: "Graveyard-acties openen" })
@@ -834,15 +838,12 @@ test("herstelt een gedownloade battle volledig offline", async ({
   await expect(
     graveyardBrowser.getByText(selectedGraveyardCardNames[0] ?? "").first(),
   ).toBeVisible()
-  await page.keyboard.press("Escape")
-
-  const graveyardTopCard = graveyard.locator(".card")
-  const graveyardTopCardName =
-    (await graveyardTopCard.getAttribute("data-card-name")) ?? ""
-  await graveyardTopCard.click({ button: "right" })
-  await page
-    .getByLabel(`Verplaats ${graveyardTopCardName}`)
+  await graveyardBrowser.getByLabel("Zoek op kaartnaam").fill("")
+  await graveyardBrowser.getByLabel(`Selecteer ${graveyardTopCardName}`).check()
+  await graveyardBrowser
+    .getByLabel("Verplaats geselecteerde kaarten")
     .selectOption("exile")
+  await page.keyboard.press("Escape")
   await expect(graveyard).toHaveAttribute("aria-label", "Graveyard, 1 kaart")
   await expect(exile).toHaveAttribute("aria-label", "Exile, 1 kaart")
   await expect(exile.locator(".card")).toHaveCount(1)
@@ -860,11 +861,11 @@ test("herstelt een gedownloade battle volledig offline", async ({
   const exileBrowser = page.getByRole("dialog", { name: "Exile bekijken" })
   await expect(exileBrowser.getByLabel("Zoek op kaartnaam")).toBeFocused()
   await expect(exileBrowser.locator(".zone-browser__item")).toHaveCount(1)
-  await page.keyboard.press("Escape")
-  await exile.locator(".card").click({ button: "right" })
-  await page
-    .getByLabel(`Verplaats ${graveyardTopCardName}`)
+  await exileBrowser.getByLabel(`Selecteer ${graveyardTopCardName}`).check()
+  await exileBrowser
+    .getByLabel("Verplaats geselecteerde kaarten")
     .selectOption("graveyard")
+  await page.keyboard.press("Escape")
   await expect(graveyard).toHaveAttribute("aria-label", "Graveyard, 2 kaarten")
   await expect(graveyard.locator(".card")).toHaveCount(1)
   await expect(exile).toHaveAttribute("aria-label", "Exile, 0 kaarten")

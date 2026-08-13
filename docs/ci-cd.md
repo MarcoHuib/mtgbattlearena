@@ -46,7 +46,7 @@ feature/* → PR naar main → CI → merge naar main
 
 | Omgeving    | GitHub Environment | Frontend                         | API / WebSocket                                                            | Card CDN                                                                                            |
 | ----------- | ------------------ | -------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Development | geen               | Vite dev server                  | lokale Workers/proxy                                                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets                                              |
+| Development | geen               | Vite dev server                  | lokale Game Worker → Service Binding → Import Worker                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets                                              |
 | Beta        | `staging`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` | publieke CDN blijft `https://cdn.mtgbattlearena.nl`; staging Image Worker heeft geen publieke route |
 | Production  | `production`       | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           | `https://cdn.mtgbattlearena.nl`                                                                     |
 
@@ -133,6 +133,25 @@ blijft volgens het local-first principe niet beschikbaar.
 De oude `.env.production` en `.env.staging` zijn verwijderd om te voorkomen dat
 omgevingendpoints opnieuw in de bundle terechtkomen. `.env.local` blijft voor
 lokale ontwikkeling als fallback ondersteund.
+
+### Lokale Feature-1-stack
+
+`npm run dev` start cross-platform met `concurrently` de Vite-webapp, Game
+Worker, private Import Worker en Firestore Emulator. Dit herstelt de volledige
+lokale keten voor Archidekt Create/Update. Voorheen startte het rootcommando
+alleen Vite; de nieuwe Deck Library gebruikt echter GraphQL-mutaties en kon met
+een lege `VITE_ONLINE_API_URL` de Game Worker niet bereiken.
+
+Vereisten zijn Node.js 22+, npm en Java voor de Firebase Emulator Suite. De
+developer kopieert `apps/web/.env.example` naar de genegeerde
+`apps/web/.env.local` en vult de publieke Firebase Web App-config in voor Auth.
+`VITE_FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` stuurt uitsluitend development-
+reads naar de emulator. De Game Worker accepteert `FIRESTORE_EMULATOR_HOST`
+alleen wanneer `APP_ENV=development` en uitsluitend voor localhost; staging en
+production falen gesloten. Er is lokaal geen service-accountcredential nodig.
+
+`npm run dev:web` blijft beschikbaar voor snelle frontend-only ontwikkeling,
+maar ondersteunt geen echte cloudlibrarymutaties.
 
 ## Releaseversie
 

@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  connectFirestoreEmulator,
   orderBy,
   query,
   Timestamp,
@@ -19,8 +20,15 @@ export type CloudDeckRepository = {
 
 export const createFirestoreCloudDeckRepository = (
   options: FirebaseOptions,
+  emulatorHost?: string,
 ): CloudDeckRepository => {
   const firestore = getFirestore(getOrInitializeFirebaseApp(options))
+  if (emulatorHost) {
+    const match = /^(127\.0\.0\.1|localhost):(\d{2,5})$/.exec(emulatorHost)
+    if (!match?.[1] || !match[2])
+      throw new Error("INVALID_FIRESTORE_EMULATOR_HOST")
+    connectFirestoreEmulator(firestore, match[1], Number(match[2]))
+  }
   return {
     async list(uid) {
       const snapshot = await getDocs(

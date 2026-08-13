@@ -60,6 +60,12 @@ service-account-JSON wordt uitsluitend uit `FIRESTORE_SERVICE_ACCOUNT_JSON`
 gelezen. De adapter bouwt ieder pad zelf op uit de geverifieerde Firebase-UID en
 een deck key; de client kan geen ownerpad aanleveren.
 
+Voor lokale ontwikkeling mag dezelfde adapter zonder service-account naar de
+Firestore Emulator schrijven. Dit pad vereist tegelijk `APP_ENV=development`
+en een expliciete `FIRESTORE_EMULATOR_HOST` op `127.0.0.1` of `localhost`.
+Andere hosts en iedere emulatorconfiguratie in staging/production worden
+geweigerd. Daarmee is de lokale mogelijkheid geen productie-authbypass.
+
 Een servercredential:
 
 - staat uitsluitend in een Cloudflare Worker Secret of gelijkwaardige secret

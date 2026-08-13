@@ -20,15 +20,34 @@ export const importedDeckFixture = (
   definitions: [
     {
       id: "commander-1",
-      name: "Aesi",
-      faces: [{ name: "Aesi", typeLine: "Legendary Creature" }],
-      imageRefs: [],
+      name: "Aesi, Tyrant of Gyre Strait",
+      faces: [
+        {
+          name: "Aesi, Tyrant of Gyre Strait",
+          typeLine: "Legendary Creature",
+        },
+      ],
+      imageRefs: [
+        {
+          resolver: 1,
+          imageId: "00000000-0000-4000-8000-000000000099",
+          faceIndex: 0,
+          variant: "normal" as const,
+        },
+      ],
     },
     ...Array.from({ length: 12 }, (_, index) => ({
       id: `card-${index + 1}`,
       name: `Forest Memory ${index + 1}`,
       faces: [{ name: `Forest Memory ${index + 1}` }],
-      imageRefs: [],
+      imageRefs: [
+        {
+          resolver: 1 as const,
+          imageId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          faceIndex: 0,
+          variant: "normal" as const,
+        },
+      ],
     })),
     {
       id: "token-treasure",
@@ -41,7 +60,7 @@ export const importedDeckFixture = (
       ],
       imageRefs: [
         {
-          resolver: 1,
+          resolver: 1 as const,
           imageId: "f909bd95-58a1-4299-9570-87724145fc85",
           faceIndex: 0,
           variant: "normal",

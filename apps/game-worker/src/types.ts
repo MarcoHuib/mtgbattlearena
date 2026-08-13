@@ -225,4 +225,5 @@ export type Env = {
   REALTIME_DEBUG?: string
   RELEASE_VERSION?: string
   FIRESTORE_SERVICE_ACCOUNT_JSON?: string
+  FIRESTORE_EMULATOR_HOST?: string
 }

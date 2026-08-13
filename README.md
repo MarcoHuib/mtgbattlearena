@@ -118,7 +118,8 @@ Magic-regels.
 
 ## 🚀 Quick Start
 
-**Vereisten:** Node.js 22+ en npm.
+**Vereisten:** Node.js 22+, npm en een Java-runtime voor de lokale Firestore
+Emulator.
 
 ```sh
 git clone https://github.com/MarcoHuib/mtgbattlearena.git
@@ -129,6 +130,12 @@ npm run dev
 ```
 
 Open daarna de URL die Vite in de terminal toont.
+
+`npm run dev` start de volledige Feature-1-stack: Firestore Emulator, private
+Import Worker, Game Worker en Vite. Kopieer vooraf
+`apps/web/.env.example` naar `apps/web/.env.local` en vul uitsluitend de
+publieke Firebase-webconfig in. De lokale Firestoredata blijft in de emulator;
+een service-account is niet nodig.
 
 > [!TIP]
 > De offline flow werkt zonder productie-secrets, Firebase-login of actieve
@@ -554,7 +561,9 @@ Voor de volledige technische uitleg:
 
 | Command                                   | Doel                                  |
 | ----------------------------------------- | ------------------------------------- |
-| `npm run dev`                             | Start de webapp met Vite              |
+| `npm run dev`                             | Start de volledige Feature-1-stack    |
+| `npm run dev:web`                         | Start uitsluitend de Vite-webapp      |
+| `npm run dev:firestore`                   | Start alleen de Firestore Emulator    |
 | `npm run dev:worker:game`                 | Start de Game Worker lokaal           |
 | `npm run dev:worker:import`               | Start de Import Worker lokaal         |
 | `npm run dev:worker:image`                | Start de Image Worker lokaal          |
@@ -569,6 +578,7 @@ Voor de volledige technische uitleg:
 | `npm test`                                | Package-, web- en Workertests         |
 | `npm run test:integration`                | Online integratietests                |
 | `npm run test:e2e`                        | Kritieke Playwright-flow              |
+| `npm run test:firestore-rules`            | Test owner-scoped Firestore Rules     |
 | `npm run deploy:cloudflare:check`         | Cloudflare dry-run                    |
 | `npm run deploy:cloudflare:check:image`   | Image Worker production dry-run       |
 | `npm run deploy:cloudflare:check:staging` | Cloudflare staging dry-run            |

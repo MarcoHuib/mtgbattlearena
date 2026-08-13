@@ -61,7 +61,23 @@ let verifier: { projectId: string; instance: FirebaseTokenVerifier } | undefined
 let appCheckVerifier:
   { configuration: string; instance: FirebaseAppCheckVerifier } | undefined
 
-const firestoreLibrary = (env: Env) => {
+export const createFirestoreLibrary = (env: Env) => {
+  const emulatorHost = env.FIRESTORE_EMULATOR_HOST?.trim()
+  if (emulatorHost) {
+    if (env.APP_ENV !== "development")
+      throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
+        extensions: { code: "SERVICE_UNAVAILABLE" },
+      })
+    if (!/^(?:127\.0\.0\.1|localhost):\d{2,5}$/.test(emulatorHost))
+      throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
+        extensions: { code: "SERVICE_UNAVAILABLE" },
+      })
+    return new FirestoreDeckLibrary(
+      env.FIREBASE_PROJECT_ID,
+      undefined,
+      `http://${emulatorHost}`,
+    )
+  }
   if (!env.FIRESTORE_SERVICE_ACCOUNT_JSON)
     throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
       extensions: { code: "SERVICE_UNAVAILABLE" },
@@ -523,7 +539,7 @@ const graphqlRequest = async (request: Request, env: Env) => {
         ...(await lobby.resolveDeckRevision(result.deck)),
       }),
     )
-  const library = () => firestoreLibrary(env)
+  const library = () => createFirestoreLibrary(env)
   const yoga = createGraphQLYoga({
     request: resolvedRequest,
     env,
@@ -692,7 +708,7 @@ const routeRequest = async (request: Request, env: Env) => {
             env,
             gameId,
             identity,
-            firestoreLibrary(env),
+            createFirestoreLibrary(env),
           ),
           201,
         )

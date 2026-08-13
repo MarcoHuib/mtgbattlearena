@@ -2,7 +2,8 @@ import {
   cloudDeckKey,
   recordFromImportedDeck,
 } from "../src/firestore-deck-library"
-import { refreshRegisteredDecks } from "../src/index"
+import { createFirestoreLibrary, refreshRegisteredDecks } from "../src/index"
+import type { Env } from "../src/types"
 
 test("deckKey is deterministisch, Firestore-veilig en inhoudsonafhankelijk", () => {
   expect(cloudDeckKey("archidekt", "42")).toBe(cloudDeckKey("archidekt", "42"))
@@ -97,4 +98,28 @@ test("ververst geregistreerde decks owner-scoped voor game-initialisatie", async
   ])
   expect(seed.players[0]?.cards[0]?.definitionId).toBe("fresh-owner-a")
   expect(seed.players[1]?.cards[0]?.definitionId).toBe("fresh-owner-b")
+})
+
+test("Firestore Emulator kan uitsluitend expliciet in development worden gebruikt", () => {
+  expect(() =>
+    createFirestoreLibrary({
+      APP_ENV: "production",
+      FIREBASE_PROJECT_ID: "mtgbattlearena",
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+    } as Env),
+  ).toThrow("Deckopslag is niet geconfigureerd.")
+  expect(() =>
+    createFirestoreLibrary({
+      APP_ENV: "development",
+      FIREBASE_PROJECT_ID: "mtgbattlearena",
+      FIRESTORE_EMULATOR_HOST: "firestore.example.com:8080",
+    } as Env),
+  ).toThrow("Deckopslag is niet geconfigureerd.")
+  expect(() =>
+    createFirestoreLibrary({
+      APP_ENV: "development",
+      FIREBASE_PROJECT_ID: "mtgbattlearena",
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+    } as Env),
+  ).not.toThrow()
 })
