@@ -6,10 +6,8 @@ import type {
   LobbyVisibility,
   SqlStorage,
 } from "./types"
-import {
-  onlineDeckSubmissionSchema,
-  type OnlineDeckSubmission,
-} from "@mtg/game-protocol"
+import type { OnlineDeckSubmission } from "@mtg/game-protocol"
+import { z } from "zod"
 
 export type LobbyRecord = Omit<LobbySummary, "viewerRole"> & {
   hostUid: string
@@ -29,9 +27,14 @@ export type ParticipantRecord = {
 export type LobbyDeckRecord = {
   gameId: string
   uid: string
-  submission: OnlineDeckSubmission
+  submission: Pick<OnlineDeckSubmission, "deckSnapshotId" | "deckName">
   registeredAt: string
 }
+
+const lobbyDeckSelectionSchema = z.object({
+  deckSnapshotId: z.string().min(1).max(120),
+  deckName: z.string().min(1).max(120),
+})
 
 type LobbyRow = {
   id: string
@@ -662,7 +665,7 @@ export class SqliteLobbyStore implements LobbyStore {
 
   private toDeckRecord(row: LobbyDeckRow): LobbyDeckRecord | null {
     try {
-      const submission = onlineDeckSubmissionSchema.safeParse(
+      const submission = lobbyDeckSelectionSchema.safeParse(
         JSON.parse(row.deckJson),
       )
       return submission.success
