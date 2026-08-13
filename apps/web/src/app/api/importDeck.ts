@@ -2,7 +2,6 @@ import type { ImportedDeck } from "@mtg/game-core/types"
 import type { AppDispatch } from "../store"
 import type { GraphQLRequestError } from "./graphqlBaseQuery"
 import { remoteGraphqlApi } from "./remoteGraphqlApi"
-import { currentArchidektSourceHash } from "../../archidekt/freshness"
 import { normalizeCardImages } from "@mtg/game-core/images"
 
 export type ImportedDeckWithId = ImportedDeck & {
@@ -13,12 +12,10 @@ export type ImportedDeckWithId = ImportedDeck & {
 export const importDeckFromUrl = async (
   dispatch: AppDispatch,
   url: string,
-  sourceHash?: string,
 ): Promise<ImportedDeckWithId> => {
-  const freshnessHash = sourceHash ?? (await currentArchidektSourceHash(url))
   const result = await dispatch(
     remoteGraphqlApi.endpoints.DeckFromUrl.initiate(
-      { url, sourceHash: freshnessHash },
+      { url },
       { subscribe: false, forceRefetch: true },
     ),
   ).unwrap()

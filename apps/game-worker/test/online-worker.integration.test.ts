@@ -225,8 +225,18 @@ const seed: OnlineGameSeed = {
         name: `Geheim van ${playerId}`,
         typeLine: "Creature — Hidden",
         imageRefs: [
-          { resolver: 1, imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546", faceIndex: 0, variant: "normal" },
-          { resolver: 1, imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546", faceIndex: 1, variant: "normal" },
+          {
+            resolver: 1,
+            imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
+            faceIndex: 0,
+            variant: "normal",
+          },
+          {
+            resolver: 1,
+            imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
+            faceIndex: 1,
+            variant: "normal",
+          },
         ],
         faces: [
           {

@@ -10,10 +10,23 @@ const card = (instanceId: string, definitionId: string, name: string) => ({
   counters: {},
   isCommander: false,
   faces: [
-    { name, imageRef: { resolver: 1, imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546", faceIndex: 0, variant: "normal" as const } },
+    {
+      name,
+      imageRef: {
+        resolver: 1,
+        imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
+        faceIndex: 0,
+        variant: "normal" as const,
+      },
+    },
     {
       name: `${name} achterkant`,
-      imageRef: { resolver: 1, imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546", faceIndex: 1, variant: "normal" as const },
+      imageRef: {
+        resolver: 1,
+        imageId: "6a9c39e4-a8cf-42dd-8d0e-45634b335546",
+        faceIndex: 1,
+        variant: "normal" as const,
+      },
     },
   ],
 })

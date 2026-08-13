@@ -1,6 +1,5 @@
 import { z } from "zod"
 import type { GameCommand, ServerEvent } from "@mtg/game-protocol"
-import type { DeckSnapshot } from "@mtg/game-core/types"
 
 export type ConnectionRole = "player" | "spectator"
 export type LobbyVisibility = "public" | "private" | "invite-only"
@@ -125,7 +124,7 @@ export type OnlineGameService = {
   getLobbyRoom(gameId: string, signal?: AbortSignal): Promise<LobbyRoom>
   deleteLobby(gameId: string): Promise<void>
   abortGame(gameId: string): Promise<void>
-  registerDeck(gameId: string, deck: DeckSnapshot): Promise<void>
+  registerDeck(gameId: string, deckKey: string): Promise<void>
   startGame(gameId: string): Promise<void>
   createSocketTicket(gameId: string): Promise<{
     ticket: string

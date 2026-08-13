@@ -60,7 +60,7 @@ jobs:
                   import_worker=true
                   image_worker=true
                   ;;
-                apps/web/*|firebase.json|.firebaserc)
+                apps/web/*|firebase.json|firestore.rules|tests/firestore-rules.test.ts|.firebaserc)
                   frontend=true
                   ;;
                 apps/game-worker/*)
@@ -108,6 +108,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Set up Java for Firestore emulator
+        if: needs.changes.outputs.frontend == 'true'
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Install dependencies
         if: needs.changes.outputs.frontend == 'true'
         run: npm ci
@@ -130,6 +136,9 @@ jobs:
       - name: Test frontend
         if: needs.changes.outputs.frontend == 'true'
         run: npm run test:web
+      - name: Test Firestore Security Rules in emulator
+        if: needs.changes.outputs.frontend == 'true'
+        run: npm run test:firestore-rules
       - name: Build production PWA
         if: needs.changes.outputs.frontend == 'true'
         run: npm run build --workspace @mtg/web

@@ -39,7 +39,9 @@ export const App = ({ services = defaultServices }: AppProps) => {
   const hydrated = useRef(false)
 
   useEffect(() => {
-    const robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]')
+    const robots = document.querySelector<HTMLMetaElement>(
+      'meta[name="robots"]',
+    )
     const isHomepage = window.location.pathname === "/"
     if (robots)
       robots.content = isHomepage ? "index, follow" : "noindex, follow"

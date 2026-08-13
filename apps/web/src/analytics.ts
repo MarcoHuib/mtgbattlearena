@@ -9,8 +9,7 @@ export const analyticsConsentStorageKey = "mtg-analytics-consent-v1"
 export const analyticsConsentChangedEvent = "mtg-analytics-consent-changed"
 
 let analyticsPromise:
-  | Promise<Awaited<ReturnType<typeof loadAnalytics>>>
-  | undefined
+  Promise<Awaited<ReturnType<typeof loadAnalytics>>> | undefined
 
 export const readAnalyticsConsent = (): AnalyticsConsent => {
   const stored = window.localStorage.getItem(analyticsConsentStorageKey)

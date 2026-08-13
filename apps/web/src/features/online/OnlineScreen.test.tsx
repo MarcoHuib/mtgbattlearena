@@ -1,8 +1,5 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react"
-import type { DeckSnapshot } from "@mtg/game-core/types"
+import { screen, within } from "@testing-library/react"
 import { App } from "../../App"
-import * as importDeckApi from "../../app/api/importDeck"
-import { repositories } from "../../persistence/database"
 import { renderWithProviders } from "../../utils/test-utils"
 import {
   MockAuthService,
@@ -128,8 +125,8 @@ class ReadyLobbyOnlineGameService extends MockOnlineGameService {
     })
   }
 
-  override registerDeck(_gameId: string, deck: DeckSnapshot) {
-    this.hostDeckName = deck.name
+  override registerDeck(_gameId: string, deckKey: string) {
+    this.hostDeckName = deckKey
     return Promise.resolve()
   }
 
@@ -366,58 +363,9 @@ test("toont serverstatus alleen in de hoofdbalk en blokkeert online acties bij u
   expect(screen.queryByText("Cloudflare verbonden")).not.toBeInTheDocument()
 })
 
-test("laat de host starten zodra alle spelers een eigen deck gereed hebben", async () => {
-  const localDeck: DeckSnapshot = {
-    id: "local-ready-deck",
-    schemaVersion: 1,
-    source: "archidekt",
-    sourceId: "123",
-    sourceUrl: "https://archidekt.com/decks/123",
-    sourceHash: "hash-123",
-    name: "Lokaal duel-deck",
-    importedAt: "2026-07-29T18:00:00.000Z",
-    cards: [
-      {
-        definitionId: "commander",
-        quantity: 1,
-        isCommander: true,
-      },
-      {
-        definitionId: "spell",
-        quantity: 99,
-        isCommander: false,
-      },
-    ],
-    definitions: [
-      {
-        id: "commander",
-        name: "Test Commander",
-        faces: [{ name: "Test Commander" }],
-        imageRefs: [],
-      },
-      {
-        id: "spell",
-        name: "Test Spell",
-        faces: [{ name: "Test Spell" }],
-        imageRefs: [],
-      },
-    ],
-  }
-  await repositories.decks.save(localDeck, "signed-out")
-  await repositories.decks.save(
-    {
-      ...localDeck,
-      id: "local-backup-deck",
-      sourceId: "456",
-      sourceUrl: "https://archidekt.com/decks/456",
-      sourceHash: "hash-456",
-      name: "Tweede lokaal deck",
-      importedAt: "2026-07-29T17:00:00.000Z",
-    },
-    "signed-out",
-  )
+test("lobby zonder clouddecks verwijst naar de Deck Library en bevat geen import of delete", async () => {
   window.history.replaceState({}, "", "/online/lobby/ready-lobby")
-  const { user } = renderWithProviders(
+  renderWithProviders(
     <App
       services={{
         auth: new MockAuthService(),
@@ -425,201 +373,14 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
       }}
     />,
   )
-
-  expect(await screen.findByText("2/2 seats bezet")).toBeInTheDocument()
-  const start = screen.getByRole("button", { name: "Battle starten" })
-  expect(start).toBeDisabled()
-
-  await screen.findByRole("option", { name: /Lokaal duel-deck/ })
-  const deckSelect = screen.getByLabelText("Lokaal deck")
+  expect(await screen.findByLabelText("Opgeslagen deck")).toBeInTheDocument()
+  expect(
+    screen.getByRole("link", { name: /Voeg eerst een deck toe/ }),
+  ).toHaveAttribute("href", "/decks")
   expect(
     screen.queryByLabelText("Openbare Archidekt-URL"),
   ).not.toBeInTheDocument()
-
-  await user.selectOptions(deckSelect, "")
-  expect(screen.getByLabelText("Openbare Archidekt-URL")).toBeInTheDocument()
-  await user.selectOptions(deckSelect, localDeck.id)
   expect(
-    screen.queryByLabelText("Openbare Archidekt-URL"),
+    screen.queryByRole("button", { name: /Uit lijst verwijderen/ }),
   ).not.toBeInTheDocument()
-
-  await user.click(
-    screen.getByRole("button", { name: "Uit lijst verwijderen" }),
-  )
-  await user.click(
-    screen.getByRole("button", { name: "Verwijderen bevestigen" }),
-  )
-  expect(
-    screen.queryByRole("option", { name: /Lokaal duel-deck/ }),
-  ).not.toBeInTheDocument()
-
-  await user.click(screen.getByRole("button", { name: "Deck gereed" }))
-  expect(await screen.findByText("Iedereen is klaar")).toBeInTheDocument()
-  expect(start).toBeEnabled()
-
-  await user.click(start)
-  expect(
-    await screen.findByRole("heading", { name: "Wie mag beginnen?" }),
-  ).toBeInTheDocument()
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const startGame = screen.queryByRole("button", {
-      name: "Start wedstrijd",
-    })
-    if (startGame) {
-      await user.click(startGame)
-      break
-    }
-    await user.click(screen.getByRole("button", { name: "Gooi dobbelsteen" }))
-    await waitFor(
-      () => {
-        expect(
-          screen.queryByRole("button", { name: "Start wedstrijd" }) ??
-            screen.queryByRole("button", { name: "Gooi dobbelsteen" }),
-        ).toBeTruthy()
-      },
-      { timeout: 2_000 },
-    )
-  }
-  expect(
-    await screen.findByRole("heading", { name: "Openingshand van Jij" }),
-  ).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "Volgende fase" })).toBeDisabled()
-  expect(
-    screen.queryByRole("button", { name: "Trek kaart" }),
-  ).not.toBeInTheDocument()
-  expect(screen.getByLabelText("Speelveld van Jij")).toBeInTheDocument()
-  expect(
-    screen.getByLabelText("Speelveld van Tegenstander 1"),
-  ).toBeInTheDocument()
-
-  await user.click(screen.getByRole("button", { name: "Deze hand houden" }))
-  expect(screen.getByRole("button", { name: "Volgende fase" })).toBeEnabled()
-  await user.click(
-    screen.getByRole("button", { name: "Library-acties openen" }),
-  )
-  expect(
-    screen.getByRole("dialog", { name: "Libraryacties" }),
-  ).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "Trek een kaart" })).toBeEnabled()
-  expect(screen.getByRole("button", { name: "Trek X" })).toBeEnabled()
-  expect(screen.getByRole("button", { name: "Mill X" })).toBeEnabled()
-  expect(screen.getByRole("button", { name: "Schud library" })).toBeEnabled()
-  await user.click(
-    screen.getByRole("button", { name: "Library-acties openen" }),
-  )
-  expect(screen.getAllByText(/Serverstate v/).length).toBeGreaterThan(0)
-  expect(
-    document.querySelector('[data-battle-draggable="true"]'),
-  ).toBeInTheDocument()
-  expect(
-    document.querySelector('[data-battle-drop-zone="battlefield"]'),
-  ).toBeInTheDocument()
-  expect(
-    document.querySelector(".online-game-controls"),
-  ).not.toBeInTheDocument()
-  expect(
-    document.querySelector('select[aria-label^="Verplaats "]'),
-  ).not.toBeInTheDocument()
-  await user.keyboard("{Escape}")
-  const draggableCard = document.querySelector<HTMLElement>(
-    '[data-battle-draggable="true"]',
-  )
-  expect(draggableCard).toBeInTheDocument()
-  fireEvent.contextMenu(draggableCard!, { clientX: 400, clientY: 300 })
-  expect(
-    screen.getByRole("dialog", { name: /Kaartacties voor/ }),
-  ).toBeInTheDocument()
-  await user.keyboard("{Escape}")
-
-  const ownBoard = screen.getByLabelText("Speelveld van Jij")
-  const battlefield = within(ownBoard).getByLabelText("Battlefield, 0 kaarten")
-  fireEvent.contextMenu(
-    battlefield.querySelector(".zone__cards") ?? battlefield,
-    {
-      clientX: 480,
-      clientY: 360,
-    },
-  )
-  expect(
-    screen.getByRole("dialog", { name: "Battlefieldacties" }),
-  ).toBeInTheDocument()
-  expect(
-    screen.getByRole("button", { name: /Token toevoegen/ }),
-  ).toHaveAttribute("aria-expanded", "true")
-  await user.click(screen.getByRole("button", { name: /Treasure/ }))
-  expect(
-    await within(ownBoard).findByRole("button", {
-      name: "Treasure, Battlefield",
-    }),
-  ).toBeInTheDocument()
-
-  await user.click(screen.getByRole("button", { name: "Spel afbreken" }))
-  expect(
-    screen.getByRole("heading", { name: "Spel voor iedereen afbreken?" }),
-  ).toBeInTheDocument()
-  await user.click(screen.getByRole("button", { name: "Ja, spel afbreken" }))
-  expect(
-    await screen.findByRole("heading", { name: "Online spelen" }),
-  ).toBeInTheDocument()
-})
-
-test("toont na herimport slechts de geselecteerde revision in de lobby-dropdown", async () => {
-  const sourceId = "24765444"
-  const deckSourceId = "source-primal-stampede"
-  await repositories.decks.save(
-    {
-      id: "revision-primal-a",
-      revisionId: "revision-primal-a",
-      deckSourceId,
-      schemaVersion: 1,
-      source: "archidekt",
-      sourceId,
-      sourceUrl: `https://archidekt.com/decks/${sourceId}/primal_stampede`,
-      sourceHash: "hash-a",
-      name: "Primal Stampede",
-      importedAt: "2026-08-10T10:00:00.000Z",
-      cards: [{ definitionId: "card-a", quantity: 100, isCommander: false }],
-      definitions: [],
-    },
-    "signed-out",
-  )
-  const importSpy = vi
-    .spyOn(importDeckApi, "importDeckFromUrl")
-    .mockResolvedValue({
-      id: deckSourceId,
-      revisionId: "revision-primal-b",
-      source: "archidekt",
-      sourceId,
-      sourceUrl: `https://archidekt.com/decks/${sourceId}/primal_stampede`,
-      sourceHash: "hash-b",
-      name: "Primal Stampede",
-      importedAt: "2026-08-11T10:00:00.000Z",
-      cards: [{ definitionId: "card-b", quantity: 100, isCommander: false }],
-      definitions: [],
-    })
-  window.history.replaceState({}, "", "/online/lobby/ready-lobby")
-  const { user } = renderWithProviders(
-    <App
-      services={{
-        auth: new MockAuthService(),
-        onlineGames: new ReadyLobbyOnlineGameService(),
-      }}
-    />,
-  )
-  const select = await screen.findByLabelText("Lokaal deck")
-  await user.selectOptions(select, "")
-  await user.type(
-    screen.getByLabelText("Openbare Archidekt-URL"),
-    `https://archidekt.com/decks/${sourceId}/primal_stampede`,
-  )
-  await user.click(screen.getByRole("button", { name: "Importeren" }))
-  await waitFor(() => {
-    expect(
-      screen.getAllByRole("option", {
-        name: "Primal Stampede · 100 kaarten",
-      }),
-    ).toHaveLength(1)
-  })
-  expect(select).toHaveValue("revision-primal-b")
-  importSpy.mockRestore()
 })

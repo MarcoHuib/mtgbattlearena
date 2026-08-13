@@ -18,6 +18,10 @@ const contextWith = (
     identity,
     lobby,
     importDeck: vi.fn() as GraphQLContext["importDeck"],
+    createCloudDeck: vi.fn() as GraphQLContext["createCloudDeck"],
+    updateCloudDeck: vi.fn() as GraphQLContext["updateCloudDeck"],
+    deleteCloudDeck: vi.fn() as GraphQLContext["deleteCloudDeck"],
+    registerCloudDeck: vi.fn() as GraphQLContext["registerCloudDeck"],
     personalSnapshot: vi.fn(() =>
       Promise.resolve(snapshot),
     ) as GraphQLContext["personalSnapshot"],
@@ -146,7 +150,6 @@ test("deckFromUrl retourneert uitsluitend het provider-neutrale importcontract",
       source: "archidekt",
       sourceId: "42",
       sourceUrl: "https://archidekt.com/decks/42",
-      sourceHash: "abc",
       name: "Deck",
       importedAt: "2026-01-01T00:00:00.000Z",
       cards: [{ definitionId: "card", quantity: 1, isCommander: false }],
@@ -160,7 +163,7 @@ test("deckFromUrl retourneert uitsluitend het provider-neutrale importcontract",
   const importDeck = context.importDeck
   const result = await execute(
     context,
-    `query { deckFromUrl(url: "https://archidekt.com/decks/42") { cacheStatus deckId revisionId deck { source sourceId sourceHash name cards { definitionId quantity isCommander } } } }`,
+    `query { deckFromUrl(url: "https://archidekt.com/decks/42") { cacheStatus deckId revisionId deck { source sourceId name cards { definitionId quantity isCommander } } } }`,
   )
   expect(result.errors).toBeUndefined()
   expect(result.data?.deckFromUrl).toMatchObject({
@@ -169,9 +172,6 @@ test("deckFromUrl retourneert uitsluitend het provider-neutrale importcontract",
     revisionId: "00000000-0000-4000-8000-000000000043",
     deck: { sourceId: "42", name: "Deck" },
   })
-  expect(importDeck).toHaveBeenCalledWith(
-    "https://archidekt.com/decks/42",
-    undefined,
-  )
+  expect(importDeck).toHaveBeenCalledWith("https://archidekt.com/decks/42")
   expect(JSON.stringify(result.data)).not.toContain("categories")
 })

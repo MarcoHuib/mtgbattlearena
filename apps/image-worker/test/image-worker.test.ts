@@ -1,10 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it, vi } from "vitest"
-import {
-  createImageHandler,
-  fetcher,
-  type ImageResolver,
-} from "../src/index"
+import { createImageHandler, fetcher, type ImageResolver } from "../src/index"
 
 const id = "6a9c39e4-a8cf-42dd-8d0e-45634b335546"
 const request = (path = `/v1/1/${id}/0/normal`, method = "GET") =>
@@ -33,9 +29,7 @@ describe("image CDN boundary", () => {
     const response = await createImageHandler({ fetcher: fetch })(request())
     expect(response.status).toBe(200)
     expect(response.headers.get("Content-Type")).toBe("image/jpeg")
-    expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=86400",
-    )
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=86400")
     expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe(
       "public, max-age=2592000",
     )
@@ -62,7 +56,9 @@ describe("image CDN boundary", () => {
       )
       .mockResolvedValueOnce(jpeg())
     const log = { warn: vi.fn(), error: vi.fn() }
-    const response = await createImageHandler({ fetcher: fetch, log })(request())
+    const response = await createImageHandler({ fetcher: fetch, log })(
+      request(),
+    )
     expect(response.status).toBe(200)
     expect(response.headers.get("Content-Type")).toBe("image/jpeg")
     expect(fetch).toHaveBeenCalledTimes(2)
@@ -86,7 +82,9 @@ describe("image CDN boundary", () => {
     ["query input", `/v1/1/${id}/0/normal?url=https://evil.test`],
     ["old misleading extension", `/v1/1/${id}/0/normal.webp`],
   ])("rejects %s without long-lived caching", async (_name, path) => {
-    const response = await createImageHandler({ fetcher: vi.fn() })(request(path))
+    const response = await createImageHandler({ fetcher: vi.fn() })(
+      request(path),
+    )
     expect(response.status).toBe(404)
     expect(response.headers.get("Cache-Control")).toBe("no-store")
     expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe(
@@ -152,8 +150,7 @@ describe("image CDN boundary", () => {
 
   it("rejects resolver output outside Scryfall", async () => {
     const evil: ImageResolver = {
-      resolve: () =>
-        Promise.resolve({ url: new URL("https://evil.test/x") }),
+      resolve: () => Promise.resolve({ url: new URL("https://evil.test/x") }),
     }
     expect(
       (

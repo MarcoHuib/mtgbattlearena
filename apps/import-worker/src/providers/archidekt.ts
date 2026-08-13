@@ -360,7 +360,6 @@ export const mapArchidektDeck = (
   }
   return {
     ...source,
-    sourceHash: "",
     name: parsed.data.name,
     ...(parsed.data.format ? { format: parsed.data.format } : {}),
     importedAt,

@@ -62,7 +62,7 @@ const visibleDefinition = (card: VisibleOnlineCard): CardDefinition => {
     name: card.name,
     typeLine: card.typeLine,
     faces,
-    imageRefs: faces.flatMap(face => face.imageRef ? [face.imageRef] : []),
+    imageRefs: faces.flatMap(face => (face.imageRef ? [face.imageRef] : [])),
   }
 }
 

@@ -106,10 +106,7 @@ const currentGameSchema = z
       round: z.number().int().positive(),
       participantIds: z.array(currentPlayerIdSchema).min(2).max(6),
       eligiblePlayerIds: z.array(currentPlayerIdSchema),
-      rolls: z.record(
-        currentPlayerIdSchema,
-        z.number().int().min(1).max(20),
-      ),
+      rolls: z.record(currentPlayerIdSchema, z.number().int().min(1).max(20)),
       eliminatedPlayerIds: z.array(currentPlayerIdSchema),
       tiedPlayerIds: z.array(currentPlayerIdSchema),
       winnerPlayerId: currentPlayerIdSchema.nullable(),
@@ -334,18 +331,16 @@ const migrateVersionSixGame = (game: LegacyGame): GameState => {
   }
 }
 
-const normalizePersistedGameImages = (
-  record: PersistedGame,
-): PersistedGame => {
+const normalizePersistedGameImages = (record: PersistedGame): PersistedGame => {
   const normalize = (game: GameState): GameState => ({
-      ...game,
-      cardDefinitionsById: Object.fromEntries(
-        Object.entries(game.cardDefinitionsById ?? {}).map(([id, definition]) => [
-          id,
-          normalizeCardImages(definition),
-        ]),
-      ),
-    })
+    ...game,
+    cardDefinitionsById: Object.fromEntries(
+      Object.entries(game.cardDefinitionsById ?? {}).map(([id, definition]) => [
+        id,
+        normalizeCardImages(definition),
+      ]),
+    ),
+  })
   return {
     ...record,
     game: normalize(record.game),

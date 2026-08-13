@@ -9,7 +9,8 @@ export type ImageResolver = {
   resolve(request: ImageRequest): Promise<ResolvedImage>
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_BYTES = 12 * 1024 * 1024
 const BROWSER_CACHE_CONTROL = "public, max-age=86400"
 const EDGE_CACHE_CONTROL = "public, max-age=2592000"
@@ -93,9 +94,7 @@ export const createImageHandler =
 
     const url = new URL(request.url)
     if (url.search) return errorResponse(404, "Not found")
-    const match = /^\/v1\/(\d+)\/([^/]+)\/(\d+)\/([^/.]+)$/.exec(
-      url.pathname,
-    )
+    const match = /^\/v1\/(\d+)\/([^/]+)\/(\d+)\/([^/.]+)$/.exec(url.pathname)
     if (!match) return errorResponse(404, "Not found")
 
     const resolverId = Number(match[1])
@@ -119,20 +118,20 @@ export const createImageHandler =
       faceIndex: face,
       variant,
     })
-    if (!isSafeUpstream(resolved.url))
-      return errorResponse(502, "Bad gateway")
+    if (!isSafeUpstream(resolved.url)) return errorResponse(502, "Bad gateway")
 
     const controller = new AbortController()
-    const timer = setTimeout(
-      () => {
-        controller.abort()
-      },
-      dependencies.timeoutMs ?? 8_000,
-    )
+    const timer = setTimeout(() => {
+      controller.abort()
+    }, dependencies.timeoutMs ?? 8_000)
     let upstreamUrl = resolved.url
     try {
       let upstream: Response | undefined
-      for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+      for (
+        let redirectCount = 0;
+        redirectCount <= MAX_REDIRECTS;
+        redirectCount += 1
+      ) {
         upstream = await dependencies.fetcher(upstreamUrl, {
           method: request.method,
           redirect: "manual",
@@ -195,9 +194,7 @@ export const createImageHandler =
         return errorResponse(415, "Unsupported media type")
       }
 
-      const declaredSize = Number(
-        upstream.headers.get("Content-Length") ?? 0,
-      )
+      const declaredSize = Number(upstream.headers.get("Content-Length") ?? 0)
       if (declaredSize > MAX_BYTES) {
         dependencies.log?.warn("Image upstream response rejected", {
           status: upstream.status,
@@ -208,10 +205,7 @@ export const createImageHandler =
         return errorResponse(413, "Payload too large")
       }
 
-      const headers = successHeaders(
-        contentType,
-        upstream.headers.get("ETag"),
-      )
+      const headers = successHeaders(contentType, upstream.headers.get("ETag"))
       if (request.method === "HEAD")
         return new Response(null, { status: 200, headers })
 
@@ -228,7 +222,8 @@ export const createImageHandler =
       return new Response(body, { status: 200, headers })
     } catch (error) {
       const errorName = error instanceof Error ? error.name : "UnknownError"
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
       dependencies.log?.error("Image upstream fetch failed", {
         host: upstreamUrl.hostname,
         path: upstreamUrl.pathname,

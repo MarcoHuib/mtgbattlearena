@@ -9,6 +9,15 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: "http://127.0.0.1:4173",
+          localStorage: [{ name: "mtg-analytics-consent-v1", value: "denied" }],
+        },
+      ],
+    },
   },
   projects: [
     {

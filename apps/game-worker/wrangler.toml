@@ -55,7 +55,8 @@ new_sqlite_classes = ["GameDurableObject"]
 tag = "v2"
 new_sqlite_classes = ["LobbyDurableObject"]
 
-# Firebase private keys are neither required nor supported here.
+# Provision FIRESTORE_SERVICE_ACCOUNT_JSON only as a Worker Secret. Never add
+# the credential to this file, frontend runtime config or repository variables.
 
 # Staging is een afzonderlijke Worker deployment. De environment-specifieke
 # bindings hieronder zijn bewust herhaald omdat vars, services en Durable

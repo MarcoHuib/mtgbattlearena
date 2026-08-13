@@ -2,7 +2,7 @@
 
 ## Status
 
-Geaccepteerd en door latere ADR’s uitgebreid. De actuele savegameversie is schema 7; deckidentiteit volgt ADR 010 en image delivery ADR 011.
+Geaccepteerd en door latere ADR’s uitgebreid. De actuele savegameversie is schema 7; deckidentiteit volgt ADR 010 en image delivery ADR 011. De hieronder beschreven `sourceHash`/revisionregels documenteren de huidige legacy persistence. Roadmap Feature 1 en ADR 013/016 migreren clouddeckbeheer naar Firestore CRUD en verwijderen `sourceHash` uit de actieve deckimportflow, zonder bestaande savegames stilzwijgend te wijzigen.
 
 ## Context
 
@@ -26,14 +26,14 @@ hetzelfde zijn als een tijdelijke browsercache.
 - Dexie implementeert repositoryinterfaces voor decks, games,
   offlinepakketmanifesten en assetmetadata. Daardoor blijft een andere
   opslagimplementatie mogelijk.
-- Deckinhoud blijft immutable per revision en kan door een bestaande savegame
-  worden vastgehouden. Een stabiele `DeckSource` identificeert `(provider,
-  externalId)`; iedere unieke `sourceHash` krijgt een onveranderlijke
-  `DeckRevision`. De hash is daarmee versie/freshness en niet langer de
-  bronidentiteit zelf.
-- De lokale ownerrelatie is expliciet `(ownerId, deckSourceId) -> revisionId`.
-  Een herimport kan alleen de selectie van die owner naar een nieuwe revision
-  verplaatsen; historische revisions, games en offlinepakketten blijven intact.
+- In het **huidige legacy schema** blijft deckinhoud immutable per revision en
+  kan een bestaande savegame die revision vasthouden. `DeckSource`, `sourceHash`
+  en `DeckRevision` blijven alleen bestaan zolang de Feature-1 migratie dat voor
+  oude lokale data nodig heeft.
+- Het **doelmodel** uit ADR 013/016 gebruikt voor clouddecks
+  `uid + provider + externalDeckKey`, expliciete Create/Update/Delete en een
+  Firestore current snapshot. Bestaande savegames/offlinepakketten behouden hun
+  reeds vastgelegde inhoud en worden niet door libraryupdates gemuteerd.
 - Legacy apparaatlokale snapshots blijven compatibel hydrateerbaar. Migraties
   mogen eigenaarschap of revision-identiteit niet uit providerdata of oude
   afbeelding-URL's afleiden.

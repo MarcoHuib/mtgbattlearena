@@ -16,19 +16,19 @@ GraphQL-requeststatus en servercache.
 
 ## Migratiemapping
 
-| REST-operatie                        | GraphQL                                                                                      | Hergebruikte backendfunctie                              |
-| ------------------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `GET /api/online/lobbies`            | `publicLobbies`                                                                              | `LobbyDurableObject.listPublicLobbies`                   |
-| `POST /api/online/lobbies`           | `createLobby`                                                                                | `LobbyDurableObject.createLobby`                         |
-| `POST /api/online/lobbies/join`      | `joinLobby`                                                                                  | `LobbyDurableObject.joinByCode`                          |
-| `GET /api/online/lobbies/:id`        | `lobby`                                                                                      | `LobbyDurableObject.getLobbyRoom`                        |
-| `DELETE /api/online/lobbies/:id`     | `deleteLobby`                                                                                | `LobbyDurableObject.deleteLobby`                         |
-| `PUT /api/online/lobbies/:id/deck`   | `registerDeck`                                                                               | `LobbyDurableObject.registerDeck` + bestaand Zod-schema  |
-| `POST /api/online/lobbies/:id/start` | `startGame`                                                                                  | bestaande prepare/init/mark/release-flow                 |
-| `POST /api/online/lobbies/:id/abort` | `abortGame`                                                                                  | bestaande hostsession, Game DO en lobbystatus            |
-| `POST /api/online/socket-ticket`     | `createSocketTicket`                                                                         | `LobbyDurableObject.issueSocketTicket`                   |
-| `GET /api/online/games/:id/snapshot` | GraphQL-resolver bestaat voor migratie/tests maar is niet als first-party productieoperatie geregistreerd | session lookup + `GameDurableObject.getPersonalSnapshot` |
-| provider-deckimport                    | `deckFromUrl(url, sourceHash)`                                                               | private Import Worker + `LobbyDurableObject.resolveDeckRevision`             |
+| REST-operatie                        | GraphQL                                                                                                   | Hergebruikte backendfunctie                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /api/online/lobbies`            | `publicLobbies`                                                                                           | `LobbyDurableObject.listPublicLobbies`                           |
+| `POST /api/online/lobbies`           | `createLobby`                                                                                             | `LobbyDurableObject.createLobby`                                 |
+| `POST /api/online/lobbies/join`      | `joinLobby`                                                                                               | `LobbyDurableObject.joinByCode`                                  |
+| `GET /api/online/lobbies/:id`        | `lobby`                                                                                                   | `LobbyDurableObject.getLobbyRoom`                                |
+| `DELETE /api/online/lobbies/:id`     | `deleteLobby`                                                                                             | `LobbyDurableObject.deleteLobby`                                 |
+| `PUT /api/online/lobbies/:id/deck`   | `registerDeck`                                                                                            | `LobbyDurableObject.registerDeck` + bestaand Zod-schema          |
+| `POST /api/online/lobbies/:id/start` | `startGame`                                                                                               | bestaande prepare/init/mark/release-flow                         |
+| `POST /api/online/lobbies/:id/abort` | `abortGame`                                                                                               | bestaande hostsession, Game DO en lobbystatus                    |
+| `POST /api/online/socket-ticket`     | `createSocketTicket`                                                                                      | `LobbyDurableObject.issueSocketTicket`                           |
+| `GET /api/online/games/:id/snapshot` | GraphQL-resolver bestaat voor migratie/tests maar is niet als first-party productieoperatie geregistreerd | session lookup + `GameDurableObject.getPersonalSnapshot`         |
+| provider-deckimport                  | `deckFromUrl(url, sourceHash)`                                                                            | private Import Worker + `LobbyDurableObject.resolveDeckRevision` |
 
 `GET /api/online/health`, `POST /api/online/games/:id/commands` en de
 WebSocket-upgrade blijven HTTP. De commandroute is een bestaande fallback;
@@ -94,3 +94,7 @@ ongewijzigd. Offline routes, IndexedDB, autosave en assetcaching zijn niet afhan
 van GraphQL of Firebase. De online/managed deckimport gebruikt wel GraphQL als
 application-API, terwijl de provideradapter en Image Worker afzonderlijke
 architectuurgrenzen blijven.
+
+## Geplande Deck Library-migratie
+
+ADR 013/016 verplaatsen providerimport uit de online lobby naar de Firestore-backed Deck Library. In het doelbeeld importeert/update de gebruiker via `/decks` en registreert de lobby uitsluitend een reeds opgeslagen `deckKey`. De huidige `deckFromUrl(url, sourceHash)`-operatie documenteert de bestaande implementatie; Roadmap Feature 1 migreert die flow en verwijdert `sourceHash` uit de actieve GraphQL-/frontend-/persistencecontracten met compatibiliteitstests. Online game-start accepteert daarna geen provider-URL of client-authored deckcontent meer.

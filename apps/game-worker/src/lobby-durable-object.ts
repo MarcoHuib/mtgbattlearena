@@ -5,10 +5,6 @@ import {
   type OnlineDeckSubmission,
 } from "@mtg/game-protocol"
 import {
-  onlineGameSeedSchema,
-  type OnlineGameSeed,
-} from "./game-server-adapter"
-import {
   FINISHED_LOBBY_RETENTION_MS,
   MAX_ACTIVE_LOBBIES_PER_UID,
   MAX_WAITING_LOBBIES_PER_UID,
@@ -36,6 +32,7 @@ import type {
   JoinLobbyResult,
   LobbyRoom,
   LobbySummary,
+  RegisteredGameSeed,
   RpcResult,
   VerifiedIdentity,
 } from "./types"
@@ -146,33 +143,6 @@ export class LobbyDurableObject extends DurableObject<Env> {
       ticketRepository ?? new SqliteSocketTicketRepository(state.storage),
       now,
     )
-    this.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS deck_source_identities (
-        deck_id TEXT NOT NULL UNIQUE,
-        provider TEXT NOT NULL,
-        external_id TEXT NOT NULL,
-        source_url TEXT,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (provider, external_id)
-      );
-      CREATE TABLE IF NOT EXISTS deck_revisions (
-        revision_id TEXT NOT NULL UNIQUE,
-        deck_id TEXT NOT NULL,
-        source_hash TEXT NOT NULL,
-        deck_json TEXT NOT NULL,
-        imported_at TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (deck_id, source_hash),
-        FOREIGN KEY (deck_id) REFERENCES deck_source_identities(deck_id)
-      );
-    `)
-    const sourceColumns = this.storage.sql
-      .exec<{ name: string }>("PRAGMA table_info(deck_source_identities)")
-      .toArray()
-    if (!sourceColumns.some(column => column.name === "source_url"))
-      this.storage.sql.exec(
-        "ALTER TABLE deck_source_identities ADD COLUMN source_url TEXT",
-      )
   }
 
   resolveDeckRevision(
@@ -180,85 +150,13 @@ export class LobbyDurableObject extends DurableObject<Env> {
   ): Promise<{ deckId: string; revisionId: string }> {
     const provider = deck.source.trim().toLowerCase()
     const externalId = deck.sourceId.trim()
-    const sourceHash = deck.sourceHash.trim()
-    if (!provider || !externalId || !sourceHash)
+    if (!provider || !externalId)
       throw new Error("INVALID_DECK_SOURCE_IDENTITY")
-    return Promise.resolve(
-      this.storage.transactionSync(() => {
-        const existing = this.storage.sql
-          .exec<{ deckId: string }>(
-            `SELECT deck_id AS deckId FROM deck_source_identities
-           WHERE provider = ? AND external_id = ?`,
-            provider,
-            externalId,
-          )
-          .toArray()[0]
-        const deckId = existing?.deckId ?? crypto.randomUUID()
-        if (!existing)
-          this.storage.sql.exec(
-            `INSERT OR IGNORE INTO deck_source_identities
-         (deck_id, provider, external_id, source_url, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-            deckId,
-            provider,
-            externalId,
-            deck.sourceUrl,
-            new Date(this.now()).toISOString(),
-          )
-        this.storage.sql.exec(
-          `UPDATE deck_source_identities SET source_url = ?
-           WHERE provider = ? AND external_id = ?
-             AND (source_url IS NULL OR source_url = '')`,
-          deck.sourceUrl,
-          provider,
-          externalId,
-        )
-        const persistedDeckId = this.storage.sql
-          .exec<{ deckId: string }>(
-            `SELECT deck_id AS deckId FROM deck_source_identities
-           WHERE provider = ? AND external_id = ?`,
-            provider,
-            externalId,
-          )
-          .one().deckId
-        const existingRevision = this.storage.sql
-          .exec<{ revisionId: string }>(
-            `SELECT revision_id AS revisionId FROM deck_revisions
-             WHERE deck_id = ? AND source_hash = ?`,
-            persistedDeckId,
-            sourceHash,
-          )
-          .toArray()[0]
-        if (existingRevision)
-          return {
-            deckId: persistedDeckId,
-            revisionId: existingRevision.revisionId,
-          }
-        const revisionId = crypto.randomUUID()
-        this.storage.sql.exec(
-          `INSERT OR IGNORE INTO deck_revisions
-           (revision_id, deck_id, source_hash, deck_json, imported_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          revisionId,
-          persistedDeckId,
-          sourceHash,
-          JSON.stringify(deck),
-          deck.importedAt,
-          new Date(this.now()).toISOString(),
-        )
-        return {
-          deckId: persistedDeckId,
-          revisionId: this.storage.sql
-            .exec<{ revisionId: string }>(
-              `SELECT revision_id AS revisionId FROM deck_revisions
-               WHERE deck_id = ? AND source_hash = ?`,
-              persistedDeckId,
-              sourceHash,
-            )
-            .one().revisionId,
-        }
-      }),
-    )
+    const deckId = `${provider}:${externalId}`
+    return Promise.resolve({
+      deckId,
+      revisionId: `${deckId}:${deck.importedAt}`,
+    })
   }
 
   listPublicLobbies(viewerUid?: string): LobbySummary[] {
@@ -466,7 +364,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
     this.store.upsertDeck({
       gameId,
       uid: identity.uid,
-      submission: parsed.data,
+      // De lobby bewaart alleen de selectie-identiteit en presentatienaam.
+      // De Game Worker leest de authoritative content owner-scoped uit
+      // Firestore vlak voordat het Game Durable Object wordt geïnitialiseerd.
+      submission: { ...parsed.data, cards: [], tokens: [] },
       registeredAt: new Date().toISOString(),
     })
     return { ok: true, value: null }
@@ -551,7 +452,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
     gameId: string,
     identity: VerifiedIdentity,
   ): RpcResult<{
-    seed: OnlineGameSeed
+    seed: RegisteredGameSeed
     session: GameSession
   }> {
     const session = this.getSession(gameId, identity.uid)
@@ -590,7 +491,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
         "Iedere speler moet eerst een deck kiezen.",
       )
     }
-    const seed = onlineGameSeedSchema.safeParse({
+    const seed: RegisteredGameSeed = {
       gameId,
       title: lobby.title,
       players: players.map(participant => {
@@ -601,16 +502,8 @@ export class LobbyDurableObject extends DurableObject<Env> {
           displayName: participant.displayName,
           deckSnapshotId: deck?.deckSnapshotId ?? "",
           deckName: deck?.deckName ?? "",
-          cards: deck?.cards ?? [],
         }
       }),
-    })
-    if (!seed.success) {
-      return failure(
-        400,
-        "INVALID_REQUEST",
-        "De game-initialisatie is ongeldig.",
-      )
     }
     const reserved = this.store.reserveLobbyStart(
       gameId,
@@ -634,7 +527,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
       return failure(409, "LOBBY_NOT_READY", "Deze lobby kan niet starten.")
     }
     this.scheduleNextCleanup()
-    return { ok: true, value: { seed: seed.data, session } }
+    return { ok: true, value: { seed, session } }
   }
 
   releaseGameStart(

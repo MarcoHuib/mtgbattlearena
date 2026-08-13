@@ -84,9 +84,7 @@ export const CardView = ({
     image => image.faceIndex === instance.activeFaceIndex,
   )
   const imageAssetKey = imageRef ? cardImageAssetKey(imageRef) : undefined
-  const remoteImageUrl = imageRef
-    ? getCardImageUrl(imageRef)
-    : undefined
+  const remoteImageUrl = imageRef ? getCardImageUrl(imageRef) : undefined
   const [imageUrl, setImageUrl] = useState<string | null>(
     online ? (remoteImageUrl ?? null) : null,
   )

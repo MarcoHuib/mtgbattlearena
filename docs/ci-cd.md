@@ -11,6 +11,17 @@ interne providerdetails in logs, artifacts, source maps of clientbundles
 publiceren. De exacte productieconfiguratie wordt in private operationele
 documentatie beheerd.
 
+De publieke repository blijft zelfstandig buildbaar zonder private providerpackage
+of projectspecifieke providercredential. Pull-request-CI en forks krijgen geen
+private provideraccess. Een trusted officiële release mag later een private
+server-side adapter koppelen, maar dat mag de standaard `npm ci`, lint, typecheck,
+tests of build niet afhankelijk maken van private registrytoegang.
+
+Gevoelige runtimecredentials horen in de server-side secret store van de Worker.
+Wanneer GitHub Actions een secret moet provisionen, komt de waarde uitsluitend uit
+een GitHub Secret/Environment Secret, nooit uit een gewone Repository Variable, en
+mag de workflow de waarde niet naar stdout, artifacts of gegenereerde clientconfig
+schrijven.
 
 `main` is de single source of truth voor iedere release. Development gebeurt
 lokaal; pull requests naar `main` valideren code zonder credentials of
@@ -33,11 +44,11 @@ feature/* → PR naar main → CI → merge naar main
                          Production · Build #X
 ```
 
-| Omgeving    | GitHub Environment | Frontend                         | API / WebSocket                                                            | Card CDN |
-| ----------- | ------------------ | -------------------------------- | -------------------------------------------------------------------------- | -------- |
-| Development | geen               | Vite dev server                  | lokale Workers/proxy                                                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets |
+| Omgeving    | GitHub Environment | Frontend                         | API / WebSocket                                                            | Card CDN                                                                                            |
+| ----------- | ------------------ | -------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Development | geen               | Vite dev server                  | lokale Game Worker → Service Binding → Import Worker                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets                                              |
 | Beta        | `staging`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` | publieke CDN blijft `https://cdn.mtgbattlearena.nl`; staging Image Worker heeft geen publieke route |
-| Production  | `production`       | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           | `https://cdn.mtgbattlearena.nl` |
+| Production  | `production`       | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           | `https://cdn.mtgbattlearena.nl`                                                                     |
 
 De branch `staging` is niet meer nodig voor CI/CD. De naam `staging` blijft
 uitsluitend bestaan als GitHub Environment, Firebase Hosting-target en Wrangler
@@ -123,6 +134,26 @@ De oude `.env.production` en `.env.staging` zijn verwijderd om te voorkomen dat
 omgevingendpoints opnieuw in de bundle terechtkomen. `.env.local` blijft voor
 lokale ontwikkeling als fallback ondersteund.
 
+### Lokale Feature-1-stack
+
+`npm run dev` start cross-platform met `concurrently` de Vite-webapp, Game
+Worker, private Import Worker en Firestore Emulator. Dit herstelt de volledige
+lokale keten voor Archidekt Create/Update. Voorheen startte het rootcommando
+alleen Vite; de nieuwe Deck Library gebruikt echter GraphQL-mutaties en kon met
+een lege `VITE_ONLINE_API_URL` de Game Worker niet bereiken.
+
+Vereisten zijn Node.js 22+, npm en JDK 21 of nieuwer voor de Firebase Emulator
+Suite. De
+developer kopieert `apps/web/.env.example` naar de genegeerde
+`apps/web/.env.local` en vult de publieke Firebase Web App-config in voor Auth.
+`VITE_FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` stuurt uitsluitend development-
+reads naar de emulator. De Game Worker accepteert `FIRESTORE_EMULATOR_HOST`
+alleen wanneer `APP_ENV=development` en uitsluitend voor localhost; staging en
+production falen gesloten. Er is lokaal geen service-accountcredential nodig.
+
+`npm run dev:web` blijft beschikbaar voor snelle frontend-only ontwikkeling,
+maar ondersteunt geen echte cloudlibrarymutaties.
+
 ## Releaseversie
 
 `github.run_number` is het release-/buildnummer voor de volledige workflow.
@@ -166,26 +197,26 @@ Beide GitHub Environments hebben nodig:
 Configureer deze niet-geheime GitHub Repository Variables eenmaal voor beide
 omgevingen:
 
-| Repository Variable    | Inhoud                               |
-| ---------------------- | ------------------------------------ |
-| `FIREBASE_API_KEY`     | publieke gedeelde Firebase-webconfig |
-| `FIREBASE_PROJECT_ID`  | gedeeld Firebaseproject-ID           |
-| `FIREBASE_MEASUREMENT_ID` | publieke Analytics measurement-ID |
+| Repository Variable       | Inhoud                               |
+| ------------------------- | ------------------------------------ |
+| `FIREBASE_API_KEY`        | publieke gedeelde Firebase-webconfig |
+| `FIREBASE_PROJECT_ID`     | gedeeld Firebaseproject-ID           |
+| `FIREBASE_MEASUREMENT_ID` | publieke Analytics measurement-ID    |
 
 Configureer daarnaast deze GitHub Environment Variables per omgeving:
 
-| Environment Variable  | `staging`                            | `production`                    |
-| -------------------- | ------------------------------------ | ------------------------------- |
-| `APP_ENV`            | `staging`                            | `production`                    |
-| `IMPORT_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
-| `ONLINE_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
-| `ONLINE_SOCKET_URL`  | `https://ws.beta.mtgbattlearena.nl`  | `https://ws.mtgbattlearena.nl`  |
-| `FIREBASE_AUTH_DOMAIN` | `beta.mtgbattlearena.nl`           | `mtgbattlearena.nl`             |
-| `FIREBASE_APP_ID` | afzonderlijke publieke beta Web App-ID | publieke productie Web App-ID |
-| `FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY` | publieke beta Enterprise-sitekey | publieke productie Enterprise-sitekey |
-| `FIREBASE_PROJECT_NUMBER` | numeriek Firebase-projectnummer | numeriek Firebase-projectnummer |
-| `FIREBASE_ALLOWED_APP_IDS` | uitsluitend beta App-ID(s) | uitsluitend productie App-ID(s) |
-| `APP_CHECK_ENFORCEMENT` | `enforce` | eerst `monitor`, na observatie `enforce` |
+| Environment Variable                               | `staging`                              | `production`                             |
+| -------------------------------------------------- | -------------------------------------- | ---------------------------------------- |
+| `APP_ENV`                                          | `staging`                              | `production`                             |
+| `IMPORT_API_URL`                                   | `https://api.beta.mtgbattlearena.nl`   | `https://api.mtgbattlearena.nl`          |
+| `ONLINE_API_URL`                                   | `https://api.beta.mtgbattlearena.nl`   | `https://api.mtgbattlearena.nl`          |
+| `ONLINE_SOCKET_URL`                                | `https://ws.beta.mtgbattlearena.nl`    | `https://ws.mtgbattlearena.nl`           |
+| `FIREBASE_AUTH_DOMAIN`                             | `beta.mtgbattlearena.nl`               | `mtgbattlearena.nl`                      |
+| `FIREBASE_APP_ID`                                  | afzonderlijke publieke beta Web App-ID | publieke productie Web App-ID            |
+| `FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY` | publieke beta Enterprise-sitekey       | publieke productie Enterprise-sitekey    |
+| `FIREBASE_PROJECT_NUMBER`                          | numeriek Firebase-projectnummer        | numeriek Firebase-projectnummer          |
+| `FIREBASE_ALLOWED_APP_IDS`                         | uitsluitend beta App-ID(s)             | uitsluitend productie App-ID(s)          |
+| `APP_CHECK_ENFORCEMENT`                            | `enforce`                              | eerst `monitor`, na observatie `enforce` |
 
 `RELEASE_VERSION` wordt door de workflow gezet op `github.run_number` en
 `RUNTIME_CONFIG_OUTPUT` op `apps/web/dist/runtime-config.js`; deze hoeven niet
@@ -194,17 +225,42 @@ handmatig als Environment Variable te worden beheerd.
 Pas de deployment branch policy van GitHub Environment `staging` aan: alleen
 `main` hoeft nog toegestaan te zijn. Doe hetzelfde voor `production`.
 
+### Gepland in Feature 1 — Firestore Deck Library
+
+ADR 016 voegt Firestore toe voor duurzame clouddecks. Dit is geen verborgen
+handmatige consolewijziging:
+
+- `firestore.rules` staat onder versiebeheer;
+- CI voert `npm run test:firestore-rules` tegen de emulator uit;
+- de frontend-CI-job installeert daarvoor expliciet Temurin JDK 21; de Rules-
+  tests gebruiken alleen de lokale emulator en vereisen geen Firebase-login;
+- de releaseworkflow deployt dezelfde Rules bij zowel Beta- als
+  Production-promotie;
+- activeer App Check voor directe Firestore webreads pas nadat Beta bewezen werkt;
+- houd Firestore-data zelf buiten build artifacts en CI-fixtures.
+
+Runtime serverwrites naar Firestore mogen niet de bestaande Firebase Hosting-
+deploymentcredential hergebruiken alleen omdat die al beschikbaar is. Kies een
+afzonderlijke least-privilege servercredential/IAM-identiteit wanneer server-IAM
+nodig is en bewaar die uitsluitend als Cloudflare runtime secret. Als GitHub
+Actions die credential provisiont, mag de waarde alleen uit een protected GitHub
+Environment Secret komen en nooit in runtime-config of logs terechtkomen.
+
+De webapp krijgt geen service-accountcredential. Directe webtoegang gebruikt
+Firebase Authentication + Security Rules + App Check en is in het doelmodel
+read-only voor authoritative clouddeckrecords.
+
 ## Cloudflare-isolatie
 
-| Component       | Beta                                  | Production                            |
-| --------------- | ------------------------------------- | ------------------------------------- |
-| Import Worker   | `mtg-battle-mode-import-staging`      | `mtg-battle-mode-import`              |
-| Game Worker     | `mtg-battle-mode-online-staging`      | `mtg-battle-mode-online`              |
-| Image Worker    | `mtg-battle-mode-images-staging`      | `mtg-battle-mode-images`              |
-| Image route     | geen publieke route / preview-URL     | `cdn.mtgbattlearena.nl` custom domain |
-| Wrangler        | `--env staging`                       | top-levelconfiguratie                 |
-| Import binding  | staging Import Worker                 | Production Import Worker              |
-| Durable Objects | eigen staging namespaces              | Production namespaces                 |
+| Component       | Beta                              | Production                            |
+| --------------- | --------------------------------- | ------------------------------------- |
+| Import Worker   | `mtg-battle-mode-import-staging`  | `mtg-battle-mode-import`              |
+| Game Worker     | `mtg-battle-mode-online-staging`  | `mtg-battle-mode-online`              |
+| Image Worker    | `mtg-battle-mode-images-staging`  | `mtg-battle-mode-images`              |
+| Image route     | geen publieke route / preview-URL | `cdn.mtgbattlearena.nl` custom domain |
+| Wrangler        | `--env staging`                   | top-levelconfiguratie                 |
+| Import binding  | staging Import Worker             | Production Import Worker              |
+| Durable Objects | eigen staging namespaces          | Production namespaces                 |
 
 De Import Workers hebben in beide omgevingen expliciet `workers_dev = false`
 en `preview_urls = false`. Zij hebben dus geen publiek `workers.dev`- of

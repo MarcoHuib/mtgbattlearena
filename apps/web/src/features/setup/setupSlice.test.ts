@@ -34,10 +34,7 @@ describe("offline setup", () => {
     expect(state.playerOrder).not.toContain("player-3")
 
     while (state.playerOrder.length > 2) {
-      state = setupSlice.reducer(
-        state,
-        removePlayer(state.playerOrder.at(-1)!),
-      )
+      state = setupSlice.reducer(state, removePlayer(state.playerOrder.at(-1)!))
     }
     const unchanged = setupSlice.reducer(
       state,

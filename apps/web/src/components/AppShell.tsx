@@ -12,6 +12,7 @@ const navigation: { route: AppRoute; label: string }[] = [
   { route: "/", label: "Menu" },
   { route: "/offline", label: "Offline" },
   { route: "/online", label: "Online" },
+  { route: "/decks", label: "Decks" },
   { route: "/resume", label: "Hervatten" },
 ]
 

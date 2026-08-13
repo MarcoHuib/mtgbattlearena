@@ -23,6 +23,7 @@
     "eslint.config.js",
     "codegen.ts",
     "scripts/**/*.mjs",
+    "tests/**/*.ts",
     "apps/game-worker/vitest.config.ts",
     "packages/vitest.config.ts"
   ]

@@ -84,8 +84,10 @@ APP_ENV=staging|production
 ```
 
 Configure these as GitHub Environment Variables in both `staging` and
-`production`. No service-account key is required. Debug tokens are sensitive
-and must never be committed.
+`production`. Feature 1 additionally provisions
+`FIRESTORE_SERVICE_ACCOUNT_JSON` from a protected GitHub Environment Secret to
+the Game Worker as a Cloudflare Worker Secret. It is not frontend- or App
+Check-configuratie. Debug tokens are sensitive and must never be committed.
 
 At present Authentication is shared through Firebase project
 `mtgbattlearena`. Strict beta-to-production App Check isolation additionally
@@ -106,15 +108,17 @@ particular isolation guarantee cannot exist.
    put its App ID/site key in the staging Environment.
 5. For local real-backend testing, run the development build. It enables only
    Firebase's official debug provider (`self.FIREBASE_APPCHECK_DEBUG_TOKEN =
-   true`). Register the token printed once by Firebase under **App Check >
+true`). Register the token printed once by Firebase under **App Check >
    Manage debug tokens**. Never commit or share it.
 6. Do not enable Firebase Authentication App Check enforcement yet. That
    preview/native-Firebase switch is separate from this custom-backend rollout.
 
-The application does not directly use Firestore, Realtime Database, or Firebase
-Storage, so no native-service enforcement is configured. Existing CSP headers
-already permit the Firebase/Google endpoints used by Auth and App Check; no
-wildcards, `unsafe-eval`, COOP weakening, or other header relaxation was added.
+The application directly uses Firestore for owner-scoped Deck Library reads.
+Before enabling the cloud flow in an environment, deploy the Firestore Security
+Rules and configure native Firestore App Check enforcement as described in
+`docs/security/firestore-deck-library.md`. Realtime Database and Firebase Storage
+remain outside this scope. Existing CSP changes must stay narrowly scoped; do not
+add wildcards, `unsafe-eval` or unrelated COOP weakening.
 
 ## Rollout and troubleshooting
 

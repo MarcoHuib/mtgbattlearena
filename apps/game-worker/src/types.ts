@@ -7,6 +7,15 @@ import type {
 import type { ImportedDeck } from "@mtg/game-core/types"
 import type { OnlineGameSeed } from "./game-server-adapter"
 
+export type RegisteredGameSeed = {
+  gameId: string
+  title: string
+  players: Pick<
+    OnlineGameSeed["players"][number],
+    "playerId" | "uid" | "displayName" | "deckSnapshotId" | "deckName"
+  >[]
+}
+
 export type SqlStorageValue = string | number | ArrayBuffer | null
 
 export type SqlStorageCursor<T extends object> = {
@@ -160,7 +169,7 @@ export type LobbyDurableObjectStub = {
   prepareRegisteredGame(
     gameId: string,
     identity: VerifiedIdentity,
-  ): Promise<RpcResult<{ seed: OnlineGameSeed; session: GameSession }>>
+  ): Promise<RpcResult<{ seed: RegisteredGameSeed; session: GameSession }>>
   releaseGameStart(
     gameId: string,
     identity: VerifiedIdentity,
@@ -215,4 +224,6 @@ export type Env = {
   ALLOWED_ORIGIN?: string
   REALTIME_DEBUG?: string
   RELEASE_VERSION?: string
+  FIRESTORE_SERVICE_ACCOUNT_JSON?: string
+  FIRESTORE_EMULATOR_HOST?: string
 }

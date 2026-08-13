@@ -52,7 +52,9 @@ export const validateAppCheckClaims = (
   allowedAppIds: ReadonlySet<string>,
   nowSeconds: number,
 ): AppCheckVerificationResult => {
-  if (claims.iss !== `https://firebaseappcheck.googleapis.com/${projectNumber}`) {
+  if (
+    claims.iss !== `https://firebaseappcheck.googleapis.com/${projectNumber}`
+  ) {
     return { valid: false, reason: "invalid_issuer" }
   }
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud]

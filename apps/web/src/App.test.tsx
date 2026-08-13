@@ -258,7 +258,10 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
     store.getState().game.present?.cardDefinitionsById[
       treasure?.definitionId ?? ""
     ]?.imageRefs[0],
-  ).toMatchObject({ resolver: 1, imageId: "f909bd95-58a1-4299-9570-87724145fc85" })
+  ).toMatchObject({
+    resolver: 1,
+    imageId: "f909bd95-58a1-4299-9570-87724145fc85",
+  })
 
   await user.click(within(playerBoard).getByText("Optionele trackers"))
   await user.click(

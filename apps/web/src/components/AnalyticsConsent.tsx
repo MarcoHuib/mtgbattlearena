@@ -9,9 +9,8 @@ import {
 import type { AppRoute } from "../app/router"
 
 export const useAnalyticsConsent = () => {
-  const [consent, setConsent] = useState<AnalyticsConsentValue>(
-    readAnalyticsConsent,
-  )
+  const [consent, setConsent] =
+    useState<AnalyticsConsentValue>(readAnalyticsConsent)
 
   useEffect(() => {
     const update = () => {
@@ -42,7 +41,9 @@ export const AnalyticsConsent = ({ route }: { route: AppRoute }) => {
       aria-labelledby="analytics-consent-title"
     >
       <div>
-        <h2 id="analytics-consent-title">Mogen we analytische cookies gebruiken?</h2>
+        <h2 id="analytics-consent-title">
+          Mogen we analytische cookies gebruiken?
+        </h2>
         <p>
           Help ons MTG Battle Arena te verbeteren. We gebruiken anonieme
           gegevens over het gebruik van de app. Deze gegevens worden niet

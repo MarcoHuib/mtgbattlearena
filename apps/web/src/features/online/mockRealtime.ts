@@ -18,8 +18,18 @@ const card = (
   playerId = "mock-player-1",
 ): VisibleOnlineCard => {
   const imageId = "6a9c39e4-a8cf-42dd-8d0e-45634b335546"
-  const frontImage = { resolver: 1, imageId, faceIndex: 0, variant: "normal" as const }
-  const backImage = { resolver: 1, imageId, faceIndex: 1, variant: "normal" as const }
+  const frontImage = {
+    resolver: 1,
+    imageId,
+    faceIndex: 0,
+    variant: "normal" as const,
+  }
+  const backImage = {
+    resolver: 1,
+    imageId,
+    faceIndex: 1,
+    variant: "normal" as const,
+  }
   return {
     instanceId: `${playerId}-card-${index}`,
     definitionId: `${playerId}-definition-${index}`,

@@ -33,7 +33,6 @@ test("private service-bindingroute accepteert het afgesproken contract zonder Ap
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: "https://archidekt.com/decks/24765444/primal_stampede",
-        sourceHash: "client-hint",
       }),
     }),
     { RELEASE_VERSION: "test" },
@@ -47,7 +46,7 @@ test("private service-bindingroute accepteert het afgesproken contract zonder Ap
   expect(cache.put).toHaveBeenCalledOnce()
 })
 
-test("freshness, authoritative import en daaropvolgende HIT delen dezelfde Archidekt-client", async () => {
+test("iedere expliciete import raadpleegt opnieuw de gedeelde Archidekt-client", async () => {
   const values = new Map<string, Response>()
   const cache = {
     match: vi.fn((request: Request) =>
@@ -77,39 +76,29 @@ test("freshness, authoritative import en daaropvolgende HIT delen dezelfde Archi
   vi.stubGlobal("fetch", upstream)
   const context = { waitUntil: vi.fn() }
   const env = { RELEASE_VERSION: "test" }
-  const freshness = await importWorker.fetch(
-    new Request(
-      "https://import.internal/api/import/archidekt/24765444?fresh=1",
-    ),
-    env,
-    context,
-  )
-  expect(freshness.status).toBe(200)
-
-  const requestImport = (sourceHash: string) =>
+  const requestImport = () =>
     importWorker.fetch(
       new Request("https://import.internal/internal/deck-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: "https://archidekt.com/decks/24765444/primal_stampede",
-          sourceHash,
         }),
       }),
       env,
       context,
     )
-  const importedResponse = await requestImport("freshness-hint")
+  const importedResponse = await requestImport()
   expect(importedResponse.status).toBe(200)
   const imported = (await importedResponse.json()) as {
     cacheStatus: string
-    deck: { sourceHash: string; name: string }
+    deck: { name: string }
   }
   expect(imported).toMatchObject({
     cacheStatus: "MISS",
     deck: { name: "Primal Stampede" },
   })
-  const hit = await requestImport(imported.deck.sourceHash)
-  await expect(hit.json()).resolves.toMatchObject({ cacheStatus: "HIT" })
+  const hit = await requestImport()
+  await expect(hit.json()).resolves.toMatchObject({ cacheStatus: "REFRESHED" })
   expect(upstream).toHaveBeenCalledTimes(2)
 })

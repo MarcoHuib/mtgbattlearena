@@ -45,29 +45,32 @@ Publieke Terms: https://archidekt.com/terms
 ## ManaBox
 
 ManaBox heeft toestemming gegeven voor de beschreven user-triggered deckimport,
-maar heeft uitdrukkelijk gevraagd dat niet-openbare integratiedetails niet via de
-open-sourceimplementatie openbaar worden gemaakt.
+maar heeft uitdrukkelijk gevraagd dat de niet-openbare endpoint- en
+implementatiekennis niet via de open-sourceimplementatie openbaar wordt gemaakt.
 
 Daarom bevat de publieke repository uitsluitend provider-neutrale contracten en
-functionele documentatie. Niet-openbare ManaBox-integratiekennis wordt buiten de
-publieke code en documentatie gehouden. Deze beperking is ook bedoeld om te
-voorkomen dat de repository als de-facto documentatie voor een niet-publieke
-interface gaat functioneren.
+functionele documentatie. De volledige niet-openbare ManaBox-adapter hoort in een
+private server-side component/repository/package. Niet alleen een adres, maar ook
+requestconstructie, responseschema's, mapping, private fixtures en andere kennis
+waarmee de interface kan worden gereconstrueerd blijven buiten de publieke code.
+Deze grens voorkomt dat de repository als de-facto documentatie voor een
+niet-publieke interface gaat functioneren.
 
 Publieke Terms: https://manabox.app/termsofservice
 
 ## Moxfield
 
-Moxfield heeft projectspecifieke toegang aangeboden voor de beschreven import,
+Moxfield heeft projectspecifieke toegang verstrekt voor de beschreven import,
 onder voorwaarden rond vertrouwelijkheid, gratis toegang tot de betreffende
 datafunctie, zorgvuldig gebruik en provider-defined request limits. De
 niet-publieke interface is unsupported en kan wijzigen.
 
-MTG Battle Arena publiceert daarom geen vertrouwelijke toegangsinformatie of
-niet-openbare providerimplementatiedetails in de repository of client. De
-Moxfield-import mag niet als afzonderlijke betaalde toegang tot Moxfield-data
-worden verkocht of achter een betaalmuur worden geplaatst zolang de huidige
-afspraken gelden.
+De verstrekte toegangsinformatie wordt als gevoelige servercredential behandeld,
+blijft buiten repository en client en wordt uitsluitend in een server-side secret
+store gebruikt. MTG Battle Arena publiceert geen credential, private raw response
+of onnodige niet-openbare providerimplementatiedetails. De Moxfield-import mag
+niet als afzonderlijke betaalde toegang tot Moxfield-data worden verkocht of
+achter een betaalmuur worden geplaatst zolang de huidige afspraken gelden.
 
 Publieke Terms: https://moxfield.com/help/terms
 

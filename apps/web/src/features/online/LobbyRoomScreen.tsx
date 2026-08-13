@@ -1,16 +1,9 @@
-import { useCallback, useEffect, useState, type SyntheticEvent } from "react"
-import { deckCardCount } from "@mtg/game-core/decks"
-import type { DeckSnapshot } from "@mtg/game-core/types"
-import { useAppDispatch } from "../../app/hooks"
-import {
-  importDeckFromUrl,
-  importedDeckErrorMessage,
-} from "../../app/api/importDeck"
+import { useCallback, useEffect, useState } from "react"
+import type { CloudDeckMetadata } from "@mtg/game-core/types"
 import { AppLink } from "../../app/router"
 import { AppShell } from "../../components/AppShell"
-import { createImportedDeckSnapshot } from "../decks/deckSnapshots"
-import { repositories } from "../../persistence/database"
-import { deviceDeckOwnerId } from "../../persistence/database"
+import { createFirestoreCloudDeckRepository } from "../decks/cloudDeckRepository"
+import { readFirebaseConfig } from "./firebaseAuth"
 import type { LobbyRoom, OnlineGameService } from "./types"
 import { lobbyRoomSchema } from "./types"
 import { useLobbyQuery } from "../../app/api/remoteGraphqlApi"
@@ -23,6 +16,11 @@ type LobbyRoomScreenProps = {
   onLeave: () => void
 }
 
+const lobbyFirebaseConfig = readFirebaseConfig(import.meta.env)
+const lobbyDeckRepository = lobbyFirebaseConfig.configured
+  ? createFirestoreCloudDeckRepository(lobbyFirebaseConfig.options)
+  : null
+
 export const LobbyRoomScreen = ({
   gameId,
   deckOwnerId,
@@ -30,7 +28,7 @@ export const LobbyRoomScreen = ({
   onEnterGame,
   onLeave,
 }: LobbyRoomScreenProps) => {
-  const dispatch = useAppDispatch()
+  const deckRepository = lobbyDeckRepository
   const usesGraphQLQuery = onlineGames.kind === "cloudflare"
   const lobbyQuery = useLobbyQuery(
     { id: gameId },
@@ -45,11 +43,8 @@ export const LobbyRoomScreen = ({
   const [message, setMessage] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [decks, setDecks] = useState<DeckSnapshot[]>([])
-  const [legacyDeckCount, setLegacyDeckCount] = useState(0)
+  const [decks, setDecks] = useState<CloudDeckMetadata[]>([])
   const [selectedDeckId, setSelectedDeckId] = useState("")
-  const [confirmDeckDelete, setConfirmDeckDelete] = useState(false)
-  const [deckUrl, setDeckUrl] = useState("")
   const [deckBusy, setDeckBusy] = useState(false)
   const [starting, setStarting] = useState(false)
 
@@ -137,17 +132,16 @@ export const LobbyRoomScreen = ({
 
   useEffect(() => {
     let disposed = false
-    void Promise.all([
-      repositories.decks.list(deckOwnerId),
-      deckOwnerId === deviceDeckOwnerId || deckOwnerId === "signed-out"
-        ? Promise.resolve([])
-        : repositories.decks.list(deviceDeckOwnerId),
-    ])
-      .then(([records, legacyRecords]) => {
+    if (!deckRepository || deckOwnerId === "signed-out") {
+      setDecks([])
+      return
+    }
+    void deckRepository
+      .list(deckOwnerId)
+      .then(records => {
         if (disposed) return
         setDecks(records)
-        setLegacyDeckCount(legacyRecords.length)
-        setSelectedDeckId(current => current || records[0]?.id || "")
+        setSelectedDeckId(current => current || records[0]?.deckKey || "")
       })
       .catch(() => {
         if (!disposed) {
@@ -157,7 +151,7 @@ export const LobbyRoomScreen = ({
     return () => {
       disposed = true
     }
-  }, [deckOwnerId])
+  }, [deckOwnerId, deckRepository])
 
   const copyCode = async () => {
     if (!room) return
@@ -186,27 +180,8 @@ export const LobbyRoomScreen = ({
     }
   }
 
-  const importDeck = async (event: SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setDeckBusy(true)
-    setMessage("Deck importeren…")
-    try {
-      const imported = await importDeckFromUrl(dispatch, deckUrl.trim())
-      const deck = createImportedDeckSnapshot(imported)
-      await repositories.decks.save(deck, deckOwnerId)
-      setDecks(await repositories.decks.list(deckOwnerId))
-      setSelectedDeckId(deck.id)
-      setDeckUrl("")
-      setMessage(`${deck.name} is lokaal geïmporteerd. Kies ‘Deck gereed’.`)
-    } catch (error) {
-      setMessage(importedDeckErrorMessage(error))
-    } finally {
-      setDeckBusy(false)
-    }
-  }
-
   const registerDeck = async () => {
-    const deck = decks.find(candidate => candidate.id === selectedDeckId)
+    const deck = decks.find(candidate => candidate.deckKey === selectedDeckId)
     if (!deck) {
       setMessage("Kies eerst een lokaal deck.")
       return
@@ -214,7 +189,7 @@ export const LobbyRoomScreen = ({
     setDeckBusy(true)
     setMessage("Deck registreren…")
     try {
-      await onlineGames.registerDeck(gameId, deck)
+      await onlineGames.registerDeck(gameId, deck.deckKey)
       await loadRoom()
       setMessage(`${deck.name} staat gereed voor deze battle.`)
     } catch (error) {
@@ -225,25 +200,6 @@ export const LobbyRoomScreen = ({
       )
     } finally {
       setDeckBusy(false)
-    }
-  }
-
-  const removeSelectedDeck = async () => {
-    const deck = decks.find(candidate => candidate.id === selectedDeckId)
-    if (!deck) return
-    setDeckBusy(true)
-    setMessage(null)
-    try {
-      await repositories.decks.delete(deck.id, deckOwnerId)
-      const remaining = decks.filter(candidate => candidate.id !== deck.id)
-      setDecks(remaining)
-      setSelectedDeckId(remaining[0]?.id ?? "")
-      setMessage(`${deck.name} is uit jouw lokale decklijst verwijderd.`)
-    } catch {
-      setMessage(`${deck.name} kon niet worden verwijderd.`)
-    } finally {
-      setDeckBusy(false)
-      setConfirmDeckDelete(false)
     }
   }
 
@@ -316,7 +272,8 @@ export const LobbyRoomScreen = ({
   ).length
   const canStart =
     isHost && openSeats === 0 && playersWithoutDeck === 0 && !starting
-  const selectedDeck = decks.find(deck => deck.id === selectedDeckId) ?? null
+  const selectedDeck =
+    decks.find(deck => deck.deckKey === selectedDeckId) ?? null
 
   return (
     <AppShell activeRoute="/online">
@@ -423,19 +380,18 @@ export const LobbyRoomScreen = ({
                 </div>
                 <div className="lobby-deck-picker">
                   <label>
-                    Lokaal deck
+                    Opgeslagen deck
                     <select
                       value={selectedDeckId}
                       disabled={deckBusy}
                       onChange={event => {
                         setSelectedDeckId(event.target.value)
-                        setConfirmDeckDelete(false)
                       }}
                     >
-                      <option value="">Nieuw deck importeren…</option>
+                      <option value="">Kies een deck…</option>
                       {decks.map(deck => (
-                        <option key={deck.id} value={deck.id}>
-                          {deck.name} · {deckCardCount(deck)} kaarten
+                        <option key={deck.deckKey} value={deck.deckKey}>
+                          {deck.name} · {deck.cardCount} kaarten
                         </option>
                       ))}
                     </select>
@@ -455,83 +411,18 @@ export const LobbyRoomScreen = ({
                             ? "Deck opnieuw registreren"
                             : "Deck gereed"}
                       </button>
-                      {confirmDeckDelete ? (
-                        <>
-                          <button
-                            className="button button--secondary"
-                            type="button"
-                            disabled={deckBusy}
-                            onClick={() => {
-                              setConfirmDeckDelete(false)
-                            }}
-                          >
-                            Annuleren
-                          </button>
-                          <button
-                            className="button button--danger"
-                            type="button"
-                            disabled={deckBusy}
-                            onClick={() => void removeSelectedDeck()}
-                          >
-                            Verwijderen bevestigen
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="button button--secondary"
-                          type="button"
-                          disabled={deckBusy}
-                          onClick={() => {
-                            setConfirmDeckDelete(true)
-                          }}
-                        >
-                          Uit lijst verwijderen
-                        </button>
-                      )}
                     </div>
                   ) : null}
                 </div>
                 {!decks.length ? (
                   <div className="lobby-deck-empty">
                     <p>Er staat nog geen deck onder dit account.</p>
-                    {legacyDeckCount ? (
-                      <p>
-                        Er {legacyDeckCount === 1 ? "staat" : "staan"} nog{" "}
-                        {legacyDeckCount} oude{" "}
-                        {legacyDeckCount === 1 ? "import" : "imports"} op dit
-                        apparaat.{" "}
-                        <AppLink to="/decks">
-                          Open Decks beheren om jouw imports te herstellen.
-                        </AppLink>
-                      </p>
-                    ) : null}
+                    <p>
+                      <AppLink to="/decks">
+                        Voeg eerst een deck toe in de Deck Library.
+                      </AppLink>
+                    </p>
                   </div>
-                ) : null}
-                {!selectedDeck ? (
-                  <form
-                    className="lobby-deck-import"
-                    onSubmit={event => void importDeck(event)}
-                  >
-                    <label>
-                      Openbare Archidekt-URL
-                      <input
-                        type="url"
-                        value={deckUrl}
-                        disabled={deckBusy}
-                        placeholder="https://archidekt.com/decks/…"
-                        onChange={event => {
-                          setDeckUrl(event.target.value)
-                        }}
-                      />
-                    </label>
-                    <button
-                      className="button button--secondary"
-                      type="submit"
-                      disabled={deckBusy || !deckUrl.trim()}
-                    >
-                      Importeren
-                    </button>
-                  </form>
                 ) : null}
               </section>
             ) : null}

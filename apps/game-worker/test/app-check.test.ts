@@ -28,7 +28,10 @@ const createSigner = async (kid: string) => {
   )
   const exported = await crypto.subtle.exportKey("jwk", pair.publicKey)
   const jwk = { ...exported, kid, alg: "RS256", use: "sig" }
-  const sign = async (claims: object, header: object = { alg: "RS256", typ: "JWT", kid }) => {
+  const sign = async (
+    claims: object,
+    header: object = { alg: "RS256", typ: "JWT", kid },
+  ) => {
     const unsigned = `${encode(header)}.${encode(claims)}`
     const signature = await crypto.subtle.sign(
       "RSASSA-PKCS1-v1_5",
@@ -148,16 +151,22 @@ test("refresht gecontroleerd bij keyrotatie", async () => {
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(Response.json({ keys: [oldSigner.jwk] }))
-    .mockResolvedValueOnce(Response.json({ keys: [newSigner.jwk] })) as typeof fetch
+    .mockResolvedValueOnce(
+      Response.json({ keys: [newSigner.jwk] }),
+    ) as typeof fetch
   const verifier = new FirebaseAppCheckVerifier(
     "445284154827",
     new Set([validClaims.sub]),
     fetcher,
     () => now,
   )
-  expect((await verifier.verify(await oldSigner.sign(validClaims))).valid).toBe(true)
+  expect((await verifier.verify(await oldSigner.sign(validClaims))).valid).toBe(
+    true,
+  )
   now += 61_000
-  expect((await verifier.verify(await newSigner.sign(validClaims))).valid).toBe(true)
+  expect((await verifier.verify(await newSigner.sign(validClaims))).valid).toBe(
+    true,
+  )
   expect(fetcher).toHaveBeenCalledTimes(2)
 })
 
@@ -166,7 +175,9 @@ test("classificeert malformed, onbekende keys en JWKS-uitval veilig", async () =
   const verifier = new FirebaseAppCheckVerifier(
     "445284154827",
     new Set([validClaims.sub]),
-    vi.fn(() => Promise.resolve(Response.json({ keys: [signer.jwk] }))) as typeof fetch,
+    vi.fn(() =>
+      Promise.resolve(Response.json({ keys: [signer.jwk] })),
+    ) as typeof fetch,
     () => 1_500_000,
   )
   await expect(verifier.verify("geen-jwt")).resolves.toEqual({
@@ -184,7 +195,9 @@ test("classificeert malformed, onbekende keys en JWKS-uitval veilig", async () =
     vi.fn(() => Promise.reject(new Error("offline"))) as typeof fetch,
     () => 1_500_000,
   )
-  await expect(unavailable.verify(await signer.sign(validClaims))).resolves.toEqual({
+  await expect(
+    unavailable.verify(await signer.sign(validClaims)),
+  ).resolves.toEqual({
     valid: false,
     reason: "key_fetch_failed",
   })

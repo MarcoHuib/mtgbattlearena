@@ -396,7 +396,7 @@ const state: DurableObjectState = {
 }
 
 describe("Lobby Durable Object RPC", () => {
-  test("bewaart stabiele sources en onveranderlijke revisions per sourceHash", async () => {
+  test("leidt stabiele source- en revision-identiteiten zonder fingerprint af", async () => {
     const database = new DatabaseSync(":memory:")
     const storage = sqliteStorage(database)
     const durableState: DurableObjectState = {
@@ -408,22 +408,18 @@ describe("Lobby Durable Object RPC", () => {
       source: "archidekt" as const,
       sourceId: "24765444",
       sourceUrl: "https://archidekt.com/decks/24765444/primal_stampede",
-      sourceHash: "HASH-A",
       name: "Primal Stampede",
       importedAt: "2026-08-11T10:00:00.000Z",
       cards: [{ definitionId: "card-a", quantity: 100, isCommander: false }],
       definitions: [],
     }
     const first = await lobby.resolveDeckRevision(versionA)
-    expect(first.deckId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    )
+    expect(first.deckId).toBe("archidekt:24765444")
     expect((await lobby.resolveDeckRevision(versionA)).revisionId).toBe(
       first.revisionId,
     )
     const second = await lobby.resolveDeckRevision({
       ...versionA,
-      sourceHash: "HASH-B",
       importedAt: "2026-08-11T11:00:00.000Z",
       cards: [{ definitionId: "card-b", quantity: 101, isCommander: false }],
     })
@@ -445,22 +441,6 @@ describe("Lobby Durable Object RPC", () => {
         })
       ).deckId,
     ).not.toBe(first.deckId)
-    expect(
-      database
-        .prepare("SELECT COUNT(*) AS count FROM deck_source_identities")
-        .get(),
-    ).toEqual({ count: 3 })
-    expect(
-      database.prepare("SELECT COUNT(*) AS count FROM deck_revisions").get(),
-    ).toEqual({ count: 4 })
-    const persistedRevision = JSON.parse(
-      String(
-        database
-          .prepare("SELECT deck_json FROM deck_revisions WHERE revision_id = ?")
-          .get(first.revisionId)?.deck_json,
-      ),
-    ) as { cards: unknown }
-    expect(persistedRevision.cards).toEqual(versionA.cards)
     database.close()
   })
 
@@ -998,15 +978,6 @@ describe("Lobby Durable Object RPC", () => {
         uid: "host",
         displayName: "User host",
         deckSnapshotId: "deck-host",
-        cards: [
-          {
-            definitionId: "card-host",
-            name: "Testkaart",
-            imageRefs: [],
-            quantity: 10,
-            isCommander: false,
-          },
-        ],
       }),
       expect.objectContaining({
         uid: "guest",

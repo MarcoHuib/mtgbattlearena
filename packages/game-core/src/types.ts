@@ -87,12 +87,31 @@ export type ImportedDeck = {
   source: DeckSource
   sourceId: string
   sourceUrl: string
-  sourceHash: string
   name: string
   format?: string
   importedAt: string
   cards: DeckCard[]
   definitions: CardDefinition[]
+}
+
+export type CloudDeckMetadata = {
+  deckKey: string
+  provider: Exclude<DeckSource, "local">
+  externalDeckKey: string
+  sourceUrl: string
+  name: string
+  format?: string
+  commanderSummary?: string
+  cardCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type CloudDeckContent = {
+  deckKey: string
+  cards: DeckCard[]
+  definitions: CardDefinition[]
+  importedAt: string
 }
 
 export type DeckSnapshot = ImportedDeck & {

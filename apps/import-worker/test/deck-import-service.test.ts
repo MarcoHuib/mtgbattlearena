@@ -1,5 +1,4 @@
 import { describe, expect, test, vi } from "vitest"
-import { fingerprintArchidektSource } from "@mtg/deck-source"
 import {
   createDeckImportService,
   importedDeckCacheKey,
@@ -96,18 +95,23 @@ describe("application DTO cache", () => {
     const id = "6a9c39e4-a8cf-42dd-8d0e-45634b335546"
     const deck = rawDeck()
     deck.cards[0]!.card.uid = id
-    const result = await createDeckImportService({ cache: new MemoryCache(), fetcher: fetcher(deck) })
-      .importFromUrl("https://archidekt.com/decks/123")
+    const result = await createDeckImportService({
+      cache: new MemoryCache(),
+      fetcher: fetcher(deck),
+    }).importFromUrl("https://archidekt.com/decks/123")
     expect(result.deck.definitions[0]?.imageRefs).toEqual([
       { resolver: 1, imageId: id, faceIndex: 0, variant: "normal" },
     ])
-    expect(JSON.stringify(result.deck)).not.toMatch(/card-images\.archidekt|cards\.scryfall|imageUrl/)
+    expect(JSON.stringify(result.deck)).not.toMatch(
+      /card-images\.archidekt|cards\.scryfall|imageUrl/,
+    )
   })
 
   test("custom Foretell definition does not claim a Scryfall image", async () => {
     const deck = rawDeck()
     ;(
-      deck.cards[0]!.card.oracleCard as typeof deck.cards[0]["card"]["oracleCard"] & {
+      deck.cards[0]!.card
+        .oracleCard as (typeof deck.cards)[0]["card"]["oracleCard"] & {
         keywords: string[]
       }
     ).keywords = ["Foretell"]
@@ -121,7 +125,7 @@ describe("application DTO cache", () => {
     ).toEqual([])
   })
 
-  test("miss fetcht, valideert, hasht en cachet het DTO", async () => {
+  test("miss fetcht, valideert en cachet het DTO", async () => {
     const cache = new MemoryCache()
     const upstream = fetcher()
     const result = await createDeckImportService({
@@ -130,35 +134,25 @@ describe("application DTO cache", () => {
     }).importFromUrl("https://archidekt.com/decks/123/test")
     expect(result.cacheStatus).toBe("MISS")
     expect(upstream).toHaveBeenCalledTimes(2)
-    expect(result.deck.sourceHash).toMatch(/^[a-f0-9]{64}$/)
     expect(JSON.stringify(result.deck)).not.toContain("categories")
   })
 
-  test("hit zonder hash en met matching hash doen geen providercall", async () => {
+  test("een expliciete import raadpleegt de provider opnieuw", async () => {
     const cache = new MemoryCache()
     const first = fetcher()
     const service = createDeckImportService({ cache, fetcher: first })
-    const imported = await service.importFromUrl(
-      "https://archidekt.com/decks/123",
-    )
-    const noFetch = vi.fn()
-    const cachedService = createDeckImportService({ cache, fetcher: noFetch })
-    expect(
-      (await cachedService.importFromUrl("https://archidekt.com/decks/123"))
-        .cacheStatus,
-    ).toBe("HIT")
-    expect(
-      (
-        await cachedService.importFromUrl(
-          "https://archidekt.com/decks/123",
-          imported.deck.sourceHash,
-        )
-      ).cacheStatus,
-    ).toBe("HIT")
-    expect(noFetch).not.toHaveBeenCalled()
+    await service.importFromUrl("https://archidekt.com/decks/123")
+    const upstream = fetcher(rawDeck(2))
+    const refreshed = await createDeckImportService({
+      cache,
+      fetcher: upstream,
+    }).importFromUrl("https://archidekt.com/decks/123")
+    expect(refreshed.cacheStatus).toBe("REFRESHED")
+    expect(refreshed.deck.cards[0]?.quantity).toBe(2)
+    expect(upstream).toHaveBeenCalled()
   })
 
-  test("mismatch refetcht en gebruikt uitsluitend de backendhash", async () => {
+  test("refresh gebruikt uitsluitend opnieuw gevalideerde providerdata", async () => {
     const cache = new MemoryCache()
     await createDeckImportService({ cache, fetcher: fetcher() }).importFromUrl(
       "https://archidekt.com/decks/123",
@@ -166,18 +160,14 @@ describe("application DTO cache", () => {
     const result = await createDeckImportService({
       cache,
       fetcher: fetcher(rawDeck(2)),
-    }).importFromUrl(
-      "https://archidekt.com/decks/123",
-      "client-is-not-authoritative",
-    )
+    }).importFromUrl("https://archidekt.com/decks/123")
     expect(result.cacheStatus).toBe("REFRESHED")
-    expect(result.deck.sourceHash).not.toBe("client-is-not-authoritative")
     expect(result.deck.cards[0].quantity).toBe(2)
   })
 
   test("ongeldige refresh overschrijft de geldige cache niet", async () => {
     const cache = new MemoryCache()
-    const original = await createDeckImportService({
+    await createDeckImportService({
       cache,
       fetcher: fetcher(),
     }).importFromUrl("https://archidekt.com/decks/123")
@@ -199,14 +189,13 @@ describe("application DTO cache", () => {
     await expect(
       createDeckImportService({ cache, fetcher: invalidFetch }).importFromUrl(
         "https://archidekt.com/decks/123",
-        "different",
       ),
     ).rejects.toThrow()
-    const retained = await createDeckImportService({
-      cache,
-      fetcher: vi.fn(),
-    }).importFromUrl("https://archidekt.com/decks/123")
-    expect(retained.deck.sourceHash).toBe(original.deck.sourceHash)
+    const cachedValue: unknown = await cache.values
+      .get(importedDeckCacheKey("archidekt", "123").url)
+      ?.clone()
+      .json()
+    expect(cachedValue).toMatchObject({ name: "Provider Neutral" })
   })
 
   test("negeert een legacy raw cache-entry en schrijft een geldig v2 DTO", async () => {
@@ -233,9 +222,6 @@ describe("application DTO cache", () => {
     )
     const cachedValue: unknown = await cache.values.get(key.url)?.clone().json()
     expect(cachedValue).toMatchObject({ source: "archidekt" })
-    expect((cachedValue as { sourceHash?: unknown }).sourceHash).toMatch(
-      /^[a-f0-9]{64}$/,
-    )
   })
 
   test("cachefouten blokkeren een authoritative import niet", async () => {
@@ -334,16 +320,4 @@ test("providerfetchfouten loggen uitsluitend veilige upstreamdiagnostiek", async
     upstreamHostname: "archidekt.com",
     upstreamPath: "/api/decks/24765444/",
   })
-})
-
-test("gedeelde bronfingerprint is orde-onafhankelijk en detecteert deckwijzigingen", async () => {
-  const base = rawDeck(1)
-  const hash = await fingerprintArchidektSource(base, rawTokens)
-  expect(
-    await fingerprintArchidektSource(
-      { ...base, cards: [...base.cards].reverse() },
-      { results: [...rawTokens.results].reverse() },
-    ),
-  ).toBe(hash)
-  expect(await fingerprintArchidektSource(rawDeck(2), rawTokens)).not.toBe(hash)
 })

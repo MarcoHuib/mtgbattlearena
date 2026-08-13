@@ -60,8 +60,8 @@ export const LobbyDocument = new TypedDocumentString(`
 }
     `);
 export const DeckFromUrlDocument = new TypedDocumentString(`
-    query DeckFromUrl($url: String!, $sourceHash: String) {
-  deckFromUrl(url: $url, sourceHash: $sourceHash) {
+    query DeckFromUrl($url: String!) {
+  deckFromUrl(url: $url) {
     cacheStatus
     deckId
     revisionId
@@ -69,7 +69,6 @@ export const DeckFromUrlDocument = new TypedDocumentString(`
       source
       sourceId
       sourceUrl
-      sourceHash
       name
       format
       importedAt
@@ -109,6 +108,43 @@ export const DeckFromUrlDocument = new TypedDocumentString(`
   }
 }
     `);
+export const CreateCloudDeckDocument = new TypedDocumentString(`
+    mutation CreateCloudDeck($url: String!) {
+  createCloudDeck(url: $url) {
+    deckKey
+    provider
+    externalDeckKey
+    sourceUrl
+    name
+    format
+    commanderSummary
+    cardCount
+    createdAt
+    updatedAt
+  }
+}
+    `);
+export const UpdateCloudDeckDocument = new TypedDocumentString(`
+    mutation UpdateCloudDeck($deckKey: ID!) {
+  updateCloudDeck(deckKey: $deckKey) {
+    deckKey
+    provider
+    externalDeckKey
+    sourceUrl
+    name
+    format
+    commanderSummary
+    cardCount
+    createdAt
+    updatedAt
+  }
+}
+    `);
+export const DeleteCloudDeckDocument = new TypedDocumentString(`
+    mutation DeleteCloudDeck($deckKey: ID!) {
+  deleteCloudDeck(deckKey: $deckKey)
+}
+    `);
 export const CreateLobbyDocument = new TypedDocumentString(`
     mutation CreateLobby($input: CreateLobbyInput!) {
   createLobby(input: $input) {
@@ -138,8 +174,8 @@ export const AbortGameDocument = new TypedDocumentString(`
 }
     `);
 export const RegisterDeckDocument = new TypedDocumentString(`
-    mutation RegisterDeck($gameId: ID!, $deck: RegisterDeckInput!) {
-  registerDeck(gameId: $gameId, deck: $deck)
+    mutation RegisterDeck($gameId: ID!, $deckKey: ID!) {
+  registerDeck(gameId: $gameId, deckKey: $deckKey)
 }
     `);
 export const StartGameDocument = new TypedDocumentString(`
@@ -166,6 +202,15 @@ const injectedRtkApi = graphqlApi.injectEndpoints({
     DeckFromUrl: build.query<Types.DeckFromUrlQuery, Types.DeckFromUrlQueryVariables>({
       query: (variables) => ({ document: DeckFromUrlDocument as unknown as string, variables })
     }),
+    CreateCloudDeck: build.mutation<Types.CreateCloudDeckMutation, Types.CreateCloudDeckMutationVariables>({
+      query: (variables) => ({ document: CreateCloudDeckDocument as unknown as string, variables })
+    }),
+    UpdateCloudDeck: build.mutation<Types.UpdateCloudDeckMutation, Types.UpdateCloudDeckMutationVariables>({
+      query: (variables) => ({ document: UpdateCloudDeckDocument as unknown as string, variables })
+    }),
+    DeleteCloudDeck: build.mutation<Types.DeleteCloudDeckMutation, Types.DeleteCloudDeckMutationVariables>({
+      query: (variables) => ({ document: DeleteCloudDeckDocument as unknown as string, variables })
+    }),
     CreateLobby: build.mutation<Types.CreateLobbyMutation, Types.CreateLobbyMutationVariables>({
       query: (variables) => ({ document: CreateLobbyDocument as unknown as string, variables })
     }),
@@ -191,5 +236,5 @@ const injectedRtkApi = graphqlApi.injectEndpoints({
 });
 
 export { injectedRtkApi as api };
-export const { usePublicLobbiesQuery, useLazyPublicLobbiesQuery, useLobbyQuery, useLazyLobbyQuery, useDeckFromUrlQuery, useLazyDeckFromUrlQuery, useCreateLobbyMutation, useJoinLobbyMutation, useDeleteLobbyMutation, useAbortGameMutation, useRegisterDeckMutation, useStartGameMutation, useCreateSocketTicketMutation } = injectedRtkApi;
+export const { usePublicLobbiesQuery, useLazyPublicLobbiesQuery, useLobbyQuery, useLazyLobbyQuery, useDeckFromUrlQuery, useLazyDeckFromUrlQuery, useCreateCloudDeckMutation, useUpdateCloudDeckMutation, useDeleteCloudDeckMutation, useCreateLobbyMutation, useJoinLobbyMutation, useDeleteLobbyMutation, useAbortGameMutation, useRegisterDeckMutation, useStartGameMutation, useCreateSocketTicketMutation } = injectedRtkApi;
 
