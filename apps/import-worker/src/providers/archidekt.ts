@@ -161,10 +161,25 @@ const typeLine = (value: TypeLineInput): string | undefined => {
 const numberStat = (value: string | null | undefined): number | undefined =>
   value && /^-?\d+$/.test(value) ? Number(value) : undefined
 const manaColors = new Set<ManaColor>(["W", "U", "B", "R", "G"])
-const colorIdentity = (values: string[] | undefined): ManaColor[] =>
-  [...new Set(values ?? [])].filter((value): value is ManaColor =>
-    manaColors.has(value as ManaColor),
-  )
+const archidektColorNames: Record<string, ManaColor> = {
+  white: "W",
+  blue: "U",
+  black: "B",
+  red: "R",
+  green: "G",
+}
+const isManaColor = (value: string): value is ManaColor =>
+  manaColors.has(value as ManaColor)
+const colorIdentity = (values: string[] | undefined): ManaColor[] => [
+  ...new Set(
+    (values ?? []).flatMap(value => {
+      const normalized = value.trim()
+      if (isManaColor(normalized)) return [normalized]
+      const mapped = archidektColorNames[normalized.toLowerCase()]
+      return mapped ? [mapped] : []
+    }),
+  ),
+]
 const tokenKind = (name: string, types: readonly string[]): TokenKind => {
   const key = name.toLowerCase()
   if (key === "treasure" || key === "food" || key === "clue" || key === "copy")
