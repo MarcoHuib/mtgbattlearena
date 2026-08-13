@@ -73,6 +73,9 @@
 | --------------------------------- | ------------------ |
 | Offline battle voor 2–6 spelers   | 🟢 **Ready**       |
 | Provider-neutrale deckimport      | 🟢 **Ready**       |
+| Archidekt-deckimport              | 🟢 **Ready**       |
+| ManaBox-deckprovider              | ⚪ **Planned**     |
+| Moxfield-deckprovider             | ⚪ **Planned**     |
 | Autosave, hervatten en undo/redo  | 🟢 **Ready**       |
 | Offlinepakket en PWA              | 🟢 **Ready**       |
 | Commander-zones en statustracking | 🟢 **Ready**       |
@@ -639,7 +642,7 @@ uitgeschreven. Kaartafbeeldingen lopen via de afzonderlijke imagegrens.
 
 | Dienst             | Gebruik                                                   |
 | ------------------ | --------------------------------------------------------- |
-| **Deckproviders**  | User-triggered, provider-neutrale deckimport              |
+| **Deckproviders**  | Archidekt actief; ManaBox en Moxfield gepland             |
 | **Scryfall**       | Kaartafbeeldingen achter de afzonderlijke imagegrens      |
 | **Firebase**       | Authenticatie, gebruikersidentiteit en Hosting            |
 | **Cloudflare**     | Server-, realtime- en edgefunctionaliteit                 |
@@ -665,6 +668,7 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 ### ✅ Gerealiseerd
 
 - [x] Provider-neutrale deckimport en normalisatie
+- [x] Archidekt als eerste ondersteunde externe deckprovider
 - [x] Local-first battle met autosave en hervatten
 - [x] Undo/redo, Commander-zones, counters, tokens en statustracking
 - [x] Expliciete offlinepakketten en PWA-app-shell
@@ -680,6 +684,9 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 
 ### 🚧 Volgende uitbreidingen
 
+- [ ] ManaBox als aanvullende user-triggered deckprovider
+- [ ] Moxfield als aanvullende user-triggered deckprovider
+- [ ] Vertrouwelijke provideradapters via een afgeschermde server-side packagegrens, waar providerafspraken dat vereisen
 - [ ] Verdere online kaart- en tafelacties
 - [ ] Commander damage en aanvullende multiplayerstatus volledig online
 - [ ] Verdere hardening van reconnect- en recoveryflows
@@ -698,8 +705,6 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 | [`AGENTS.md`](AGENTS.md)                                           | Architectuur, scope, kwaliteit en regels voor coding agents |
 | [`docs/architecture/`](docs/architecture/)                         | Architecture Decision Records                               |
 | [`docs/ci-cd.md`](docs/ci-cd.md)                                   | CI/CD, security checks en deployments                       |
-| [`ONLINE_MULTIPLAYER_PROMPT.md`](ONLINE_MULTIPLAYER_PROMPT.md)     | Historische context van de online multiplayeruitbreiding     |
-| [`FIRST_IMPLEMENTATION_PROMPT.md`](FIRST_IMPLEMENTATION_PROMPT.md) | Context van de oorspronkelijke offline implementatie        |
 | [`docs/legal/PROVIDER_INTEGRATIONS.md`](docs/legal/PROVIDER_INTEGRATIONS.md) | Publieke grens voor externe deckproviders                    |
 | [`docs/legal/`](docs/legal/)                                       | Privacy, voorwaarden en third-party notices                 |
 
