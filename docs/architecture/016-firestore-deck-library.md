@@ -89,6 +89,12 @@ users/{uid}/decks/{deckKey}/content/current
   importedAt
 ```
 
+`thumbnailImageRef` en `colorIdentity` worden als native Firestore map- en
+arrayvelden opgeslagen. De browseradapter normaliseert deze velden runtime en
+blijft leescompatibel met de kortstondig gebruikte JSON-tekstvelden. Een
+ongeldige legacy-thumbnail wordt genegeerd en mag geen library- of
+offline-scherm laten crashen.
+
 De exacte veldnamen worden tijdens Feature 1 afgestemd op het bestaande
 provider-neutrale domeincontract. Providerresponses zelf worden niet in
 Firestore opgeslagen. `thumbnailImageRef` is één genormaliseerde

@@ -7,7 +7,6 @@ import {
   useSyncExternalStore,
 } from "react"
 import type { CloudDeckMetadata } from "@mtg/game-core/types"
-import { getCardImageUrl } from "@mtg/game-core/images"
 import { AppLink } from "../../app/router"
 import { AppShell } from "../../components/AppShell"
 import {
@@ -17,6 +16,7 @@ import {
 } from "../../app/api/remoteGraphqlApi"
 import {
   createFirestoreCloudDeckRepository,
+  cloudDeckThumbnailUrl,
   type CloudDeckRepository,
 } from "../decks/cloudDeckRepository"
 import { readRuntimeFirebaseConfig } from "../online/firebaseAuth"
@@ -38,16 +38,6 @@ const manaLabels = {
   R: "Rood",
   G: "Groen",
 } as const
-
-const thumbnailUrl = (deck: CloudDeckMetadata) => {
-  try {
-    return deck.thumbnailImageRef
-      ? getCardImageUrl(deck.thumbnailImageRef)
-      : null
-  } catch {
-    return null
-  }
-}
 
 const dateLabel = (value: string) =>
   new Intl.DateTimeFormat("nl-NL", { dateStyle: "medium" }).format(
@@ -418,9 +408,9 @@ export const DecksScreen = ({
               >
                 <div className="deck-tile__glow" aria-hidden="true" />
                 <div className="deck-tile__cover">
-                  {thumbnailUrl(deck) ? (
+                  {cloudDeckThumbnailUrl(deck) ? (
                     <img
-                      src={thumbnailUrl(deck) ?? undefined}
+                      src={cloudDeckThumbnailUrl(deck) ?? undefined}
                       alt={`Illustratie van ${deck.commanderSummary ?? deck.name}`}
                       loading="lazy"
                     />
