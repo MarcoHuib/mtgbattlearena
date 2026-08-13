@@ -48,7 +48,6 @@ Publieke documenten mogen wel de functionele en juridische grens noemen, zoals
 het feit dat toestemming bestaat, dat crawling niet is toegestaan, dat toegang
 kan worden ingetrokken en dat provider-defined gebruikslimieten worden nageleefd.
 
-
 ## Geplande private-packagevorm
 
 Voor providers waarvoor ook de technische adapterkennis niet openbaar mag worden,

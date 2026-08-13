@@ -35,8 +35,8 @@ query Lobby($id: ID!) {
   }
 }
 
-query DeckFromUrl($url: String!, $sourceHash: String) {
-  deckFromUrl(url: $url, sourceHash: $sourceHash) {
+query DeckFromUrl($url: String!) {
+  deckFromUrl(url: $url) {
     cacheStatus
     deckId
     revisionId
@@ -44,7 +44,6 @@ query DeckFromUrl($url: String!, $sourceHash: String) {
       source
       sourceId
       sourceUrl
-      sourceHash
       name
       format
       importedAt
@@ -84,6 +83,40 @@ query DeckFromUrl($url: String!, $sourceHash: String) {
   }
 }
 
+mutation CreateCloudDeck($url: String!) {
+  createCloudDeck(url: $url) {
+    deckKey
+    provider
+    externalDeckKey
+    sourceUrl
+    name
+    format
+    commanderSummary
+    cardCount
+    createdAt
+    updatedAt
+  }
+}
+
+mutation UpdateCloudDeck($deckKey: ID!) {
+  updateCloudDeck(deckKey: $deckKey) {
+    deckKey
+    provider
+    externalDeckKey
+    sourceUrl
+    name
+    format
+    commanderSummary
+    cardCount
+    createdAt
+    updatedAt
+  }
+}
+
+mutation DeleteCloudDeck($deckKey: ID!) {
+  deleteCloudDeck(deckKey: $deckKey)
+}
+
 mutation CreateLobby($input: CreateLobbyInput!) {
   createLobby(input: $input) {
     id
@@ -106,8 +139,8 @@ mutation DeleteLobby($id: ID!) {
 mutation AbortGame($gameId: ID!) {
   abortGame(gameId: $gameId)
 }
-mutation RegisterDeck($gameId: ID!, $deck: RegisterDeckInput!) {
-  registerDeck(gameId: $gameId, deck: $deck)
+mutation RegisterDeck($gameId: ID!, $deckKey: ID!) {
+  registerDeck(gameId: $gameId, deckKey: $deckKey)
 }
 mutation StartGame($gameId: ID!) {
   startGame(gameId: $gameId)

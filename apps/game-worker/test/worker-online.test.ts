@@ -25,7 +25,6 @@ test("deckimport gebruikt het private service-bindingcontract zonder browsercred
       expect(request.headers.has("X-Firebase-AppCheck")).toBe(false)
       expect(await request.json()).toEqual({
         url: "https://archidekt.com/decks/24765444/primal_stampede",
-        sourceHash: "hint",
       })
       return Response.json({
         cacheStatus: "HIT",
@@ -33,7 +32,6 @@ test("deckimport gebruikt het private service-bindingcontract zonder browsercred
           source: "archidekt",
           sourceId: "24765444",
           sourceUrl: "https://archidekt.com/decks/24765444",
-          sourceHash: "server-hash",
           name: "Primal Stampede",
           importedAt: "2026-08-11T00:00:00.000Z",
           cards: [],
@@ -46,7 +44,6 @@ test("deckimport gebruikt het private service-bindingcontract zonder browsercred
     importDeckThroughService(
       service,
       "https://archidekt.com/decks/24765444/primal_stampede",
-      "hint",
       "release-test",
     ),
   ).resolves.toMatchObject({ cacheStatus: "HIT" })

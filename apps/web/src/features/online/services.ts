@@ -1,5 +1,3 @@
-import { createOnlineDeckSubmission } from "@mtg/game-protocol"
-import type { DeckSnapshot } from "@mtg/game-core/types"
 import {
   arenaHealthSchema,
   lobbyListSchema,
@@ -361,11 +359,11 @@ export class MockOnlineGameService implements OnlineGameService {
     lobby.status = "finished"
   }
 
-  async registerDeck(gameId: string, deck: DeckSnapshot) {
+  async registerDeck(gameId: string, deckKey: string) {
     await wait()
     const lobby = this.lobbies.find(candidate => candidate.id === gameId)
     if (!lobby?.viewerRole) throw new Error("Lobby niet gevonden.")
-    this.registeredDecks.set(`${gameId}:${lobby.viewerRole}`, deck.name)
+    this.registeredDecks.set(`${gameId}:${lobby.viewerRole}`, deckKey)
   }
 
   async startGame(gameId: string) {
@@ -508,12 +506,12 @@ export class CloudflareOnlineGameService implements OnlineGameService {
       .unwrap()
   }
 
-  async registerDeck(gameId: string, deck: DeckSnapshot) {
+  async registerDeck(gameId: string, deckKey: string) {
     await store
       .dispatch(
         remoteGraphqlApi.endpoints.RegisterDeck.initiate({
           gameId,
-          deck: createOnlineDeckSubmission(deck),
+          deckKey,
         }),
       )
       .unwrap()

@@ -50,8 +50,7 @@ const firebaseAuthMessages: Record<string, string> = {
     "De eerdere inlogpoging is geannuleerd omdat een nieuwe inlogpopup werd geopend.",
   "auth/credential-already-in-use":
     "Dit Microsoft-account is al gekoppeld aan een ander account. Er zijn geen accounts samengevoegd.",
-  "auth/provider-already-linked":
-    "Microsoft is al aan dit account gekoppeld.",
+  "auth/provider-already-linked": "Microsoft is al aan dit account gekoppeld.",
   "auth/popup-blocked":
     "De SSO-login werd door de browser geblokkeerd. Sta pop-ups toe en probeer opnieuw.",
   "auth/popup-closed-by-user":
@@ -117,8 +116,7 @@ export class FederatedAccountLinker<UserValue, CredentialValue> {
         firebaseErrorCode(error) ===
         "auth/account-exists-with-different-credential"
       ) {
-        const credential =
-          this.operations.microsoftCredentialFromError(error)
+        const credential = this.operations.microsoftCredentialFromError(error)
         if (credential) {
           this.pendingMicrosoftCredential = credential
           throw Object.assign(

@@ -18,7 +18,9 @@ describe("legacy image compatibility", () => {
       variant: "normal" as const,
     }
     expect(normalizeCardImageRef(current)).toEqual(current)
-    expect(normalizeCardImageRef(normalizeCardImageRef(current))).toEqual(current)
+    expect(normalizeCardImageRef(normalizeCardImageRef(current))).toEqual(
+      current,
+    )
   })
 
   test("recovers a validated legacy assetKey and ignores its URL", () => {

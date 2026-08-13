@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — 13 augustus 2026.
+Accepted en geïmplementeerd — 13 augustus 2026.
 
 ## Context
 
@@ -149,6 +149,12 @@ repository, logs of publieke build-artifacts.
 Omdat IAM-geauthenticeerde servertoegang Firestore Security Rules kan omzeilen,
 moet servercode tenant-isolatie zelf afdwingen: ieder pad wordt opgebouwd uit de
 door MTG Battle Arena geverifieerde `uid`, niet uit een user-controlled owner-ID.
+
+De implementatie gebruikt Firestore REST `documents:commit`. De Game Worker
+maakt kortlevende OAuth-access tokens met een service-account dat uitsluitend via
+het Worker Secret `FIRESTORE_SERVICE_ACCOUNT_JSON` wordt aangeleverd. Create
+gebruikt `exists: false` voor race-safe duplicate-detectie; Update en Delete
+verwerken metadata en `content/current` in één atomische commit.
 
 ### Directe reads en loadverdeling
 

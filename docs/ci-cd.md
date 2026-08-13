@@ -23,7 +23,6 @@ een GitHub Secret/Environment Secret, nooit uit een gewone Repository Variable, 
 mag de workflow de waarde niet naar stdout, artifacts of gegenereerde clientconfig
 schrijven.
 
-
 `main` is de single source of truth voor iedere release. Development gebeurt
 lokaal; pull requests naar `main` valideren code zonder credentials of
 deployment. Na merge promoot één workflow dezelfde release eerst naar Beta en
@@ -45,11 +44,11 @@ feature/* → PR naar main → CI → merge naar main
                          Production · Build #X
 ```
 
-| Omgeving    | GitHub Environment | Frontend                         | API / WebSocket                                                            | Card CDN |
-| ----------- | ------------------ | -------------------------------- | -------------------------------------------------------------------------- | -------- |
-| Development | geen               | Vite dev server                  | lokale Workers/proxy                                                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets |
+| Omgeving    | GitHub Environment | Frontend                         | API / WebSocket                                                            | Card CDN                                                                                            |
+| ----------- | ------------------ | -------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Development | geen               | Vite dev server                  | lokale Workers/proxy                                                       | `https://cdn.mtgbattlearena.nl` voor echte kaartassets                                              |
 | Beta        | `staging`          | `https://beta.mtgbattlearena.nl` | `https://api.beta.mtgbattlearena.nl` / `https://ws.beta.mtgbattlearena.nl` | publieke CDN blijft `https://cdn.mtgbattlearena.nl`; staging Image Worker heeft geen publieke route |
-| Production  | `production`       | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           | `https://cdn.mtgbattlearena.nl` |
+| Production  | `production`       | `https://mtgbattlearena.nl`      | `https://api.mtgbattlearena.nl` / `https://ws.mtgbattlearena.nl`           | `https://cdn.mtgbattlearena.nl`                                                                     |
 
 De branch `staging` is niet meer nodig voor CI/CD. De naam `staging` blijft
 uitsluitend bestaan als GitHub Environment, Firebase Hosting-target en Wrangler
@@ -178,26 +177,26 @@ Beide GitHub Environments hebben nodig:
 Configureer deze niet-geheime GitHub Repository Variables eenmaal voor beide
 omgevingen:
 
-| Repository Variable    | Inhoud                               |
-| ---------------------- | ------------------------------------ |
-| `FIREBASE_API_KEY`     | publieke gedeelde Firebase-webconfig |
-| `FIREBASE_PROJECT_ID`  | gedeeld Firebaseproject-ID           |
-| `FIREBASE_MEASUREMENT_ID` | publieke Analytics measurement-ID |
+| Repository Variable       | Inhoud                               |
+| ------------------------- | ------------------------------------ |
+| `FIREBASE_API_KEY`        | publieke gedeelde Firebase-webconfig |
+| `FIREBASE_PROJECT_ID`     | gedeeld Firebaseproject-ID           |
+| `FIREBASE_MEASUREMENT_ID` | publieke Analytics measurement-ID    |
 
 Configureer daarnaast deze GitHub Environment Variables per omgeving:
 
-| Environment Variable  | `staging`                            | `production`                    |
-| -------------------- | ------------------------------------ | ------------------------------- |
-| `APP_ENV`            | `staging`                            | `production`                    |
-| `IMPORT_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
-| `ONLINE_API_URL`     | `https://api.beta.mtgbattlearena.nl` | `https://api.mtgbattlearena.nl` |
-| `ONLINE_SOCKET_URL`  | `https://ws.beta.mtgbattlearena.nl`  | `https://ws.mtgbattlearena.nl`  |
-| `FIREBASE_AUTH_DOMAIN` | `beta.mtgbattlearena.nl`           | `mtgbattlearena.nl`             |
-| `FIREBASE_APP_ID` | afzonderlijke publieke beta Web App-ID | publieke productie Web App-ID |
-| `FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY` | publieke beta Enterprise-sitekey | publieke productie Enterprise-sitekey |
-| `FIREBASE_PROJECT_NUMBER` | numeriek Firebase-projectnummer | numeriek Firebase-projectnummer |
-| `FIREBASE_ALLOWED_APP_IDS` | uitsluitend beta App-ID(s) | uitsluitend productie App-ID(s) |
-| `APP_CHECK_ENFORCEMENT` | `enforce` | eerst `monitor`, na observatie `enforce` |
+| Environment Variable                               | `staging`                              | `production`                             |
+| -------------------------------------------------- | -------------------------------------- | ---------------------------------------- |
+| `APP_ENV`                                          | `staging`                              | `production`                             |
+| `IMPORT_API_URL`                                   | `https://api.beta.mtgbattlearena.nl`   | `https://api.mtgbattlearena.nl`          |
+| `ONLINE_API_URL`                                   | `https://api.beta.mtgbattlearena.nl`   | `https://api.mtgbattlearena.nl`          |
+| `ONLINE_SOCKET_URL`                                | `https://ws.beta.mtgbattlearena.nl`    | `https://ws.mtgbattlearena.nl`           |
+| `FIREBASE_AUTH_DOMAIN`                             | `beta.mtgbattlearena.nl`               | `mtgbattlearena.nl`                      |
+| `FIREBASE_APP_ID`                                  | afzonderlijke publieke beta Web App-ID | publieke productie Web App-ID            |
+| `FIREBASE_APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY` | publieke beta Enterprise-sitekey       | publieke productie Enterprise-sitekey    |
+| `FIREBASE_PROJECT_NUMBER`                          | numeriek Firebase-projectnummer        | numeriek Firebase-projectnummer          |
+| `FIREBASE_ALLOWED_APP_IDS`                         | uitsluitend beta App-ID(s)             | uitsluitend productie App-ID(s)          |
+| `APP_CHECK_ENFORCEMENT`                            | `enforce`                              | eerst `monitor`, na observatie `enforce` |
 
 `RELEASE_VERSION` wordt door de workflow gezet op `github.run_number` en
 `RUNTIME_CONFIG_OUTPUT` op `apps/web/dist/runtime-config.js`; deze hoeven niet
@@ -215,7 +214,7 @@ een verborgen handmatige consolewijziging. Wanneer Feature 1 wordt uitgevoerd:
 - voeg alleen noodzakelijke Firestore indexes/configuratie toe;
 - test Rules in CI/emulator voordat deployment mogelijk is;
 - deploy Rules/config via dezelfde Beta → Production-promotie als de code die
-erop vertrouwt;
+  erop vertrouwt;
 - activeer App Check voor directe Firestore webreads pas nadat Beta bewezen werkt;
 - houd Firestore-data zelf buiten build artifacts en CI-fixtures.
 
@@ -232,15 +231,15 @@ read-only voor authoritative clouddeckrecords.
 
 ## Cloudflare-isolatie
 
-| Component       | Beta                                  | Production                            |
-| --------------- | ------------------------------------- | ------------------------------------- |
-| Import Worker   | `mtg-battle-mode-import-staging`      | `mtg-battle-mode-import`              |
-| Game Worker     | `mtg-battle-mode-online-staging`      | `mtg-battle-mode-online`              |
-| Image Worker    | `mtg-battle-mode-images-staging`      | `mtg-battle-mode-images`              |
-| Image route     | geen publieke route / preview-URL     | `cdn.mtgbattlearena.nl` custom domain |
-| Wrangler        | `--env staging`                       | top-levelconfiguratie                 |
-| Import binding  | staging Import Worker                 | Production Import Worker              |
-| Durable Objects | eigen staging namespaces              | Production namespaces                 |
+| Component       | Beta                              | Production                            |
+| --------------- | --------------------------------- | ------------------------------------- |
+| Import Worker   | `mtg-battle-mode-import-staging`  | `mtg-battle-mode-import`              |
+| Game Worker     | `mtg-battle-mode-online-staging`  | `mtg-battle-mode-online`              |
+| Image Worker    | `mtg-battle-mode-images-staging`  | `mtg-battle-mode-images`              |
+| Image route     | geen publieke route / preview-URL | `cdn.mtgbattlearena.nl` custom domain |
+| Wrangler        | `--env staging`                   | top-levelconfiguratie                 |
+| Import binding  | staging Import Worker             | Production Import Worker              |
+| Durable Objects | eigen staging namespaces          | Production namespaces                 |
 
 De Import Workers hebben in beide omgevingen expliciet `workers_dev = false`
 en `preview_urls = false`. Zij hebben dus geen publiek `workers.dev`- of

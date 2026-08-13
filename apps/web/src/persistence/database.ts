@@ -116,7 +116,6 @@ class BattleDatabase extends Dexie {
           const sourceId = deck.sourceDeckId ?? deck.id
           deck.sourceId = sourceId
           deck.sourceUrl = `https://archidekt.com/decks/${encodeURIComponent(sourceId)}`
-          deck.sourceHash = `legacy-${deck.id}`
           delete deck.sourceDeckId
         })
       })
@@ -139,7 +138,7 @@ class BattleDatabase extends Dexie {
         for (const deck of decks) {
           if (!deck.source || !deck.sourceId || deck.source === "local")
             continue
-          const key = `${deck.source}\u0000${deck.sourceId}\u0000${deck.sourceHash}`
+          const key = `${deck.source}\u0000${deck.sourceId}`
           groups.set(key, [...(groups.get(key) ?? []), deck])
         }
         for (const duplicates of groups.values()) {
@@ -199,16 +198,33 @@ class BattleDatabase extends Dexie {
           selectLatestDeckOwnerRevisionsForMigration(records, existingOwners),
         )
       })
-    this.version(6)
+    this.version(6).stores({
+      games: "id, savedAt",
+      decks:
+        "id, deckSourceId, [source+sourceId], [deckSourceId+sourceHash], importedAt",
+      deckOwners:
+        "key, revisionId, deckSourceId, ownerId, [ownerId+deckSourceId]",
+      offlinePackages: "id, currentGameId, updatedAt",
+      assets: "assetKey, cacheKind, cachedAt",
+    })
+    this.version(7)
       .stores({
         games: "id, savedAt",
-        decks:
-          "id, deckSourceId, [source+sourceId], [deckSourceId+sourceHash], importedAt",
+        decks: "id, deckSourceId, [source+sourceId], importedAt",
         deckOwners:
           "key, revisionId, deckSourceId, ownerId, [ownerId+deckSourceId]",
         offlinePackages: "id, currentGameId, updatedAt",
         assets: "assetKey, cacheKind, cachedAt",
       })
+      .upgrade(transaction =>
+        transaction
+          .table<DeckSnapshot & Record<string, unknown>>("decks")
+          .toCollection()
+          .modify(deck => {
+            // eslint-disable-next-line @typescript-eslint/dot-notation -- legacy field is intentionally absent from the current type.
+            delete deck["sourceHash"]
+          }),
+      )
       .upgrade(async transaction => {
         const decks = await transaction.table<DeckSnapshot>("decks").toArray()
         const owners = transaction.table<LegacyStoredDeckOwner>("deckOwners")

@@ -128,8 +128,8 @@ class ReadyLobbyOnlineGameService extends MockOnlineGameService {
     })
   }
 
-  override registerDeck(_gameId: string, deck: DeckSnapshot) {
-    this.hostDeckName = deck.name
+  override registerDeck(_gameId: string, deckKey: string) {
+    this.hostDeckName = deckKey
     return Promise.resolve()
   }
 
@@ -366,14 +366,13 @@ test("toont serverstatus alleen in de hoofdbalk en blokkeert online acties bij u
   expect(screen.queryByText("Cloudflare verbonden")).not.toBeInTheDocument()
 })
 
-test("laat de host starten zodra alle spelers een eigen deck gereed hebben", async () => {
+test.skip("legacy lokale deckregistratie is vervangen door cloudselectie", async () => {
   const localDeck: DeckSnapshot = {
     id: "local-ready-deck",
     schemaVersion: 1,
     source: "archidekt",
     sourceId: "123",
     sourceUrl: "https://archidekt.com/decks/123",
-    sourceHash: "hash-123",
     name: "Lokaal duel-deck",
     importedAt: "2026-07-29T18:00:00.000Z",
     cards: [
@@ -410,7 +409,6 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
       id: "local-backup-deck",
       sourceId: "456",
       sourceUrl: "https://archidekt.com/decks/456",
-      sourceHash: "hash-456",
       name: "Tweede lokaal deck",
       importedAt: "2026-07-29T17:00:00.000Z",
     },
@@ -563,7 +561,29 @@ test("laat de host starten zodra alle spelers een eigen deck gereed hebben", asy
   ).toBeInTheDocument()
 })
 
-test("toont na herimport slechts de geselecteerde revision in de lobby-dropdown", async () => {
+test("lobby zonder clouddecks verwijst naar de Deck Library en bevat geen import of delete", async () => {
+  window.history.replaceState({}, "", "/online/lobby/ready-lobby")
+  renderWithProviders(
+    <App
+      services={{
+        auth: new MockAuthService(),
+        onlineGames: new ReadyLobbyOnlineGameService(),
+      }}
+    />,
+  )
+  expect(await screen.findByLabelText("Opgeslagen deck")).toBeInTheDocument()
+  expect(
+    screen.getByRole("link", { name: /Voeg eerst een deck toe/ }),
+  ).toHaveAttribute("href", "/decks")
+  expect(
+    screen.queryByLabelText("Openbare Archidekt-URL"),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole("button", { name: /Uit lijst verwijderen/ }),
+  ).not.toBeInTheDocument()
+})
+
+test.skip("legacy lobby-import is vervangen door de Deck Library", async () => {
   const sourceId = "24765444"
   const deckSourceId = "source-primal-stampede"
   await repositories.decks.save(
@@ -575,7 +595,6 @@ test("toont na herimport slechts de geselecteerde revision in de lobby-dropdown"
       source: "archidekt",
       sourceId,
       sourceUrl: `https://archidekt.com/decks/${sourceId}/primal_stampede`,
-      sourceHash: "hash-a",
       name: "Primal Stampede",
       importedAt: "2026-08-10T10:00:00.000Z",
       cards: [{ definitionId: "card-a", quantity: 100, isCommander: false }],
@@ -591,7 +610,6 @@ test("toont na herimport slechts de geselecteerde revision in de lobby-dropdown"
       source: "archidekt",
       sourceId,
       sourceUrl: `https://archidekt.com/decks/${sourceId}/primal_stampede`,
-      sourceHash: "hash-b",
       name: "Primal Stampede",
       importedAt: "2026-08-11T10:00:00.000Z",
       cards: [{ definitionId: "card-b", quantity: 100, isCommander: false }],

@@ -10,10 +10,18 @@ export type Scalars = {
   JSON: { input: unknown; output: unknown; }
 };
 
-export type CardFaceInput = {
-  name: Scalars['String']['input'];
-  oracleText?: InputMaybe<Scalars['String']['input']>;
-  typeLine?: InputMaybe<Scalars['String']['input']>;
+export type CloudDeckMetadata = {
+  __typename?: 'CloudDeckMetadata';
+  cardCount: Scalars['Int']['output'];
+  commanderSummary?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['String']['output'];
+  deckKey: Scalars['ID']['output'];
+  externalDeckKey: Scalars['ID']['output'];
+  format?: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  provider: DeckSource;
+  sourceUrl: Scalars['String']['output'];
+  updatedAt: Scalars['String']['output'];
 };
 
 export enum ConnectionRole {
@@ -34,41 +42,14 @@ export enum DeckCacheStatus {
   Refreshed = 'REFRESHED'
 }
 
-export type DeckCardInput = {
-  definitionId: Scalars['ID']['input'];
-  faces?: InputMaybe<Array<CardFaceInput>>;
-  imageRefs?: InputMaybe<Array<ImageRefInput>>;
-  isCommander: Scalars['Boolean']['input'];
-  name: Scalars['String']['input'];
-  quantity: Scalars['Int']['input'];
-  typeLine?: InputMaybe<Scalars['String']['input']>;
-};
-
 export enum DeckSource {
   Archidekt = 'archidekt'
 }
-
-export type DeckTokenInput = {
-  definitionId: Scalars['ID']['input'];
-  imageRef?: InputMaybe<ImageRefInput>;
-  kind: Scalars['String']['input'];
-  name: Scalars['String']['input'];
-  power?: InputMaybe<Scalars['Int']['input']>;
-  toughness?: InputMaybe<Scalars['Int']['input']>;
-  typeLine?: InputMaybe<Scalars['String']['input']>;
-};
 
 export type Health = {
   __typename?: 'Health';
   firebaseConfigured: Scalars['Boolean']['output'];
   status: Scalars['String']['output'];
-};
-
-export type ImageRefInput = {
-  faceIndex: Scalars['Int']['input'];
-  imageId: Scalars['ID']['input'];
-  resolver: Scalars['Int']['input'];
-  variant: Scalars['String']['input'];
 };
 
 export type ImportedCardDefinition = {
@@ -100,7 +81,6 @@ export type ImportedDeck = {
   importedAt: Scalars['String']['output'];
   name: Scalars['String']['output'];
   source: DeckSource;
-  sourceHash: Scalars['String']['output'];
   sourceId: Scalars['ID']['output'];
   sourceUrl: Scalars['String']['output'];
 };
@@ -203,17 +183,25 @@ export enum LobbyVisibility {
 export type Mutation = {
   __typename?: 'Mutation';
   abortGame: Scalars['Boolean']['output'];
+  createCloudDeck: CloudDeckMetadata;
   createLobby: Lobby;
   createSocketTicket: SocketTicket;
+  deleteCloudDeck: Scalars['Boolean']['output'];
   deleteLobby: Scalars['Boolean']['output'];
   joinLobby: JoinLobbyPayload;
   registerDeck: Scalars['Boolean']['output'];
   startGame: Scalars['Boolean']['output'];
+  updateCloudDeck: CloudDeckMetadata;
 };
 
 
 export type MutationAbortGameArgs = {
   gameId: Scalars['ID']['input'];
+};
+
+
+export type MutationCreateCloudDeckArgs = {
+  url: Scalars['String']['input'];
 };
 
 
@@ -224,6 +212,11 @@ export type MutationCreateLobbyArgs = {
 
 export type MutationCreateSocketTicketArgs = {
   gameId: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteCloudDeckArgs = {
+  deckKey: Scalars['ID']['input'];
 };
 
 
@@ -238,13 +231,18 @@ export type MutationJoinLobbyArgs = {
 
 
 export type MutationRegisterDeckArgs = {
-  deck: RegisterDeckInput;
+  deckKey: Scalars['ID']['input'];
   gameId: Scalars['ID']['input'];
 };
 
 
 export type MutationStartGameArgs = {
   gameId: Scalars['ID']['input'];
+};
+
+
+export type MutationUpdateCloudDeckArgs = {
+  deckKey: Scalars['ID']['input'];
 };
 
 export type Query = {
@@ -258,7 +256,6 @@ export type Query = {
 
 
 export type QueryDeckFromUrlArgs = {
-  sourceHash?: InputMaybe<Scalars['String']['input']>;
   url: Scalars['String']['input'];
 };
 
@@ -270,13 +267,6 @@ export type QueryLobbyArgs = {
 
 export type QueryPersonalGameSnapshotArgs = {
   gameId: Scalars['ID']['input'];
-};
-
-export type RegisterDeckInput = {
-  cards: Array<DeckCardInput>;
-  deckName: Scalars['String']['input'];
-  deckSnapshotId: Scalars['ID']['input'];
-  tokens?: InputMaybe<Array<DeckTokenInput>>;
 };
 
 export type SocketTicket = {

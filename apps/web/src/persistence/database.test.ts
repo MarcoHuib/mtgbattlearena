@@ -12,7 +12,6 @@ const deck = (id: string): DeckSnapshot => ({
   source: "archidekt",
   sourceId: id,
   sourceUrl: `https://archidekt.com/decks/${id}`,
-  sourceHash: `hash-${id}`,
   name: id,
   importedAt: "2026-07-29T20:00:00.000Z",
   cards: [],
@@ -70,7 +69,6 @@ test("houdt revisions per eigenaar geïsoleerd en upsert expliciet per source", 
     deckSourceId: "00000000-0000-4000-8000-000000000001",
     revisionId: "revision-a",
     sourceId: "24765444",
-    sourceHash: "hash-a",
     name: "Primal Stampede",
     cards: [{ definitionId: "card-a", quantity: 100, isCommander: false }],
   }
@@ -78,7 +76,6 @@ test("houdt revisions per eigenaar geïsoleerd en upsert expliciet per source", 
     ...first,
     id: "revision-b",
     revisionId: "revision-b",
-    sourceHash: "hash-b",
     importedAt: "2026-07-30T20:00:00.000Z",
     cards: [{ definitionId: "card-b", quantity: 101, isCommander: false }],
   }
@@ -107,7 +104,6 @@ test("v6-migratie kiest per owner/source alleen de recentste revision", () => {
     ...first,
     id: "revision-b",
     revisionId: "revision-b",
-    sourceHash: "hash-b",
     importedAt: "2026-07-30T20:00:00.000Z",
   }
   const migrated = selectLatestDeckOwnerRevisionsForMigration(
@@ -207,7 +203,6 @@ test("verbergt oude content-ID duplicaten maar bewaart gerefereerde games", asyn
   const current = {
     ...old,
     id: "00000000-0000-4000-8000-000000000001",
-    sourceHash: "new-hash",
     cards: [{ definitionId: "new-card", quantity: 2, isCommander: false }],
     definitions: [
       {
@@ -295,10 +290,9 @@ test("hydrateert legacy deckrevisions zonder ze te verwijderen", async () => {
   }
   await repositories.decks.save(legacy, "legacy-owner")
 
-  expect((await repositories.decks.get(legacy.id))?.definitions[0]?.imageRefs)
-    .toEqual([
-      { resolver: 1, imageId: forest, faceIndex: 0, variant: "normal" },
-    ])
+  expect(
+    (await repositories.decks.get(legacy.id))?.definitions[0]?.imageRefs,
+  ).toEqual([{ resolver: 1, imageId: forest, faceIndex: 0, variant: "normal" }])
   expect(await repositories.decks.list()).toHaveLength(1)
   expect((await repositories.decks.list("legacy-owner"))[0]?.id).toBe(legacy.id)
 })

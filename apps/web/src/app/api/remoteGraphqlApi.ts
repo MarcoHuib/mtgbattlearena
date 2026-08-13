@@ -54,4 +54,7 @@ export const {
   useRegisterDeckMutation,
   useStartGameMutation,
   useCreateSocketTicketMutation,
+  useCreateCloudDeckMutation,
+  useUpdateCloudDeckMutation,
+  useDeleteCloudDeckMutation,
 } = remoteGraphqlApi

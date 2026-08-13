@@ -18,6 +18,8 @@ const digest = () =>
 const before = digest()
 execFileSync("npm", ["run", "graphql:codegen"], { stdio: "inherit" })
 if (digest() !== before) {
-  console.error("GraphQL-codegenoutput was niet actueel. Commit de opnieuw gegenereerde bestanden.")
+  console.error(
+    "GraphQL-codegenoutput was niet actueel. Commit de opnieuw gegenereerde bestanden.",
+  )
   process.exitCode = 1
 }

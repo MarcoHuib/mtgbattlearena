@@ -1,9 +1,6 @@
 import { screen } from "@testing-library/react"
 import { beforeEach } from "vitest"
-import {
-  analyticsConsentStorageKey,
-  readAnalyticsConsent,
-} from "../analytics"
+import { analyticsConsentStorageKey, readAnalyticsConsent } from "../analytics"
 import { renderWithProviders } from "../utils/test-utils"
 import { AnalyticsConsent } from "./AnalyticsConsent"
 
@@ -23,9 +20,7 @@ test("verstuurt niets voordat de bezoeker kiest en bewaart weigering", async () 
 
   await user.click(screen.getByRole("button", { name: "Niet toestaan" }))
 
-  expect(window.localStorage.getItem(analyticsConsentStorageKey)).toBe(
-    "denied",
-  )
+  expect(window.localStorage.getItem(analyticsConsentStorageKey)).toBe("denied")
   expect(
     screen.queryByRole("heading", {
       name: "Mogen we analytische cookies gebruiken?",

@@ -36,9 +36,8 @@ test("homepage bevat de indexeerbare SEO-contracten", () => {
   expect(html).toContain('window.location.pathname !== "/"')
   expect(html).toContain('"noindex, follow"')
 
-  const jsonLd = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(
-    html,
-  )?.[1]
+  const jsonLd =
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)?.[1]
   expect(jsonLd).toBeDefined()
   expect(JSON.parse(jsonLd!)).toEqual({
     "@context": "https://schema.org",

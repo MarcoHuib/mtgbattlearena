@@ -4,7 +4,12 @@ Deckproviders zijn uitsluitend importbronnen. De importlaag zet een expliciete
 Scryfall printing-ID om naar MTG Battle Arena's provider-neutrale `ImageRef`:
 
 ```ts
-type ImageRef = { resolver: number; imageId: string; faceIndex: number; variant: "normal" }
+type ImageRef = {
+  resolver: number
+  imageId: string
+  faceIndex: number
+  variant: "normal"
+}
 ```
 
 Resolver `1` betekent alleen binnen de image Worker Scryfall. Clients bouwen

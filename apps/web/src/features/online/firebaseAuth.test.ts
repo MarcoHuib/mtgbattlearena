@@ -102,20 +102,20 @@ describe("veilige Google/Microsoft-accountkoppeling", () => {
     expect(linker.hasPendingMicrosoftCredential()).toBe(false)
   })
 
-  test.each([
-    "auth/popup-closed-by-user",
-    "auth/cancelled-popup-request",
-  ])("ruimt de pending credential op na %s", async code => {
-    const { linker, operations } = setup()
-    await expect(linker.signInWithMicrosoft()).rejects.toBeDefined()
-    operations.signInWithGoogle.mockRejectedValueOnce(authError(code))
+  test.each(["auth/popup-closed-by-user", "auth/cancelled-popup-request"])(
+    "ruimt de pending credential op na %s",
+    async code => {
+      const { linker, operations } = setup()
+      await expect(linker.signInWithMicrosoft()).rejects.toBeDefined()
+      operations.signInWithGoogle.mockRejectedValueOnce(authError(code))
 
-    await expect(linker.signInWithGoogle()).rejects.toMatchObject({
-      code,
-    })
-    expect(operations.linkWithCredential).not.toHaveBeenCalled()
-    expect(linker.hasPendingMicrosoftCredential()).toBe(false)
-  })
+      await expect(linker.signInWithGoogle()).rejects.toMatchObject({
+        code,
+      })
+      expect(operations.linkWithCredential).not.toHaveBeenCalled()
+      expect(linker.hasPendingMicrosoftCredential()).toBe(false)
+    },
+  )
 
   test("weigert credentials van een ander account zonder accounts te mergen", async () => {
     const { linker, operations } = setup()

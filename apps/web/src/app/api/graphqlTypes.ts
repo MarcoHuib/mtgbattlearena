@@ -18,11 +18,31 @@ export type LobbyQuery = { lobby: { lobby: { code: string, title: string, hostDi
 
 export type DeckFromUrlQueryVariables = Exact<{
   url: string;
-  sourceHash?: string | null | undefined;
 }>;
 
 
-export type DeckFromUrlQuery = { deckFromUrl: { cacheStatus: Schema.DeckCacheStatus, deckId: string, revisionId: string, deck: { source: Schema.DeckSource, sourceId: string, sourceUrl: string, sourceHash: string, name: string, format: string | null, importedAt: string, cards: Array<{ definitionId: string, quantity: number, isCommander: boolean }>, definitions: Array<{ id: string, name: string, oracleId: string | null, layout: string | null, oracleText: string | null, typeLine: string | null, manaValue: number | null, faces: Array<{ name: string, typeLine: string | null, oracleText: string | null }>, imageRefs: Array<{ resolver: number, imageId: string, faceIndex: number, variant: string }>, token: { kind: string, name: string, power: number | null, toughness: number | null, source: string | null } | null }> } } };
+export type DeckFromUrlQuery = { deckFromUrl: { cacheStatus: Schema.DeckCacheStatus, deckId: string, revisionId: string, deck: { source: Schema.DeckSource, sourceId: string, sourceUrl: string, name: string, format: string | null, importedAt: string, cards: Array<{ definitionId: string, quantity: number, isCommander: boolean }>, definitions: Array<{ id: string, name: string, oracleId: string | null, layout: string | null, oracleText: string | null, typeLine: string | null, manaValue: number | null, faces: Array<{ name: string, typeLine: string | null, oracleText: string | null }>, imageRefs: Array<{ resolver: number, imageId: string, faceIndex: number, variant: string }>, token: { kind: string, name: string, power: number | null, toughness: number | null, source: string | null } | null }> } } };
+
+export type CreateCloudDeckMutationVariables = Exact<{
+  url: string;
+}>;
+
+
+export type CreateCloudDeckMutation = { createCloudDeck: { deckKey: string, provider: Schema.DeckSource, externalDeckKey: string, sourceUrl: string, name: string, format: string | null, commanderSummary: string | null, cardCount: number, createdAt: string, updatedAt: string } };
+
+export type UpdateCloudDeckMutationVariables = Exact<{
+  deckKey: string | number;
+}>;
+
+
+export type UpdateCloudDeckMutation = { updateCloudDeck: { deckKey: string, provider: Schema.DeckSource, externalDeckKey: string, sourceUrl: string, name: string, format: string | null, commanderSummary: string | null, cardCount: number, createdAt: string, updatedAt: string } };
+
+export type DeleteCloudDeckMutationVariables = Exact<{
+  deckKey: string | number;
+}>;
+
+
+export type DeleteCloudDeckMutation = { deleteCloudDeck: boolean };
 
 export type CreateLobbyMutationVariables = Exact<{
   input: Schema.CreateLobbyInput;
@@ -54,7 +74,7 @@ export type AbortGameMutation = { abortGame: boolean };
 
 export type RegisterDeckMutationVariables = Exact<{
   gameId: string | number;
-  deck: Schema.RegisterDeckInput;
+  deckKey: string | number;
 }>;
 
 

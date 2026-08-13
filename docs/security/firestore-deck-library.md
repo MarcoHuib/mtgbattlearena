@@ -2,9 +2,10 @@
 
 ## Status
 
-Planned for Roadmap Feature 1. Deze pagina beschrijft de doelgrens; de huidige
-productioncode gebruikt Firestore nog niet als Deck Library totdat Feature 1 is
-geïmplementeerd en uitgerold.
+Implemented for Roadmap Feature 1. De repository bevat de browser-readadapter,
+servermutatieadapter en deploybare `firestore.rules`. Een omgeving is pas
+operationeel nadat Rules, App Check-enforcement en het Worker Secret zijn
+geprovisioned.
 
 ## Doel
 
@@ -31,16 +32,13 @@ Import Worker
 De browser mag alleen de eigen Deck Library lezen. Authoritative Create, Update
 en Delete lopen via MTG Battle Arena en niet via vrije clientwrites.
 
-Conceptuele Security Rules-doelstelling:
+De deploybare regels in `firestore.rules` implementeren:
 
 ```text
 /users/{uid}/decks/**
   read  -> authenticated && request.auth.uid == uid
   write -> denied to normal web clients
 ```
-
-Gebruik de daadwerkelijke Firestore Rules-syntax en tests tijdens implementatie;
-deze schets is geen deploybaar rulesbestand.
 
 App Check moet voor de Firestore Web App worden ingeregeld voordat directe
 productionreads worden afgedwongen. App Check vervangt Firebase Authentication of
@@ -56,6 +54,11 @@ clientrequest.
 Wanneer de server via IAM/service-accounttoegang naar Firestore schrijft, gelden
 Firestore Security Rules niet als primaire autorisatiegrens. Daarom moet de
 applicatie zelf tenant-isolatie afdwingen en die grens met tests bewijzen.
+
+De Game Worker gebruikt Firestore REST met een kortlevend OAuth-token. Het
+service-account-JSON wordt uitsluitend uit `FIRESTORE_SERVICE_ACCOUNT_JSON`
+gelezen. De adapter bouwt ieder pad zelf op uit de geverifieerde Firebase-UID en
+een deck key; de client kan geen ownerpad aanleveren.
 
 Een servercredential:
 

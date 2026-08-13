@@ -68,11 +68,7 @@ export default {
             corsHeaders,
           )
         const body = (await request.json()) as ImportRequestBody
-        if (
-          !body ||
-          typeof body.url !== "string" ||
-          (body.sourceHash !== undefined && typeof body.sourceHash !== "string")
-        ) {
+        if (!body || typeof body.url !== "string") {
           return jsonError(
             400,
             "INVALID_DECK_URL",
@@ -89,7 +85,7 @@ export default {
               releaseVersion: env.RELEASE_VERSION ?? "unknown",
             })
           },
-        }).importFromUrl(body.url, body.sourceHash)
+        }).importFromUrl(body.url)
         return new Response(JSON.stringify(result), {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
@@ -156,9 +152,7 @@ export default {
 
     const cache = (caches as CloudflareCacheStorage).default
     const cacheKey = new Request(url.toString(), request)
-    const freshnessProbe =
-      url.searchParams.get("fresh") === "1"
-    const cached = freshnessProbe ? undefined : await cache.match(cacheKey)
+    const cached = await cache.match(cacheKey)
     if (cached) return withCors(cached, corsHeaders)
 
     const controller = new AbortController()
@@ -174,13 +168,10 @@ export default {
         const response = new Response(upstream.payload, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": freshnessProbe
-              ? "no-store"
-              : "public, max-age=120, s-maxage=600",
+            "Cache-Control": "public, max-age=120, s-maxage=600",
           },
         })
-        if (!freshnessProbe)
-          context.waitUntil(cache.put(cacheKey, response.clone()))
+        context.waitUntil(cache.put(cacheKey, response.clone()))
         return withCors(response, corsHeaders)
       }
     } catch (error: unknown) {
@@ -240,4 +231,4 @@ import {
 type Env = { ALLOWED_ORIGIN?: string; RELEASE_VERSION?: string }
 type WorkerContext = { waitUntil(promise: Promise<unknown>): void }
 type CloudflareCacheStorage = CacheStorage & { default: Cache }
-type ImportRequestBody = { url?: unknown; sourceHash?: unknown }
+type ImportRequestBody = { url?: unknown }

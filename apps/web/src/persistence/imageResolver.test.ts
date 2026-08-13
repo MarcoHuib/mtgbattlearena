@@ -8,7 +8,8 @@ const image: CardImageRef = {
   faceIndex: 0,
   variant: "normal",
 }
-const cdnUrl = "https://cdn.mtgbattlearena.nl/v1/1/6a9c39e4-a8cf-42dd-8d0e-45634b335546/0/normal"
+const cdnUrl =
+  "https://cdn.mtgbattlearena.nl/v1/1/6a9c39e4-a8cf-42dd-8d0e-45634b335546/0/normal"
 
 afterEach(() => {
   vi.restoreAllMocks()

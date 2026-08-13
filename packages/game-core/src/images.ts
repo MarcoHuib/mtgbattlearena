@@ -51,7 +51,10 @@ export const normalizeCardImageRef = (
       variant,
     }
 
-  if (typeof fallbackPrintingId === "string" && printingId.test(fallbackPrintingId))
+  if (
+    typeof fallbackPrintingId === "string" &&
+    printingId.test(fallbackPrintingId)
+  )
     return {
       resolver: SCRYFALL_IMAGE_RESOLVER,
       imageId: fallbackPrintingId.toLowerCase(),
@@ -96,8 +99,7 @@ export const getCardImageUrl = (ref: CardImageRef): string => {
 
 export const publicImageRef = (
   ref: PersistedImageRef | undefined,
-): NormalizedCardImageRef | undefined =>
-  normalizeCardImageRef(ref)
+): NormalizedCardImageRef | undefined => normalizeCardImageRef(ref)
 
 /** Persisted compatibility: the legacy URL is deliberately ignored. */
 export const normalizeCardImages = (
@@ -117,7 +119,11 @@ export const normalizeCardImages = (
     typeof definition.scryfallId === "string" &&
     printingId.test(definition.scryfallId)
   )
-    for (let faceIndex = 0; faceIndex < definition.faces.length; faceIndex += 1) {
+    for (
+      let faceIndex = 0;
+      faceIndex < definition.faces.length;
+      faceIndex += 1
+    ) {
       const normalized = normalizeCardImageRef(
         undefined,
         definition.scryfallId,
@@ -137,7 +143,9 @@ export const normalizeCardImages = (
       delete currentFace.imageUrl
       return currentFace
     }),
-    imageRefs: [...new Map(refs.map(ref => [cardImageAssetKey(ref), ref])).values()],
+    imageRefs: [
+      ...new Map(refs.map(ref => [cardImageAssetKey(ref), ref])).values(),
+    ],
   }
 }
 

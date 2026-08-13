@@ -4,10 +4,7 @@ import {
   mapArchidektDeck,
 } from "./providers/archidekt.ts"
 import type { ImportedDeck } from "@mtg/game-core/types"
-import {
-  archidektTokenIdsForFingerprint,
-  fingerprintArchidektSource,
-} from "@mtg/deck-source"
+import { archidektTokenIds } from "@mtg/deck-source"
 import {
   archidektDeckApiUrl,
   archidektTokensApiUrl,
@@ -37,10 +34,8 @@ export type DeckImportDiagnostic = {
     | "IMPORT_CACHE_WRITE_FAILED"
     | "PROVIDER_FETCH_FAILED"
     | "INVALID_PROVIDER_RESPONSE"
-    | "FINGERPRINT_FAILED"
     | "MAPPING_FAILED"
-  phase:
-    "cache_read" | "provider_fetch" | "mapping" | "fingerprint" | "cache_write"
+  phase: "cache_read" | "provider_fetch" | "mapping" | "cache_write"
   provider: string
   sourceId: string
   errorName?: string
@@ -57,8 +52,6 @@ const isImportedDeck = (value: unknown): value is ImportedDeck => {
     typeof deck.source === "string" &&
     typeof deck.sourceId === "string" &&
     typeof deck.sourceUrl === "string" &&
-    typeof deck.sourceHash === "string" &&
-    /^[a-f0-9]{64}$/.test(deck.sourceHash) &&
     typeof deck.name === "string" &&
     typeof deck.importedAt === "string" &&
     Array.isArray(deck.cards) &&
@@ -104,10 +97,7 @@ export const createDeckImportService = ({
   fetcher = fetch,
   onDiagnostic = () => undefined,
 }: DeckImportServiceOptions) => ({
-  async importFromUrl(
-    inputUrl: string,
-    clientHash?: string,
-  ): Promise<DeckImportResult> {
+  async importFromUrl(inputUrl: string): Promise<DeckImportResult> {
     let parsedUrl
     try {
       parsedUrl = new URL(inputUrl.trim())
@@ -159,8 +149,6 @@ export const createDeckImportService = ({
       // Cache availability must never prevent an authoritative import.
       diagnostic("IMPORT_CACHE_READ_FAILED", "cache_read")
     }
-    if (cached && (!clientHash || clientHash === cached.sourceHash))
-      return { cacheStatus: "HIT", deck: cached }
     let rawDeck: unknown
     try {
       rawDeck = (
@@ -183,7 +171,7 @@ export const createDeckImportService = ({
       })
       throw providerError(error)
     }
-    const tokenIds = archidektTokenIdsForFingerprint(rawDeck)
+    const tokenIds = archidektTokenIds(rawDeck)
     let rawTokens: unknown
     try {
       rawTokens = tokenIds.length
@@ -222,13 +210,6 @@ export const createDeckImportService = ({
           : "MAPPING_FAILED",
         "mapping",
       )
-      throw error
-    }
-    // Never persist the client hint: independently hash the fetched provider data.
-    try {
-      deck.sourceHash = await fingerprintArchidektSource(rawDeck, rawTokens)
-    } catch (error) {
-      diagnostic("FINGERPRINT_FAILED", "fingerprint")
       throw error
     }
     try {

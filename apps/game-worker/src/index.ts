@@ -1,6 +1,12 @@
 import { z } from "zod"
 import type { ImportedDeck } from "@mtg/game-core/types"
 import {
+  FirestoreDeckLibrary,
+  recordFromImportedDeck,
+  type FirestoreCredentials,
+} from "./firestore-deck-library"
+import {
+  createOnlineDeckSubmission,
   onlineDeckSubmissionSchema,
   parseGameCommand,
   type PersonalGameSnapshot,
@@ -313,7 +319,6 @@ const gameSnapshotValue = (
 export const importDeckThroughService = async (
   service: Env["IMPORT"],
   url: string,
-  sourceHash: string | undefined,
   releaseVersion = "unknown",
 ) => {
   let response: Response
@@ -322,7 +327,7 @@ export const importDeckThroughService = async (
       new Request("https://import.internal/internal/deck-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, sourceHash }),
+        body: JSON.stringify({ url }),
       }),
     )
   } catch {
@@ -440,22 +445,101 @@ const graphqlRequest = async (request: Request, env: Env) => {
     }
   }
   const lobby = env.LOBBY.getByName("global")
-  const importDeck = (url: string, sourceHash?: string) =>
-    importDeckThroughService(
-      env.IMPORT,
-      url,
-      sourceHash,
-      env.RELEASE_VERSION,
-    ).then(async result => ({
-      ...result,
-      ...(await lobby.resolveDeckRevision(result.deck)),
-    }))
+  const importDeck = (url: string) =>
+    importDeckThroughService(env.IMPORT, url, env.RELEASE_VERSION).then(
+      async result => ({
+        ...result,
+        ...(await lobby.resolveDeckRevision(result.deck)),
+      }),
+    )
+  const library = () => {
+    if (!env.FIRESTORE_SERVICE_ACCOUNT_JSON)
+      throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
+        extensions: { code: "SERVICE_UNAVAILABLE" },
+      })
+    let credentials: FirestoreCredentials
+    try {
+      credentials = JSON.parse(
+        env.FIRESTORE_SERVICE_ACCOUNT_JSON,
+      ) as FirestoreCredentials
+    } catch {
+      throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
+        extensions: { code: "SERVICE_UNAVAILABLE" },
+      })
+    }
+    return new FirestoreDeckLibrary(env.FIREBASE_PROJECT_ID, credentials)
+  }
   const yoga = createGraphQLYoga({
     request: resolvedRequest,
     env,
     identity,
     lobby,
     importDeck,
+    createCloudDeck: async (url, verifiedIdentity) => {
+      const result = await importDeck(url)
+      const record = recordFromImportedDeck(result.deck)
+      try {
+        await library().create(verifiedIdentity.uid, record)
+      } catch (caught) {
+        if (
+          caught instanceof Error &&
+          caught.message === "DECK_ALREADY_IMPORTED"
+        )
+          throw new GraphQLError(
+            "Dit deck staat al in je bibliotheek. Gebruik Update.",
+            { extensions: { code: "DECK_ALREADY_IMPORTED" } },
+          )
+        throw caught
+      }
+      return record.metadata
+    },
+    updateCloudDeck: async (deckKey, verifiedIdentity) => {
+      const current = await library().get(verifiedIdentity.uid, deckKey)
+      if (!current)
+        throw new GraphQLError("Deck niet gevonden.", {
+          extensions: { code: "NOT_FOUND" },
+        })
+      const imported = await importDeck(current.metadata.sourceUrl)
+      const replacement = recordFromImportedDeck(
+        imported.deck,
+        current.metadata.createdAt,
+      )
+      if (replacement.metadata.deckKey !== deckKey)
+        throw new GraphQLError("Deckidentiteit is ongeldig.", {
+          extensions: { code: "VALIDATION_ERROR" },
+        })
+      await library().replace(verifiedIdentity.uid, replacement)
+      return replacement.metadata
+    },
+    deleteCloudDeck: async (deckKey, verifiedIdentity) => {
+      await library().delete(verifiedIdentity.uid, deckKey)
+    },
+    registerCloudDeck: async (gameId, deckKey, verifiedIdentity) => {
+      const record = await library().get(verifiedIdentity.uid, deckKey)
+      if (!record)
+        throw new GraphQLError("Deck niet gevonden.", {
+          extensions: { code: "NOT_FOUND" },
+        })
+      const snapshot = {
+        schemaVersion: 1 as const,
+        id: `cloud:${deckKey}:${record.content.importedAt}`,
+        source: record.metadata.provider,
+        sourceId: record.metadata.externalDeckKey,
+        sourceUrl: record.metadata.sourceUrl,
+        name: record.metadata.name,
+        ...(record.metadata.format ? { format: record.metadata.format } : {}),
+        importedAt: record.content.importedAt,
+        cards: record.content.cards,
+        definitions: record.content.definitions,
+      }
+      resultValue(
+        await lobby.registerDeck(
+          gameId,
+          verifiedIdentity,
+          createOnlineDeckSubmission(snapshot),
+        ),
+      )
+    },
     personalSnapshot: (gameId, verifiedIdentity) =>
       personalSnapshot(env, gameId, verifiedIdentity),
     startGame: (gameId, verifiedIdentity) =>

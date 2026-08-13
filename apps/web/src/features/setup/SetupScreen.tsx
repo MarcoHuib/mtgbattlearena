@@ -31,8 +31,8 @@ export const SetupScreen = ({ onBattleStarted }: SetupScreenProps) => {
           <span className="eyebrow">2–6 spelers · één lokale tafel</span>
           <h1>Leg je battle klaar.</h1>
           <p>
-            Stel twee tot zes spelers in en importeer voor iedereen een
-            openbaar Archidekt-deck. Daarna blijft de battle lokaal beschikbaar.
+            Stel twee tot zes spelers in en importeer voor iedereen een openbaar
+            Archidekt-deck. Daarna blijft de battle lokaal beschikbaar.
           </p>
         </div>
         <div className="setup-hero__seal" aria-hidden="true">
@@ -51,8 +51,8 @@ export const SetupScreen = ({ onBattleStarted }: SetupScreenProps) => {
       </section>
       <footer className="setup-actions">
         <p>
-          Commanders gaan naar de command zone; iedere speler trekt
-          automatisch zeven kaarten.
+          Commanders gaan naar de command zone; iedere speler trekt automatisch
+          zeven kaarten.
         </p>
         <button
           className="button button--secondary button--large"

@@ -45,6 +45,10 @@ provider-neutrale snapshot.
 
 ## Feature 1 — Firestore Deck Library, importwizard en expliciete CRUD
 
+**Implementatiestatus:** gerealiseerd in de applicatiecode op 13 augustus 2026;
+Firestore Rules en de servercredential moeten per deploymentomgeving worden
+geprovisioned voordat de cloudflow daar actief is.
+
 **Prioriteit:** eerst uitvoeren.
 
 **Voorgestelde branch:** `feature/deck-library-import-wizard`
@@ -186,7 +190,7 @@ lokale cache/kopie van clouddecks later expliciet kan worden ondersteund.
 - `sourceHash` en client-side fingerprint/freshnesscalls zijn uit de actieve
   Feature-1 contracten verwijderd via geteste migratie.
 - Duplicate import wordt race-safe geweigerd op `uid + provider +
-  externalDeckKey`.
+externalDeckKey`.
 - Update is expliciet en user-triggered; falen bewaart het oude deck.
 - Delete verwijdert de actuele libraryrecords zonder reeds gestarte games of
   offlinepakketten kapot te maken.

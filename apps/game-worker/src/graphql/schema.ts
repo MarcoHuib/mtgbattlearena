@@ -1,10 +1,6 @@
 import { GraphQLError, GraphQLScalarType, Kind } from "graphql"
 import { createSchema } from "graphql-yoga"
 import { z } from "zod"
-import {
-  onlineDeckSubmissionSchema,
-  type OnlineDeckSubmission,
-} from "@mtg/game-protocol"
 import type { GraphQLContext } from "./context"
 import { domainResult, requireIdentity } from "./errors"
 
@@ -49,6 +45,18 @@ export const typeDefs = /* GraphQL */ `
     HIT
     MISS
     REFRESHED
+  }
+  type CloudDeckMetadata {
+    deckKey: ID!
+    provider: DeckSource!
+    externalDeckKey: ID!
+    sourceUrl: String!
+    name: String!
+    format: String
+    commanderSummary: String
+    cardCount: Int!
+    createdAt: String!
+    updatedAt: String!
   }
 
   type Health {
@@ -129,7 +137,6 @@ export const typeDefs = /* GraphQL */ `
     source: DeckSource!
     sourceId: ID!
     sourceUrl: String!
-    sourceHash: String!
     name: String!
     format: String
     importedAt: String!
@@ -153,57 +160,24 @@ export const typeDefs = /* GraphQL */ `
     code: String!
     role: ConnectionRole = player
   }
-  input CardFaceInput {
-    name: String!
-    typeLine: String
-    oracleText: String
-  }
-  input ImageRefInput {
-    resolver: Int!
-    imageId: ID!
-    faceIndex: Int!
-    variant: String!
-  }
-  input DeckCardInput {
-    definitionId: ID!
-    name: String!
-    typeLine: String
-    imageRefs: [ImageRefInput!]
-    faces: [CardFaceInput!]
-    quantity: Int!
-    isCommander: Boolean!
-  }
-  input DeckTokenInput {
-    definitionId: ID!
-    name: String!
-    typeLine: String
-    imageRef: ImageRefInput
-    kind: String!
-    power: Int
-    toughness: Int
-  }
-  input RegisterDeckInput {
-    deckSnapshotId: ID!
-    deckName: String!
-    cards: [DeckCardInput!]!
-    tokens: [DeckTokenInput!] = []
-  }
-
   type Query {
     health: Health!
     publicLobbies: [Lobby!]!
     lobby(id: ID!): LobbyRoom!
     personalGameSnapshot(gameId: ID!): JSON!
-    deckFromUrl(url: String!, sourceHash: String): ImportedDeckResult!
+    deckFromUrl(url: String!): ImportedDeckResult!
   }
   type Mutation {
     createLobby(input: CreateLobbyInput!): Lobby!
     joinLobby(input: JoinLobbyInput!): JoinLobbyPayload!
     deleteLobby(id: ID!): Boolean!
     abortGame(gameId: ID!): Boolean!
-    registerDeck(gameId: ID!, deck: RegisterDeckInput!): Boolean!
+    registerDeck(gameId: ID!, deckKey: ID!): Boolean!
     startGame(gameId: ID!): Boolean!
     createSocketTicket(gameId: ID!): SocketTicket!
+    createCloudDeck(url: String!): CloudDeckMetadata!
+    updateCloudDeck(deckKey: ID!): CloudDeckMetadata!
+    deleteCloudDeck(deckKey: ID!): Boolean!
   }
 `
 
@@ -239,11 +213,8 @@ export const schema = createSchema<GraphQLContext>({
         ),
       personalGameSnapshot: async (_root, args: { gameId: string }, context) =>
         context.personalSnapshot(args.gameId, requireIdentity(context)),
-      deckFromUrl: async (
-        _root,
-        args: { url: string; sourceHash?: string },
-        context,
-      ) => context.importDeck(args.url, args.sourceHash),
+      deckFromUrl: async (_root, args: { url: string }, context) =>
+        context.importDeck(args.url),
     },
     Mutation: {
       createLobby: async (
@@ -288,16 +259,13 @@ export const schema = createSchema<GraphQLContext>({
       },
       registerDeck: async (
         _root,
-        args: { gameId: string; deck: OnlineDeckSubmission },
+        args: { gameId: string; deckKey: string },
         context,
       ) => {
-        const deck = onlineDeckSubmissionSchema.parse(args.deck)
-        domainResult(
-          await context.lobby.registerDeck(
-            args.gameId,
-            requireIdentity(context),
-            deck,
-          ),
+        await context.registerCloudDeck(
+          args.gameId,
+          args.deckKey,
+          requireIdentity(context),
         )
         return true
       },
@@ -312,6 +280,14 @@ export const schema = createSchema<GraphQLContext>({
             requireIdentity(context),
           ),
         ),
+      createCloudDeck: (_root, args: { url: string }, context) =>
+        context.createCloudDeck(args.url, requireIdentity(context)),
+      updateCloudDeck: (_root, args: { deckKey: string }, context) =>
+        context.updateCloudDeck(args.deckKey, requireIdentity(context)),
+      deleteCloudDeck: async (_root, args: { deckKey: string }, context) => {
+        await context.deleteCloudDeck(args.deckKey, requireIdentity(context))
+        return true
+      },
     },
   },
 })

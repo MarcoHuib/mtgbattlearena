@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — bijgewerkt 13 augustus 2026.
+Accepted en geïmplementeerd — 13 augustus 2026.
 
 ## Context
 

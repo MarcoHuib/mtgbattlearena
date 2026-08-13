@@ -5,7 +5,6 @@ const imported: ImportedDeck = {
   source: "archidekt",
   sourceId: "12345",
   sourceUrl: "https://archidekt.com/decks/12345",
-  sourceHash: "fixture-hash",
   name: "Mijn deck",
   importedAt: "2026-07-29T20:00:00.000Z",
   cards: [{ definitionId: "card", quantity: 1, isCommander: false }],
@@ -39,7 +38,6 @@ test("geeft gewijzigde providerinhoud een nieuwe revision onder dezelfde source"
   const first = createImportedDeckSnapshot(identified)
   const changed = createImportedDeckSnapshot({
     ...identified,
-    sourceHash: "changed-hash",
     revisionId: "20000000-0000-4000-8000-000000012345",
     cards: [{ definitionId: "card", quantity: 2, isCommander: false }],
   })

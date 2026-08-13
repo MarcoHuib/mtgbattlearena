@@ -48,7 +48,7 @@
 |                             |                                                                                  |
 | --------------------------- | -------------------------------------------------------------------------------- |
 | 📴 **Local-first**          | Start en hervat battles zonder account of backend.                               |
-| 🃏 **Deck import**          | Importeer ondersteunde openbare deckreferenties naar lokale snapshots.          |
+| 🃏 **Deck import**          | Importeer ondersteunde openbare deckreferenties naar lokale snapshots.           |
 | 💾 **Autosave & recovery**  | Game-state, undo/redo en deckdata blijven lokaal beschikbaar.                    |
 | 📦 **Offline ready**        | PWA + expliciete offlinepakketten met kaartdata en afbeeldingen.                 |
 | 👥 **2–6 spelers**          | Commander-ready multiplayer met vier spelers als belangrijke use-case.           |
@@ -80,12 +80,12 @@
 | Server-authoritative game-core    | 🟢 **Ready**       |
 | CI-validatie op pull requests     | 🔵 **Automated**   |
 | Release promotion vanaf `main`    | 🔵 **Automated**   |
-| GraphQL + persisted operations     | 🟢 **Ready**       |
-| Provider-neutrale deckrevisions    | 🟢 **Ready**       |
-| Publieke card-image CDN Worker     | 🟢 **Ready**       |
-| Deck Library + importwizard        | ⚪ **Planned**     |
-| Moxfield FIFO + provider           | ⚪ **Planned**     |
-| ManaBox private providerpackage    | ⚪ **Planned**     |
+| GraphQL + persisted operations    | 🟢 **Ready**       |
+| Provider-neutrale deckrevisions   | 🟢 **Ready**       |
+| Publieke card-image CDN Worker    | 🟢 **Ready**       |
+| Deck Library + importwizard       | ✅ **Implemented** |
+| Moxfield FIFO + provider          | ⚪ **Planned**     |
+| ManaBox private providerpackage   | ⚪ **Planned**     |
 | Verdere online game-acties        | 🟡 **In progress** |
 
 <details>
@@ -558,8 +558,8 @@ Voor de volledige technische uitleg:
 | `npm run dev:worker:game`                 | Start de Game Worker lokaal           |
 | `npm run dev:worker:import`               | Start de Import Worker lokaal         |
 | `npm run dev:worker:image`                | Start de Image Worker lokaal          |
-| `npm run test:image-worker`                | Test de Image Worker                  |
-| `npm run image-worker:type-check`          | Typecheck de Image Worker             |
+| `npm run test:image-worker`               | Test de Image Worker                  |
+| `npm run image-worker:type-check`         | Typecheck de Image Worker             |
 | `npm run build`                           | Bouw de environment-neutrale PWA      |
 | `npm run build:staging`                   | Compatibele alias voor dezelfde PWA   |
 | `npm run preview`                         | Preview de productiebuild             |
@@ -570,7 +570,7 @@ Voor de volledige technische uitleg:
 | `npm run test:integration`                | Online integratietests                |
 | `npm run test:e2e`                        | Kritieke Playwright-flow              |
 | `npm run deploy:cloudflare:check`         | Cloudflare dry-run                    |
-| `npm run deploy:cloudflare:check:image`     | Image Worker production dry-run       |
+| `npm run deploy:cloudflare:check:image`   | Image Worker production dry-run       |
 | `npm run deploy:cloudflare:check:staging` | Cloudflare staging dry-run            |
 | `npm run deploy:cloudflare`               | Deploy alle drie Cloudflare Workers   |
 | `npm run deploy:firebase`                 | Deploy Firebase Hosting               |
@@ -585,8 +585,8 @@ Voor de volledige technische uitleg:
 <br />
 
 Op dit moment verzorgt Firebase Authentication de online identiteit en Firebase
-Hosting de webhosting. Roadmap Feature 1 voegt Cloud Firestore toe als duurzame,
-owner-scoped Deck Library; actieve multiplayerstate blijft in Cloudflare Durable
+Hosting de webhosting. Cloud Firestore is de duurzame, owner-scoped Deck
+Library; actieve multiplayerstate blijft in Cloudflare Durable
 Objects.
 
 Firebase App Check met reCAPTCHA Enterprise vormt daarnaast een extra
@@ -647,13 +647,13 @@ uitgeschreven. Kaartafbeeldingen lopen via de afzonderlijke imagegrens.
 
 <br />
 
-| Dienst             | Gebruik                                                   |
-| ------------------ | --------------------------------------------------------- |
-| **Deckproviders**  | User-triggered, provider-neutrale deckimport              |
-| **Scryfall**       | Kaartafbeeldingen achter de afzonderlijke imagegrens      |
-| **Firebase**       | Auth + Hosting; Firestore Deck Library gepland in Feature 1 |
-| **Cloudflare**     | Server-, realtime- en edgefunctionaliteit                 |
-| **GitHub Actions** | CI en gescheiden Beta-/Production-deployments             |
+| Dienst             | Gebruik                                              |
+| ------------------ | ---------------------------------------------------- |
+| **Deckproviders**  | User-triggered, provider-neutrale deckimport         |
+| **Scryfall**       | Kaartafbeeldingen achter de afzonderlijke imagegrens |
+| **Firebase**       | Auth + Hosting + owner-scoped Firestore Deck Library |
+| **Cloudflare**     | Server-, realtime- en edgefunctionaliteit            |
+| **GitHub Actions** | CI en gescheiden Beta-/Production-deployments        |
 
 Archidekt, ManaBox, Moxfield, Scryfall, Firebase, Cloudflare en Wizards of the
 Coast zijn onafhankelijke derden. Ondersteuning of gebruik van hun diensten
@@ -687,12 +687,12 @@ Zie [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md) voor details.
 - [x] GraphQL Yoga + RTK Query met SHA-256 persisted operations
 - [x] Provider-neutrale deck sources/revisions met lokale ownerselectie
 - [x] Publieke Image Worker/CDN op `cdn.mtgbattlearena.nl` met Scryfall als afgeschermde upstream
+- [x] Firestore Deck Library met providerwizard, expliciete CRUD en online selectie-only
 
 ### 🚧 Volgende uitbreidingen
 
 De eerstvolgende deck/providerroadmap wordt als vier afzonderlijke features uitgevoerd:
 
-- [ ] **Feature 1:** Firestore Deck Library met providerwizard, CRUD zonder `sourceHash`, duplicate-detectie, handmatige Update en online selectie-only
 - [ ] **Feature 2:** globale Moxfield FIFO/rate-limit infrastructuur, eerst volledig tegen mocks
 - [ ] **Feature 3:** Moxfield-provider server-side aansluiten via de bewezen queue en geheime runtimecredential
 - [ ] **Feature 4:** ManaBox via een private server-side providerpackage zonder dat forks daarvan afhankelijk worden
@@ -714,15 +714,15 @@ Zie [`ROADMAP.md`](ROADMAP.md) voor scope, volgorde, security-invarianten en Def
 
 ## 📚 Documentatie
 
-| Document                                                           | Doel                                                        |
-| ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| [`AGENTS.md`](AGENTS.md)                                           | Architectuur, scope, kwaliteit en regels voor coding agents |
-| [`ROADMAP.md`](ROADMAP.md)                                         | Vier volgende features voor Deck Library en providers       |
-| [`docs/codex/`](docs/codex/)                                       | Kleine, versiebeheerbare prompts per roadmapfeature          |
-| [`docs/architecture/`](docs/architecture/)                         | Architecture Decision Records, incl. Firestore/loadverdeling        |
-| [`docs/ci-cd.md`](docs/ci-cd.md)                                   | CI/CD, security checks en deployments                       |
-| [`docs/legal/PROVIDER_INTEGRATIONS.md`](docs/legal/PROVIDER_INTEGRATIONS.md) | Publieke grens voor externe deckproviders                   |
-| [`docs/legal/`](docs/legal/)                                       | Privacy, voorwaarden en third-party notices                 |
+| Document                                                                     | Doel                                                         |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`AGENTS.md`](AGENTS.md)                                                     | Architectuur, scope, kwaliteit en regels voor coding agents  |
+| [`ROADMAP.md`](ROADMAP.md)                                                   | Vier volgende features voor Deck Library en providers        |
+| [`docs/codex/`](docs/codex/)                                                 | Kleine, versiebeheerbare prompts per roadmapfeature          |
+| [`docs/architecture/`](docs/architecture/)                                   | Architecture Decision Records, incl. Firestore/loadverdeling |
+| [`docs/ci-cd.md`](docs/ci-cd.md)                                             | CI/CD, security checks en deployments                        |
+| [`docs/legal/PROVIDER_INTEGRATIONS.md`](docs/legal/PROVIDER_INTEGRATIONS.md) | Publieke grens voor externe deckproviders                    |
+| [`docs/legal/`](docs/legal/)                                                 | Privacy, voorwaarden en third-party notices                  |
 
 ---
 

@@ -215,4 +215,5 @@ export type Env = {
   ALLOWED_ORIGIN?: string
   REALTIME_DEBUG?: string
   RELEASE_VERSION?: string
+  FIRESTORE_SERVICE_ACCOUNT_JSON?: string
 }

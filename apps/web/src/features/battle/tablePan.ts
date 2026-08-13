@@ -20,9 +20,7 @@ export const tableCameraPanDelta = ({
 }: TablePanInput): TablePanDelta | null => {
   if (ctrlKey) return null
   if (shiftKey && Math.abs(deltaX) < Math.abs(deltaY)) {
-    return Math.abs(deltaY) < MINIMUM_PAN_DELTA
-      ? null
-      : { x: deltaY, y: 0 }
+    return Math.abs(deltaY) < MINIMUM_PAN_DELTA ? null : { x: deltaY, y: 0 }
   }
   if (
     Math.abs(deltaX) < MINIMUM_PAN_DELTA &&

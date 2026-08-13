@@ -55,10 +55,7 @@ import type {
   PlayerId,
   PlayerState,
 } from "@mtg/game-core/types"
-import {
-  normalizeCardImages,
-  publicImageRef,
-} from "@mtg/game-core/images"
+import { normalizeCardImages, publicImageRef } from "@mtg/game-core/images"
 import {
   onlineDeckSubmissionSchema,
   onlineTokenDefinitionSchema,
@@ -155,7 +152,6 @@ export const deckSnapshotFromOnlineSubmission = (
   source: "archidekt",
   sourceId: submission.deckSnapshotId,
   sourceUrl: `https://local.invalid/imported/${encodeURIComponent(submission.deckSnapshotId)}`,
-  sourceHash: "online-validated-submission",
   name: submission.deckName,
   importedAt: "1970-01-01T00:00:00.000Z",
   cards: submission.cards.map(card => ({
@@ -986,7 +982,9 @@ const visibleCard = (
     throw new Error("Kaartdefinitie ontbreekt in authoritative state.")
   const activeFace =
     definition.faces[card.activeFaceIndex] ?? definition.faces[0]
-  const imageRef = publicImageRef(definition.imageRefs.find(ref => ref.faceIndex === card.activeFaceIndex))
+  const imageRef = publicImageRef(
+    definition.imageRefs.find(ref => ref.faceIndex === card.activeFaceIndex),
+  )
   return {
     instanceId: card.instanceId,
     definitionId: card.definitionId,
@@ -999,7 +997,9 @@ const visibleCard = (
     faces: definition.faces.map((face, faceIndex) => ({
       name: face.name,
       typeLine: face.typeLine,
-      imageRef: publicImageRef(definition.imageRefs.find(ref => ref.faceIndex === faceIndex)),
+      imageRef: publicImageRef(
+        definition.imageRefs.find(ref => ref.faceIndex === faceIndex),
+      ),
     })),
     attachedTo: card.attachedTo,
     position: card.position,
@@ -1015,7 +1015,9 @@ const visibleTokenDefinition = (
     definitionId: definition.id,
     name: firstFace?.name ?? definition.name,
     typeLine: firstFace?.typeLine ?? definition.typeLine,
-    imageRef: publicImageRef(definition.imageRefs.find(reference => reference.faceIndex === 0)),
+    imageRef: publicImageRef(
+      definition.imageRefs.find(reference => reference.faceIndex === 0),
+    ),
     kind: definition.token?.kind ?? "other",
     power: definition.token?.power,
     toughness: definition.token?.toughness,

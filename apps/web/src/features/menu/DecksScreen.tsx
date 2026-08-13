@@ -1,201 +1,377 @@
-import { useEffect, useState, useSyncExternalStore } from "react"
-import { deckCardCount } from "@mtg/game-core/decks"
-import type { DeckSnapshot } from "@mtg/game-core/types"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react"
+import type { CloudDeckMetadata } from "@mtg/game-core/types"
 import { AppLink } from "../../app/router"
 import { AppShell } from "../../components/AppShell"
-import { deviceDeckOwnerId, repositories } from "../../persistence/database"
+import {
+  useCreateCloudDeckMutation,
+  useDeleteCloudDeckMutation,
+  useUpdateCloudDeckMutation,
+} from "../../app/api/remoteGraphqlApi"
+import { createFirestoreCloudDeckRepository } from "../decks/cloudDeckRepository"
+import { readFirebaseConfig } from "../online/firebaseAuth"
 import type { AuthService } from "../online/types"
 
-type DecksScreenProps = {
-  auth: AuthService
-}
+type DecksScreenProps = { auth: AuthService }
+type WizardStep = "closed" | "provider" | "reference" | "importing" | "success"
+
+const firebaseConfig = readFirebaseConfig(import.meta.env)
+
+const dateLabel = (value: string) =>
+  new Intl.DateTimeFormat("nl-NL", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value))
 
 export const DecksScreen = ({ auth }: DecksScreenProps) => {
   const authState = useSyncExternalStore(
-    listener => auth.subscribe(listener),
-    () => auth.getState(),
-    () => auth.getState(),
+    auth.subscribe.bind(auth),
+    auth.getState.bind(auth),
+    auth.getState.bind(auth),
   )
-  const ownerId =
-    authState.status === "signed-in" ? authState.user.uid : deviceDeckOwnerId
-  const [decks, setDecks] = useState<DeckSnapshot[]>([])
-  const [deviceDecks, setDeviceDecks] = useState<DeckSnapshot[]>([])
+  const repository = useMemo(
+    () =>
+      firebaseConfig.configured
+        ? createFirestoreCloudDeckRepository(firebaseConfig.options)
+        : null,
+    [],
+  )
+  const [decks, setDecks] = useState<CloudDeckMetadata[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [wizard, setWizard] = useState<WizardStep>("closed")
+  const [url, setUrl] = useState("")
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [createDeck] = useCreateCloudDeckMutation()
+  const [updateDeck] = useUpdateCloudDeckMutation()
+  const [deleteDeck] = useDeleteCloudDeckMutation()
 
-  useEffect(() => {
-    let disposed = false
-    void Promise.all([
-      repositories.decks.list(ownerId),
-      ownerId === deviceDeckOwnerId
-        ? Promise.resolve([])
-        : repositories.decks.list(deviceDeckOwnerId),
-    ])
-      .then(([records, legacyRecords]) => {
-        if (disposed) return
-        setDecks(records)
-        setDeviceDecks(
-          legacyRecords.filter(
-            legacy => !records.some(record => record.id === legacy.id),
-          ),
-        )
-        setStatus("ready")
-      })
-      .catch(() => {
-        if (!disposed) setStatus("error")
-      })
-    return () => {
-      disposed = true
+  const load = useCallback(async () => {
+    if (authState.status !== "signed-in" || !repository) {
+      setDecks([])
+      setStatus("ready")
+      return
     }
-  }, [ownerId])
-
-  const removeDeck = async (deck: DeckSnapshot, deckOwnerId = ownerId) => {
+    setStatus("loading")
     try {
-      await repositories.decks.delete(deck.id, deckOwnerId)
-      if (deckOwnerId === deviceDeckOwnerId) {
-        setDeviceDecks(current =>
-          current.filter(candidate => candidate.id !== deck.id),
-        )
-      } else {
-        setDecks(current =>
-          current.filter(candidate => candidate.id !== deck.id),
-        )
-      }
-      setMessage(`${deck.name} is uit jouw decklijst verwijderd.`)
+      setDecks(await repository.list(authState.user.uid))
+      setStatus("ready")
     } catch {
-      setMessage(`${deck.name} kon niet worden verwijderd.`)
-    } finally {
-      setConfirmDeleteId(null)
+      setStatus("error")
+    }
+  }, [authState, repository])
+
+  useEffect(() => void load(), [load])
+
+  const submitImport = async () => {
+    setWizard("importing")
+    setMessage(null)
+    try {
+      const result = await createDeck({ url: url.trim() }).unwrap()
+      setDecks(current => [
+        result.createCloudDeck as CloudDeckMetadata,
+        ...current,
+      ])
+      setWizard("success")
+      setMessage(
+        `${result.createCloudDeck.name} is aan je Deck Library toegevoegd.`,
+      )
+    } catch (error) {
+      const duplicate = JSON.stringify(error).includes("DECK_ALREADY_IMPORTED")
+      setWizard("reference")
+      setMessage(
+        duplicate
+          ? "Dit deck staat al in je bibliotheek. Gebruik Update."
+          : "Het deck kon niet veilig worden geïmporteerd.",
+      )
     }
   }
 
-  const claimDeviceDeck = async (deck: DeckSnapshot) => {
+  const update = async (deck: CloudDeckMetadata) => {
+    setMessage(`${deck.name} bijwerken…`)
     try {
-      await repositories.decks.save(deck, ownerId)
-      await repositories.decks.delete(deck.id, deviceDeckOwnerId)
-      const [nextDecks, nextDeviceDecks] = await Promise.all([
-        repositories.decks.list(ownerId),
-        repositories.decks.list(deviceDeckOwnerId),
-      ])
-      setDecks(nextDecks)
-      setDeviceDecks(nextDeviceDecks)
-      setMessage(`${deck.name} is aan jouw account gekoppeld.`)
+      const result = await updateDeck({ deckKey: deck.deckKey }).unwrap()
+      const next = result.updateCloudDeck as CloudDeckMetadata
+      setDecks(current =>
+        current.map(candidate =>
+          candidate.deckKey === next.deckKey ? next : candidate,
+        ),
+      )
+      setMessage(`${next.name} is bijgewerkt.`)
     } catch {
-      setMessage(`${deck.name} kon niet aan jouw account worden gekoppeld.`)
+      setMessage(
+        `Bijwerken van ${deck.name} mislukte. De vorige versie is behouden.`,
+      )
+    }
+  }
+
+  const remove = async (deck: CloudDeckMetadata) => {
+    try {
+      await deleteDeck({ deckKey: deck.deckKey }).unwrap()
+      setDecks(current =>
+        current.filter(candidate => candidate.deckKey !== deck.deckKey),
+      )
+      setMessage(
+        `${deck.name} is verwijderd. Bestaande battles blijven behouden.`,
+      )
+    } catch {
+      setMessage(`${deck.name} kon niet worden verwijderd.`)
+    } finally {
+      setConfirmDelete(null)
     }
   }
 
   return (
-    <AppShell>
-      <section className="content-page">
-        <span className="eyebrow">Jouw lokale, onveranderlijke snapshots</span>
-        <h1>Decks beheren</h1>
-        <p>
-          Deze lijst is gekoppeld aan de huidige gebruiker op dit apparaat. Een
-          lopende battle verandert niet wanneer je een deck uit de lijst
-          verwijdert.
-        </p>
+    <AppShell activeRoute="/decks">
+      <section className="content-page deck-library-page">
+        <header className="deck-library-hero">
+          <div>
+            <span className="eyebrow">Jouw cloudcollectie</span>
+            <h1>Deck Library</h1>
+            <p>
+              Beheer je opgeslagen decks hier. Updates gebeuren alleen wanneer
+              jij daarvoor kiest.
+            </p>
+          </div>
+          {authState.status === "signed-in" ? (
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={() => {
+                setWizard("provider")
+              }}
+            >
+              + Deck toevoegen
+            </button>
+          ) : null}
+        </header>
+
         {message ? (
-          <p className="inline-message" role="status">
+          <p className="inline-message" role="status" aria-live="polite">
             {message}
           </p>
         ) : null}
-        <div className="content-card">
-          <h2>Opgeslagen decks</h2>
-          {status === "loading" ? <p>Decks laden…</p> : null}
-          {status === "error" ? (
-            <p role="alert">De lokale deckopslag kon niet worden gelezen.</p>
-          ) : null}
-          {status === "ready" && decks.length === 0 ? (
-            <p>Je hebt nog geen deck onder deze gebruiker opgeslagen.</p>
-          ) : null}
-          {decks.length ? (
-            <ul className="managed-deck-list">
-              {decks.map(deck => (
-                <li key={deck.id}>
+        {authState.status !== "signed-in" ? (
+          <div className="content-card deck-library-empty">
+            <h2>Log in voor je Deck Library</h2>
+            <p>
+              Offline battles en lokale imports blijven zonder account
+              beschikbaar.
+            </p>
+            <AppLink className="button button--primary" to="/online">
+              Naar inloggen
+            </AppLink>
+          </div>
+        ) : status === "loading" ? (
+          <div
+            className="deck-library-grid"
+            aria-busy="true"
+            aria-label="Decks laden"
+          >
+            <article className="deck-tile deck-tile--skeleton" />
+            <article className="deck-tile deck-tile--skeleton" />
+          </div>
+        ) : status === "error" ? (
+          <div className="content-card" role="alert">
+            <h2>Je collectie kon niet worden geladen</h2>
+            <p>Controleer je verbinding en probeer opnieuw.</p>
+            <button
+              className="button button--secondary"
+              onClick={() => void load()}
+            >
+              Opnieuw proberen
+            </button>
+          </div>
+        ) : decks.length === 0 ? (
+          <div className="content-card deck-library-empty">
+            <h2>Je collectie wacht op het eerste deck</h2>
+            <p>
+              Voeg een openbaar Archidekt-deck toe. Moxfield en ManaBox volgen
+              in latere features.
+            </p>
+            <button
+              className="button button--primary"
+              onClick={() => {
+                setWizard("provider")
+              }}
+            >
+              + Deck toevoegen
+            </button>
+          </div>
+        ) : (
+          <div className="deck-library-grid">
+            {decks.map(deck => (
+              <article className="deck-tile" key={deck.deckKey}>
+                <div className="deck-tile__top">
+                  <span className="mode-badge">Archidekt</span>
+                  <span>{deck.format ?? "Deck"}</span>
+                </div>
+                <h2>{deck.name}</h2>
+                <p>{deck.commanderSummary ?? "Geen commander opgegeven"}</p>
+                <dl>
                   <div>
-                    <strong>{deck.name}</strong>
-                    <span>
-                      {deck.source} {deck.sourceId} · {deckCardCount(deck)}{" "}
-                      kaarten
-                    </span>
+                    <dt>Kaarten</dt>
+                    <dd>{deck.cardCount}</dd>
                   </div>
-                  {confirmDeleteId === deck.id ? (
-                    <div className="managed-deck-list__actions">
+                  <div>
+                    <dt>Bijgewerkt</dt>
+                    <dd>{dateLabel(deck.updatedAt)}</dd>
+                  </div>
+                </dl>
+                <div className="deck-tile__actions">
+                  <button
+                    className="button button--secondary"
+                    onClick={() => void update(deck)}
+                  >
+                    Update
+                  </button>
+                  {confirmDelete === deck.deckKey ? (
+                    <>
                       <button
                         className="button button--secondary"
-                        type="button"
                         onClick={() => {
-                          setConfirmDeleteId(null)
+                          setConfirmDelete(null)
                         }}
                       >
                         Annuleren
                       </button>
                       <button
                         className="button button--danger"
-                        type="button"
-                        onClick={() => void removeDeck(deck)}
+                        onClick={() => void remove(deck)}
                       >
-                        Definitief verwijderen
+                        Bevestig verwijderen
                       </button>
-                    </div>
+                    </>
                   ) : (
                     <button
                       className="button button--secondary"
-                      type="button"
                       onClick={() => {
-                        setConfirmDeleteId(deck.id)
+                        setConfirmDelete(deck.deckKey)
                       }}
                     >
                       Verwijderen
                     </button>
                   )}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {deviceDecks.length ? (
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {wizard !== "closed" ? (
+          <div className="modal-backdrop" role="presentation">
             <section
-              className="legacy-deck-section"
-              aria-labelledby="legacy-decks-title"
+              className="confirm-dialog deck-wizard"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="deck-wizard-title"
             >
-              <span className="eyebrow">Herstel oude imports</span>
-              <h3 id="legacy-decks-title">
-                Decks van vóór de accountscheiding
-              </h3>
-              <p>
-                Deze imports staan nog veilig op dit apparaat, maar hadden nog
-                geen eigenaar. Koppel alleen jouw eigen decks aan dit account.
-              </p>
-              <ul className="managed-deck-list">
-                {deviceDecks.map(deck => (
-                  <li key={deck.id}>
-                    <div>
-                      <strong>{deck.name}</strong>
-                      <span>
-                        {deck.source} {deck.sourceId} · {deckCardCount(deck)}{" "}
-                        kaarten
-                      </span>
-                    </div>
-                    <div className="managed-deck-list__actions">
-                      <button
-                        className="button button--primary"
-                        type="button"
-                        onClick={() => void claimDeviceDeck(deck)}
-                      >
-                        Aan mijn account koppelen
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <span className="eyebrow">
+                Deck toevoegen ·{" "}
+                {wizard === "provider"
+                  ? "1 van 4"
+                  : wizard === "reference"
+                    ? "2 van 4"
+                    : wizard === "importing"
+                      ? "3 van 4"
+                      : "4 van 4"}
+              </span>
+              <h2 id="deck-wizard-title">
+                {wizard === "provider"
+                  ? "Kies een provider"
+                  : wizard === "reference"
+                    ? "Plak je deckreferentie"
+                    : wizard === "importing"
+                      ? "Deck importeren…"
+                      : "Deck toegevoegd"}
+              </h2>
+              {wizard === "provider" ? (
+                <div className="deck-provider-list">
+                  <button
+                    className="deck-provider is-selected"
+                    onClick={() => {
+                      setWizard("reference")
+                    }}
+                  >
+                    <strong>Archidekt</strong>
+                    <span>Beschikbaar</span>
+                  </button>
+                  <button className="deck-provider" disabled>
+                    <strong>Moxfield</strong>
+                    <span>Gepland</span>
+                  </button>
+                  <button className="deck-provider" disabled>
+                    <strong>ManaBox</strong>
+                    <span>Gepland</span>
+                  </button>
+                </div>
+              ) : null}
+              {wizard === "reference" ? (
+                <label>
+                  Openbare Archidekt-URL
+                  <input
+                    type="url"
+                    autoFocus
+                    value={url}
+                    placeholder="https://archidekt.com/decks/…"
+                    onChange={event => {
+                      setUrl(event.target.value)
+                    }}
+                  />
+                </label>
+              ) : null}
+              {wizard === "importing" ? (
+                <p aria-live="polite">
+                  De providerdata wordt gevalideerd en genormaliseerd. Sluit dit
+                  venster niet.
+                </p>
+              ) : null}
+              {wizard === "success" ? (
+                <p>
+                  Het deck staat nu klaar in je collectie en kan in een online
+                  lobby worden gekozen.
+                </p>
+              ) : null}
+              <div>
+                {wizard === "reference" ? (
+                  <button
+                    className="button button--primary"
+                    disabled={!url.trim()}
+                    onClick={() => void submitImport()}
+                  >
+                    Import starten
+                  </button>
+                ) : null}
+                {wizard === "success" ? (
+                  <button
+                    className="button button--primary"
+                    onClick={() => {
+                      setWizard("closed")
+                      setUrl("")
+                    }}
+                  >
+                    Naar collectie
+                  </button>
+                ) : null}
+                {wizard !== "importing" && wizard !== "success" ? (
+                  <button
+                    className="button button--secondary"
+                    onClick={() => {
+                      setWizard("closed")
+                    }}
+                  >
+                    Annuleren
+                  </button>
+                ) : null}
+              </div>
             </section>
-          ) : null}
-          <AppLink to="/offline" className="button button--primary">
-            Decks importeren
-          </AppLink>
-        </div>
+          </div>
+        ) : null}
       </section>
     </AppShell>
   )
