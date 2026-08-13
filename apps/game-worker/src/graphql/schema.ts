@@ -54,6 +54,8 @@ export const typeDefs = /* GraphQL */ `
     name: String!
     format: String
     commanderSummary: String
+    thumbnailImageRef: JSON
+    colorIdentity: [String!]
     cardCount: Int!
     createdAt: String!
     updatedAt: String!

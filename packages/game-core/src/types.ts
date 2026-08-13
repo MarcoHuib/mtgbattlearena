@@ -16,6 +16,8 @@ export type TurnPhase =
 export type TokenKind =
   "creature" | "treasure" | "food" | "clue" | "copy" | "emblem" | "other"
 
+export type ManaColor = "W" | "U" | "B" | "R" | "G"
+
 export type TokenDefinition = {
   kind: TokenKind
   name: string
@@ -57,6 +59,7 @@ export type CardDefinition = {
   oracleText?: string
   typeLine?: string
   manaValue?: number
+  colorIdentity?: ManaColor[]
   token?: TokenDefinition
 }
 
@@ -102,6 +105,8 @@ export type CloudDeckMetadata = {
   name: string
   format?: string
   commanderSummary?: string
+  thumbnailImageRef?: CardImageRef
+  colorIdentity?: ManaColor[]
   cardCount: number
   createdAt: string
   updatedAt: string

@@ -30,6 +30,13 @@ const deck: CloudDeckMetadata = {
   name: "Edgar Markov",
   format: "Commander",
   commanderSummary: "Edgar Markov",
+  thumbnailImageRef: {
+    resolver: 1,
+    imageId: "00000000-0000-4000-8000-000000000001",
+    faceIndex: 0,
+    variant: "normal",
+  },
+  colorIdentity: ["W", "B", "R"],
   cardCount: 100,
   createdAt: "2026-08-13T10:00:00.000Z",
   updatedAt: "2026-08-13T10:00:00.000Z",
@@ -154,6 +161,13 @@ test("voorkomt dubbele submit en toont succes met het nieuwe deck", async () => 
   await user.click(screen.getByRole("button", { name: "Sluiten" }))
   expect(
     await screen.findByRole("heading", { name: "Edgar Markov" }),
+  ).toBeVisible()
+  expect(screen.getByAltText("Illustratie van Edgar Markov")).toHaveAttribute(
+    "src",
+    expect.stringContaining("00000000-0000-4000-8000-000000000001"),
+  )
+  expect(
+    screen.getByLabelText("Kleuridentiteit: Wit, Zwart, Rood"),
   ).toBeVisible()
 })
 

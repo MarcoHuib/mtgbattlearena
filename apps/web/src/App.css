@@ -5921,17 +5921,17 @@ html.card-pointer-active .card.card--tapped {
 }
 .deck-library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr));
   gap: 1.25rem;
 }
 .deck-tile {
   position: relative;
   isolation: isolate;
-  min-height: 330px;
+  min-height: 390px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 1.45rem;
+  padding: 0;
   border: 1px solid rgba(211, 180, 111, 0.22);
   border-radius: 22px;
   background: linear-gradient(
@@ -5962,13 +5962,71 @@ html.card-pointer-active .card.card--tapped {
   background: rgba(39, 115, 94, 0.22);
   filter: blur(12px);
 }
+.deck-tile__cover {
+  position: relative;
+  height: 176px;
+  overflow: hidden;
+  background: #152126;
+}
+.deck-tile__cover > img,
+.deck-tile__cover-fallback {
+  width: 100%;
+  height: 100%;
+}
+.deck-tile__cover > img {
+  display: block;
+  object-fit: cover;
+  object-position: center 20%;
+  transform: scale(1.04);
+  transition: transform 350ms ease;
+}
+.deck-tile:hover .deck-tile__cover > img {
+  transform: scale(1.09);
+}
+.deck-tile__cover-fallback {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(
+      circle at 24% 20%,
+      rgba(220, 184, 99, 0.3),
+      transparent 28%
+    ),
+    linear-gradient(135deg, #244a42, #101922 68%);
+}
+.deck-tile__cover-fallback span {
+  color: rgba(244, 215, 145, 0.82);
+  font-family: var(--font-display);
+  font-size: 4.5rem;
+}
+.deck-tile__cover-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 10, 12, 0.28),
+    transparent 42%,
+    rgba(10, 17, 22, 0.92)
+  );
+}
 .deck-tile__top {
+  position: absolute;
+  inset: 0.8rem 0.85rem auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   color: var(--text-muted);
   font-size: 0.82rem;
+}
+.deck-tile__cover-meta {
+  position: absolute;
+  inset: auto 0.95rem 0.65rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.74rem;
 }
 .deck-provider-badge,
 .deck-format {
@@ -5991,55 +6049,67 @@ html.card-pointer-active .card.card--tapped {
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  margin: 1.35rem 0;
-}
-.deck-tile__monogram {
-  display: grid;
-  flex: 0 0 52px;
-  width: 52px;
-  aspect-ratio: 0.72;
-  place-items: center;
-  border: 1px solid rgba(218, 184, 104, 0.38);
-  border-radius: 8px;
-  background: linear-gradient(
-    145deg,
-    rgba(44, 101, 79, 0.7),
-    rgba(12, 23, 31, 0.9)
-  );
-  color: #f2d48d;
-  font-family: var(--font-display);
-  font-size: 1.45rem;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+  min-height: 76px;
+  margin: 0;
+  padding: 1rem 1.1rem 0.55rem;
 }
 .deck-tile h2 {
   margin: 0 0 0.25rem;
   line-height: 1.15;
+  font-size: 1.08rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .deck-tile__identity p {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.88rem;
 }
-.deck-tile dl {
-  display: grid;
-  grid-template-columns: 0.8fr 1.5fr;
-  gap: 0.8rem;
-  margin: auto 0 1.25rem;
-  padding: 1rem 0;
-  border-block: 1px solid rgba(255, 255, 255, 0.07);
-}
-.deck-tile dl div {
+.deck-color-identity {
   display: flex;
-  flex-direction: column;
+  min-height: 34px;
+  gap: 0.38rem;
+  padding: 0 1.1rem 0.75rem;
 }
-.deck-tile dt {
-  color: var(--text-muted);
+.deck-color {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  color: #11161a;
   font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.38),
+    0 3px 8px rgba(0, 0, 0, 0.3);
 }
-.deck-tile dd {
-  margin: 0.25rem 0 0;
+.deck-color--w {
+  background: #f4efcf;
+}
+.deck-color--u {
+  background: #6ab3d8;
+}
+.deck-color--b {
+  background: #8a8183;
+  color: #fff;
+}
+.deck-color--r {
+  background: #cf7457;
+}
+.deck-color--g {
+  background: #6b9f79;
+}
+.deck-color--c {
+  background: #aaa6a0;
+}
+.deck-tile__actions {
+  margin-top: auto;
+  padding: 0.85rem 1.1rem 1.05rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 .deck-tile__actions {
   display: flex;

@@ -77,6 +77,8 @@ users/{uid}/decks/{deckKey}
   name
   format
   commanderSummary
+  thumbnailImageRef
+  colorIdentity[]
   cardCount
   createdAt
   updatedAt
@@ -89,7 +91,12 @@ users/{uid}/decks/{deckKey}/content/current
 
 De exacte veldnamen worden tijdens Feature 1 afgestemd op het bestaande
 provider-neutrale domeincontract. Providerresponses zelf worden niet in
-Firestore opgeslagen.
+Firestore opgeslagen. `thumbnailImageRef` is één genormaliseerde
+kaartafbeeldingsreferentie en `colorIdentity` bevat uitsluitend
+provider-neutrale W/U/B/R/G-codes. Zo rendert de library een compacte visuele
+kaart zonder de volledige deckinhoud te lezen. Bestaande records zonder deze
+optionele velden behouden een fallback en krijgen de presentatiemetadata bij een
+bewuste Update.
 
 De scheiding is bewust: de Deck Library kan metadata tonen zonder bij iedere
 lijstweergave alle kaarten en definitions te downloaden. Firestoredocumenten

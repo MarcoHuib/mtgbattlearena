@@ -92,6 +92,8 @@ mutation CreateCloudDeck($url: String!) {
     name
     format
     commanderSummary
+    thumbnailImageRef
+    colorIdentity
     cardCount
     createdAt
     updatedAt
@@ -107,6 +109,8 @@ mutation UpdateCloudDeck($deckKey: ID!) {
     name
     format
     commanderSummary
+    thumbnailImageRef
+    colorIdentity
     cardCount
     createdAt
     updatedAt

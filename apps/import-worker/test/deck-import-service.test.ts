@@ -21,6 +21,7 @@ const rawDeck = (quantity = 1, commander = true) => ({
         oracleCard: {
           oracleId: "oracle-one",
           typeLine: "Legendary Creature",
+          colorIdentity: ["W", "B", "R"],
           tokens: [42],
         },
       },
@@ -102,6 +103,7 @@ describe("application DTO cache", () => {
     expect(result.deck.definitions[0]?.imageRefs).toEqual([
       { resolver: 1, imageId: id, faceIndex: 0, variant: "normal" },
     ])
+    expect(result.deck.definitions[0]?.colorIdentity).toEqual(["W", "B", "R"])
     expect(JSON.stringify(result.deck)).not.toMatch(
       /card-images\.archidekt|cards\.scryfall|imageUrl/,
     )
