@@ -35,9 +35,14 @@ const configurePlayers = async (page: Page, count: number) => {
   for (let index = 0; index < count; index += 1) {
     const slot = slots.nth(index)
     await slot
+      .getByRole("button", { name: "Deck via provider importeren" })
+      .click()
+    await page.getByRole("radio", { name: /Archidekt/ }).click()
+    await page.getByRole("button", { name: "Doorgaan" }).click()
+    await page
       .getByLabel("Openbare Archidekt-URL")
       .fill(`https://archidekt.com/decks/${index + 101}/deck`)
-    await slot.getByRole("button", { name: "Deck importeren" }).click()
+    await page.getByRole("button", { name: "Lokaal importeren" }).click()
     await expect(slot.getByText(`Deck ${index + 101}`)).toBeVisible()
   }
 }

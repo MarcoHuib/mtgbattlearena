@@ -193,6 +193,16 @@ lokale kopie/cache van clouddecks bevatten, maar die kopie is niet de cloud sour
 of truth. Offline-only decks of savegames blijven onder de local-firstgrenzen uit
 ADR 001 vallen.
 
+De offline setup toont dezelfde owner-scoped Deck Library-keuzes als de online
+lobby wanneer de gebruiker met een niet-anoniem account is aangemeld. Bij selectie leest de browser de
+authoritative huidige content onder Firestore Rules en legt daarvan eerst een
+immutable `DeckSnapshot` vast in IndexedDB. De lokale battle start uitsluitend
+met die snapshot en blijft daarna zonder Firebase beschikbaar. Reeds lokale
+snapshots blijven selecteerbaar. Uitgelogde en Firebase-anonieme gebruikers
+importeren via dezelfde providerwizard naar uitsluitend IndexedDB; die flow doet
+geen Firebase-write. De wizard houdt toekomstige providers zichtbaar als
+onbeschikbare capability zonder ze vooruitlopend te implementeren.
+
 ## Security-invarianten
 
 - Firestoredocumenten zijn owner-scoped op de geverifieerde Firebase-UID.

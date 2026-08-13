@@ -69,14 +69,27 @@ test("importeert twee decks, start een battle en verplaatst via het actiemenu", 
     await screen.findByRole("heading", { name: "Leg je battle klaar." }),
   ).toBeInTheDocument()
 
-  const inputs = screen.getAllByLabelText("Openbare Archidekt-URL")
-  await user.type(inputs[0]!, "https://archidekt.com/decks/111/verdant")
   await user.click(
-    screen.getAllByRole("button", { name: "Deck importeren" })[0]!,
+    screen.getAllByRole("button", { name: "Deck via provider importeren" })[0]!,
   )
+  await user.click(screen.getByRole("radio", { name: /Archidekt/ }))
+  await user.click(screen.getByRole("button", { name: "Doorgaan" }))
+  await user.type(
+    screen.getByLabelText("Openbare Archidekt-URL"),
+    "https://archidekt.com/decks/111/verdant",
+  )
+  await user.click(screen.getByRole("button", { name: "Lokaal importeren" }))
   expect(await screen.findByText("Verdant Resolve")).toBeInTheDocument()
-  await user.type(inputs[1]!, "https://archidekt.com/decks/222/tidal")
-  await user.click(screen.getByRole("button", { name: "Deck importeren" }))
+  await user.click(
+    screen.getByRole("button", { name: "Deck via provider importeren" }),
+  )
+  await user.click(screen.getByRole("radio", { name: /Archidekt/ }))
+  await user.click(screen.getByRole("button", { name: "Doorgaan" }))
+  await user.type(
+    screen.getByLabelText("Openbare Archidekt-URL"),
+    "https://archidekt.com/decks/222/tidal",
+  )
+  await user.click(screen.getByRole("button", { name: "Lokaal importeren" }))
 
   expect(await screen.findByText("Tidal Memory")).toBeInTheDocument()
   const start = screen.getByRole("button", { name: "Battle starten" })

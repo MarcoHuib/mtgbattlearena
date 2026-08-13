@@ -257,6 +257,48 @@
   background: rgb(0 0 0 / 22%);
 }
 
+.offline-deck-picker {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+  padding: 18px;
+  border: 1px solid rgb(142 214 201 / 14%);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgb(3 35 33 / 72%), rgb(2 20 22 / 58%));
+}
+
+.offline-deck-picker__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.offline-deck-picker__heading h3 {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font:
+    18px Georgia,
+    serif;
+}
+
+.offline-deck-picker__heading > span,
+.offline-deck-picker__state {
+  color: #83948a;
+  font-size: 11px;
+}
+
+.offline-deck-options {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 245px), 1fr));
+  max-height: 245px;
+  padding: 1px;
+}
+
+.offline-import-trigger {
+  margin-top: 16px;
+  width: fit-content;
+}
+
 .import-state {
   padding: 6px 9px;
   border-radius: 999px;
@@ -346,8 +388,8 @@
 }
 
 .deck-slot__message {
-  min-height: 92px;
-  margin-top: 22px;
+  min-height: 0;
+  margin-top: 16px;
   color: #83948a;
   font-size: 12px;
   line-height: 1.55;
