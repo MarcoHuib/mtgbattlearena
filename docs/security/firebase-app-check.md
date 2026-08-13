@@ -84,8 +84,10 @@ APP_ENV=staging|production
 ```
 
 Configure these as GitHub Environment Variables in both `staging` and
-`production`. No service-account key is required. Debug tokens are sensitive
-and must never be committed.
+`production`. Feature 1 additionally provisions
+`FIRESTORE_SERVICE_ACCOUNT_JSON` from a protected GitHub Environment Secret to
+the Game Worker as a Cloudflare Worker Secret. It is not frontend- or App
+Check-configuratie. Debug tokens are sensitive and must never be committed.
 
 At present Authentication is shared through Firebase project
 `mtgbattlearena`. Strict beta-to-production App Check isolation additionally

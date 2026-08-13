@@ -978,15 +978,6 @@ describe("Lobby Durable Object RPC", () => {
         uid: "host",
         displayName: "User host",
         deckSnapshotId: "deck-host",
-        cards: [
-          {
-            definitionId: "card-host",
-            name: "Testkaart",
-            imageRefs: [],
-            quantity: 10,
-            isCommander: false,
-          },
-        ],
       }),
       expect.objectContaining({
         uid: "guest",

@@ -5,10 +5,6 @@ import {
   type OnlineDeckSubmission,
 } from "@mtg/game-protocol"
 import {
-  onlineGameSeedSchema,
-  type OnlineGameSeed,
-} from "./game-server-adapter"
-import {
   FINISHED_LOBBY_RETENTION_MS,
   MAX_ACTIVE_LOBBIES_PER_UID,
   MAX_WAITING_LOBBIES_PER_UID,
@@ -36,6 +32,7 @@ import type {
   JoinLobbyResult,
   LobbyRoom,
   LobbySummary,
+  RegisteredGameSeed,
   RpcResult,
   VerifiedIdentity,
 } from "./types"
@@ -367,7 +364,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
     this.store.upsertDeck({
       gameId,
       uid: identity.uid,
-      submission: parsed.data,
+      // De lobby bewaart alleen de selectie-identiteit en presentatienaam.
+      // De Game Worker leest de authoritative content owner-scoped uit
+      // Firestore vlak voordat het Game Durable Object wordt geïnitialiseerd.
+      submission: { ...parsed.data, cards: [], tokens: [] },
       registeredAt: new Date().toISOString(),
     })
     return { ok: true, value: null }
@@ -452,7 +452,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
     gameId: string,
     identity: VerifiedIdentity,
   ): RpcResult<{
-    seed: OnlineGameSeed
+    seed: RegisteredGameSeed
     session: GameSession
   }> {
     const session = this.getSession(gameId, identity.uid)
@@ -491,7 +491,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
         "Iedere speler moet eerst een deck kiezen.",
       )
     }
-    const seed = onlineGameSeedSchema.safeParse({
+    const seed: RegisteredGameSeed = {
       gameId,
       title: lobby.title,
       players: players.map(participant => {
@@ -502,16 +502,8 @@ export class LobbyDurableObject extends DurableObject<Env> {
           displayName: participant.displayName,
           deckSnapshotId: deck?.deckSnapshotId ?? "",
           deckName: deck?.deckName ?? "",
-          cards: deck?.cards ?? [],
         }
       }),
-    })
-    if (!seed.success) {
-      return failure(
-        400,
-        "INVALID_REQUEST",
-        "De game-initialisatie is ongeldig.",
-      )
     }
     const reserved = this.store.reserveLobbyStart(
       gameId,
@@ -535,7 +527,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
       return failure(409, "LOBBY_NOT_READY", "Deze lobby kan niet starten.")
     }
     this.scheduleNextCleanup()
-    return { ok: true, value: { seed: seed.data, session } }
+    return { ok: true, value: { seed, session } }
   }
 
   releaseGameStart(

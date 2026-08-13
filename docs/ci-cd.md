@@ -207,14 +207,13 @@ Pas de deployment branch policy van GitHub Environment `staging` aan: alleen
 
 ### Gepland in Feature 1 — Firestore Deck Library
 
-ADR 016 voegt Firestore toe voor duurzame clouddecks. Implementeer dit niet als
-een verborgen handmatige consolewijziging. Wanneer Feature 1 wordt uitgevoerd:
+ADR 016 voegt Firestore toe voor duurzame clouddecks. Dit is geen verborgen
+handmatige consolewijziging:
 
-- voeg Firestore Security Rules als versiebeheerbaar bestand aan de repository toe;
-- voeg alleen noodzakelijke Firestore indexes/configuratie toe;
-- test Rules in CI/emulator voordat deployment mogelijk is;
-- deploy Rules/config via dezelfde Beta → Production-promotie als de code die
-  erop vertrouwt;
+- `firestore.rules` staat onder versiebeheer;
+- CI voert `npm run test:firestore-rules` tegen de emulator uit;
+- de releaseworkflow deployt dezelfde Rules bij zowel Beta- als
+  Production-promotie;
 - activeer App Check voor directe Firestore webreads pas nadat Beta bewezen werkt;
 - houd Firestore-data zelf buiten build artifacts en CI-fixtures.
 

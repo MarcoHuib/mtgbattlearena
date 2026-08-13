@@ -60,7 +60,7 @@ jobs:
                   import_worker=true
                   image_worker=true
                   ;;
-                apps/web/*|firebase.json|.firebaserc)
+                apps/web/*|firebase.json|firestore.rules|tests/firestore-rules.test.ts|.firebaserc)
                   frontend=true
                   ;;
                 apps/game-worker/*)
@@ -130,6 +130,9 @@ jobs:
       - name: Test frontend
         if: needs.changes.outputs.frontend == 'true'
         run: npm run test:web
+      - name: Test Firestore Security Rules in emulator
+        if: needs.changes.outputs.frontend == 'true'
+        run: npm run test:firestore-rules
       - name: Build production PWA
         if: needs.changes.outputs.frontend == 'true'
         run: npm run build --workspace @mtg/web

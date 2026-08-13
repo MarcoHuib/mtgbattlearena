@@ -109,6 +109,15 @@ const eslintConfig = config(
     },
   },
   {
+    files: ["tests/firestore-rules.test.ts"],
+    rules: {
+      "vitest/expect-expect": [
+        2,
+        { assertFunctionNames: ["assertSucceeds", "assertFails"] },
+      ],
+    },
+  },
+  {
     files: ["apps/web/src/features/offline/offlineService.ts"],
     rules: {
       "@typescript-eslint/no-invalid-void-type": [0],

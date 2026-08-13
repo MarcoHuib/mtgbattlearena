@@ -7,11 +7,14 @@ import {
 } from "./firestore-deck-library"
 import {
   createOnlineDeckSubmission,
-  onlineDeckSubmissionSchema,
   parseGameCommand,
   type PersonalGameSnapshot,
   type ServerEvent,
 } from "@mtg/game-protocol"
+import {
+  onlineGameSeedSchema,
+  type OnlineGameSeed,
+} from "./game-server-adapter"
 import { FirebaseTokenVerifier, readBearerToken } from "./auth"
 import {
   APP_CHECK_HEADER,
@@ -28,6 +31,7 @@ import type {
   GameSession,
   GameSnapshotResult,
   RpcResult,
+  RegisteredGameSeed,
   VerifiedIdentity,
 } from "./types"
 
@@ -56,6 +60,33 @@ const ticketRequestSchema = z
 let verifier: { projectId: string; instance: FirebaseTokenVerifier } | undefined
 let appCheckVerifier:
   { configuration: string; instance: FirebaseAppCheckVerifier } | undefined
+
+const firestoreLibrary = (env: Env) => {
+  if (!env.FIRESTORE_SERVICE_ACCOUNT_JSON)
+    throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
+      extensions: { code: "SERVICE_UNAVAILABLE" },
+    })
+  try {
+    const parsed = JSON.parse(
+      env.FIRESTORE_SERVICE_ACCOUNT_JSON,
+    ) as Partial<FirestoreCredentials>
+    if (
+      typeof parsed.client_email !== "string" ||
+      !parsed.client_email.trim() ||
+      typeof parsed.private_key !== "string" ||
+      !parsed.private_key.trim()
+    )
+      throw new Error("INVALID_FIRESTORE_CREDENTIALS")
+    return new FirestoreDeckLibrary(env.FIREBASE_PROJECT_ID, {
+      client_email: parsed.client_email,
+      private_key: parsed.private_key,
+    })
+  } catch {
+    throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
+      extensions: { code: "SERVICE_UNAVAILABLE" },
+    })
+  }
+}
 
 const getVerifier = (env: Env) => {
   if (!env.FIREBASE_PROJECT_ID) throw new Error("AUTH_NOT_CONFIGURED")
@@ -245,6 +276,7 @@ const startRegisteredGame = async (
   env: Env,
   gameId: string,
   identity: VerifiedIdentity,
+  deckLibrary: FirestoreDeckLibrary,
 ) => {
   const lobby = env.LOBBY.getByName("global")
   const prepared = resultValue(
@@ -252,8 +284,9 @@ const startRegisteredGame = async (
   )
   let initialized: GameSnapshotResult
   try {
+    const seed = await refreshRegisteredDecks(prepared.seed, deckLibrary)
     initialized = await env.GAMES.getByName(gameId).initializeGame(
-      prepared.seed,
+      seed,
       prepared.session,
     )
   } catch (caught) {
@@ -266,6 +299,44 @@ const startRegisteredGame = async (
     await lobby.releaseGameStart(gameId, identity)
   }
   return gameSnapshotValue(initialized)
+}
+
+const cloudDeckKeyFromSnapshotId = (snapshotId: string) => {
+  const match = /^cloud:([^:]+):/.exec(snapshotId)
+  if (!match?.[1]) throw new Error("INVALID_CLOUD_DECK_SELECTION")
+  return match[1]
+}
+
+export const refreshRegisteredDecks = async (
+  prepared: RegisteredGameSeed,
+  deckLibrary: Pick<FirestoreDeckLibrary, "get">,
+): Promise<OnlineGameSeed> => {
+  const players = await Promise.all(
+    prepared.players.map(async player => {
+      const deckKey = cloudDeckKeyFromSnapshotId(player.deckSnapshotId)
+      const record = await deckLibrary.get(player.uid, deckKey)
+      if (!record) throw new Error("REGISTERED_DECK_NOT_FOUND")
+      const snapshot = {
+        schemaVersion: 1 as const,
+        id: `cloud:${deckKey}:${record.content.importedAt}`,
+        source: record.metadata.provider,
+        sourceId: record.metadata.externalDeckKey,
+        sourceUrl: record.metadata.sourceUrl,
+        name: record.metadata.name,
+        ...(record.metadata.format ? { format: record.metadata.format } : {}),
+        importedAt: record.content.importedAt,
+        cards: record.content.cards,
+        definitions: record.content.definitions,
+      }
+      return {
+        ...createOnlineDeckSubmission(snapshot),
+        playerId: player.playerId,
+        uid: player.uid,
+        displayName: player.displayName,
+      }
+    }),
+  )
+  return onlineGameSeedSchema.parse({ ...prepared, players })
 }
 
 const abortRegisteredGame = async (
@@ -452,23 +523,7 @@ const graphqlRequest = async (request: Request, env: Env) => {
         ...(await lobby.resolveDeckRevision(result.deck)),
       }),
     )
-  const library = () => {
-    if (!env.FIRESTORE_SERVICE_ACCOUNT_JSON)
-      throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
-        extensions: { code: "SERVICE_UNAVAILABLE" },
-      })
-    let credentials: FirestoreCredentials
-    try {
-      credentials = JSON.parse(
-        env.FIRESTORE_SERVICE_ACCOUNT_JSON,
-      ) as FirestoreCredentials
-    } catch {
-      throw new GraphQLError("Deckopslag is niet geconfigureerd.", {
-        extensions: { code: "SERVICE_UNAVAILABLE" },
-      })
-    }
-    return new FirestoreDeckLibrary(env.FIREBASE_PROJECT_ID, credentials)
-  }
+  const library = () => firestoreLibrary(env)
   const yoga = createGraphQLYoga({
     request: resolvedRequest,
     env,
@@ -543,7 +598,7 @@ const graphqlRequest = async (request: Request, env: Env) => {
     personalSnapshot: (gameId, verifiedIdentity) =>
       personalSnapshot(env, gameId, verifiedIdentity),
     startGame: (gameId, verifiedIdentity) =>
-      startRegisteredGame(env, gameId, verifiedIdentity),
+      startRegisteredGame(env, gameId, verifiedIdentity, library()),
     abortGame: (gameId, verifiedIdentity) =>
       abortRegisteredGame(env, gameId, verifiedIdentity),
   })
@@ -624,16 +679,23 @@ const routeRequest = async (request: Request, env: Env) => {
     await requireAppCheck(request, env)
     const gameId = decodeURIComponent(lobbyActionRoute[1])
     if (lobbyActionRoute[2] === "deck" && request.method === "PUT") {
-      const submission = onlineDeckSubmissionSchema.parse(
-        await readJson(request, 512_000),
-      )
-      return resultResponse(
-        await lobby.registerDeck(gameId, identity, submission),
+      return error(
+        410,
+        "DECK_SELECTION_REQUIRES_LIBRARY_KEY",
+        "Kies een opgeslagen deck via de Deck Library.",
       )
     }
     if (lobbyActionRoute[2] === "start" && request.method === "POST") {
       try {
-        return json(await startRegisteredGame(env, gameId, identity), 201)
+        return json(
+          await startRegisteredGame(
+            env,
+            gameId,
+            identity,
+            firestoreLibrary(env),
+          ),
+          201,
+        )
       } catch (caught) {
         if (
           caught instanceof GraphQLError &&
