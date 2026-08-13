@@ -61,7 +61,7 @@ const isImportedDeck = (value: unknown): value is ImportedDeck => {
 
 export const importedDeckCacheKey = (provider: string, sourceId: string) =>
   new Request(
-    `https://api.mtgbattlearena.nl/__internal-cache/imported-deck/v2/${encodeURIComponent(provider)}/${encodeURIComponent(sourceId)}`,
+    `https://api.mtgbattlearena.nl/__internal-cache/imported-deck/v3/${encodeURIComponent(provider)}/${encodeURIComponent(sourceId)}`,
   )
 
 const providers = [archidektProvider]

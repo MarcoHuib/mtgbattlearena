@@ -80,6 +80,17 @@ test("herkent uitsluitend veilige Archidekt deck-URL's", () => {
   }
 })
 
+test("normaliseert actuele Archidekt-kleurnamen naar WUBRG", async () => {
+  const deck = rawDeck()
+  deck.cards[0]!.card.oracleCard.colorIdentity = ["White", "Black", "Red"]
+  const result = await createDeckImportService({
+    cache: new MemoryCache(),
+    fetcher: fetcher(deck),
+  }).importFromUrl("https://archidekt.com/decks/123")
+
+  expect(result.deck.definitions[0]?.colorIdentity).toEqual(["W", "B", "R"])
+})
+
 test("een willekeurige host kan nooit een uitgaande fetch afdwingen", async () => {
   const upstream = vi.fn()
   await expect(
@@ -200,10 +211,10 @@ describe("application DTO cache", () => {
     expect(cachedValue).toMatchObject({ name: "Provider Neutral" })
   })
 
-  test("negeert een legacy raw cache-entry en schrijft een geldig v2 DTO", async () => {
+  test("negeert een legacy raw cache-entry en schrijft een geldig v3 DTO", async () => {
     const cache = new MemoryCache()
     const key = importedDeckCacheKey("archidekt", "123")
-    expect(key.url).toContain("/imported-deck/v2/archidekt/123")
+    expect(key.url).toContain("/imported-deck/v3/archidekt/123")
     expect(new URL(key.url).hostname).not.toBe("cache.internal")
     cache.values.set(key.url, Response.json(rawDeck()))
     const diagnostics: DeckImportDiagnostic[] = []
