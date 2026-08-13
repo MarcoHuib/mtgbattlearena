@@ -188,11 +188,11 @@ target `production`. Er zijn geen Preview Channels.
 
 Beide GitHub Environments hebben nodig:
 
-| Secret                                    | Inhoud                                                                  |
-| ----------------------------------------- | ----------------------------------------------------------------------- |
-| `FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA` | Service-account JSON met Hostingrechten in het gedeelde Firebaseproject |
-| `CLOUDFLARE_API_TOKEN`                    | Scoped token voor de betreffende Workers en routes                      |
-| `CLOUDFLARE_ACCOUNT_ID`                   | Cloudflare-account met de Workers                                       |
+| Secret                                    | Inhoud                                                                       |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| `FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA` | Service-account JSON voor Hosting/Rules en de benodigde Firestore-deckwrites |
+| `CLOUDFLARE_API_TOKEN`                    | Scoped token voor de betreffende Workers en routes                           |
+| `CLOUDFLARE_ACCOUNT_ID`                   | Cloudflare-account met de Workers                                            |
 
 Configureer deze niet-geheime GitHub Repository Variables eenmaal voor beide
 omgevingen:
@@ -239,12 +239,12 @@ handmatige consolewijziging:
 - activeer App Check voor directe Firestore webreads pas nadat Beta bewezen werkt;
 - houd Firestore-data zelf buiten build artifacts en CI-fixtures.
 
-Runtime serverwrites naar Firestore mogen niet de bestaande Firebase Hosting-
-deploymentcredential hergebruiken alleen omdat die al beschikbaar is. Kies een
-afzonderlijke least-privilege servercredential/IAM-identiteit wanneer server-IAM
-nodig is en bewaar die uitsluitend als Cloudflare runtime secret. Als GitHub
-Actions die credential provisiont, mag de waarde alleen uit een protected GitHub
-Environment Secret komen en nooit in runtime-config of logs terechtkomen.
+De releaseworkflow leest `FIREBASE_SERVICE_ACCOUNT_MTGBATTLEARENA` uitsluitend
+uit het protected GitHub Environment en provisiont dezelfde JSON onder de
+runtime-naam `FIRESTORE_SERVICE_ACCOUNT_JSON` als encrypted Cloudflare Worker
+Secret. De serviceaccount moet daarom naast Hosting/Rules ook uitsluitend de
+benodigde Firestore-deckwrites mogen uitvoeren. De waarde mag nooit in een
+Repository Variable, Wrangler-var, runtime-config of log terechtkomen.
 
 De webapp krijgt geen service-accountcredential. Directe webtoegang gebruikt
 Firebase Authentication + Security Rules + App Check en is in het doelmodel
