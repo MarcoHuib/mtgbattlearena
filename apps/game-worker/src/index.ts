@@ -21,6 +21,14 @@ import {
   FirebaseAppCheckVerifier,
   parseAllowedAppIds,
 } from "./app-check"
+import {
+  LOBBY_CREATION_RESTRICTED_CODE,
+  LOBBY_CREATION_RESTRICTED_MESSAGE,
+  LobbyCreationRestrictedError,
+  assertCanCreateLobby,
+  canCreateLobby,
+  resolveLobbyCreationMode,
+} from "./multiplayer-access"
 import { GameDurableObject } from "./game-durable-object"
 import { LobbyDurableObject } from "./lobby-durable-object"
 import { GraphQLError } from "graphql"
@@ -655,22 +663,28 @@ const routeRequest = async (request: Request, env: Env) => {
     return graphqlRequest(request, env)
   }
 
-  const lobby = env.LOBBY.getByName("global")
-
-  if (request.method === "GET" && url.pathname === "/api/online/lobbies") {
+  if (request.method === "GET" && url.pathname === "/api/online/access") {
     const identity = request.headers.has("Authorization")
       ? await authenticate(request, env)
       : null
     await requireAppCheck(request, env)
-    return json(
-      await lobby.listPublicLobbies(identity?.uid),
-      200,
-      identity ? undefined : { "Cache-Control": "public, max-age=5" },
-    )
+    return json({
+      canCreateLobby: canCreateLobby(identity, env),
+      mode: resolveLobbyCreationMode(env),
+    })
+  }
+
+  const lobby = env.LOBBY.getByName("global")
+
+  if (request.method === "GET" && url.pathname === "/api/online/lobbies") {
+    const identity = await authenticate(request, env)
+    await requireAppCheck(request, env)
+    return json(await lobby.listPublicLobbies(identity.uid))
   }
 
   if (request.method === "POST" && url.pathname === "/api/online/lobbies") {
     const identity = await authenticate(request, env)
+    assertCanCreateLobby(identity, env)
     await requireAppCheck(request, env)
     const input = createLobbySchema.parse(await readJson(request))
     return resultResponse(await lobby.createLobby(input, identity), 201)
@@ -867,6 +881,17 @@ export default {
       if (caught instanceof z.ZodError || caught instanceof SyntaxError) {
         return withCors(
           error(400, "INVALID_REQUEST", "De request is ongeldig."),
+          request,
+          env,
+        )
+      }
+      if (caught instanceof LobbyCreationRestrictedError) {
+        return withCors(
+          error(
+            403,
+            LOBBY_CREATION_RESTRICTED_CODE,
+            LOBBY_CREATION_RESTRICTED_MESSAGE,
+          ),
           request,
           env,
         )

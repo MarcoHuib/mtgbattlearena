@@ -14,7 +14,10 @@ const contextWith = (
   } as LobbyDurableObjectStub
   return {
     request: new Request("https://api.example/graphql"),
-    env: { FIREBASE_PROJECT_ID: "project" } as Env,
+    env: {
+      FIREBASE_PROJECT_ID: "project",
+      LOBBY_CREATION_MODE: "public",
+    } as Env,
     identity,
     lobby,
     importDeck: vi.fn() as GraphQLContext["importDeck"],

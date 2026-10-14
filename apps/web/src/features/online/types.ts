@@ -115,9 +115,17 @@ export type OnlineGameConnection = {
   close(): void
 }
 
+export const multiplayerAccessSchema = z
+  .object({ canCreateLobby: z.boolean(), mode: z.enum(["beta", "public"]) })
+  .strict()
+
+export type MultiplayerAccess = z.infer<typeof multiplayerAccessSchema>
+
 export type OnlineGameService = {
   readonly kind: "mock" | "cloudflare"
   checkHealth(signal?: AbortSignal): Promise<ArenaHealth>
+  /** Uitsluitend UX-hint; de server dwingt toegang zelf af. */
+  checkAccess(signal?: AbortSignal): Promise<MultiplayerAccess>
   listPublicLobbies(signal?: AbortSignal): Promise<PublicLobby[]>
   createLobby(input: CreateLobbyInput): Promise<CreateLobbyResult>
   joinByCode(code: string): Promise<JoinLobbyResult>

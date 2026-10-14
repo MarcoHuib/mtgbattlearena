@@ -53,9 +53,10 @@ test("bekende persisted operation wordt in productie uitgevoerd", async () => {
       },
     } as unknown as Env,
   )
+  // De operatie wordt uitgevoerd, maar de lobbylijst is niet langer anoniem.
   expect(response.status).toBe(200)
-  await expect(response.json()).resolves.toEqual({
-    data: { publicLobbies: [] },
+  await expect(response.json()).resolves.toMatchObject({
+    errors: [{ extensions: { code: "UNAUTHENTICATED" } }],
   })
 })
 
