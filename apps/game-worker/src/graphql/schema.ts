@@ -2,7 +2,11 @@ import { GraphQLError, GraphQLScalarType, Kind } from "graphql"
 import { createSchema } from "graphql-yoga"
 import { z } from "zod"
 import type { GraphQLContext } from "./context"
-import { domainResult, requireIdentity } from "./errors"
+import {
+  domainResult,
+  requireIdentity,
+  requireLobbyCreatorIdentity,
+} from "./errors"
 
 const createLobbyInputSchema = z.object({
   title: z.string().trim().min(1).max(100),
@@ -208,7 +212,7 @@ export const schema = createSchema<GraphQLContext>({
         firebaseConfigured: Boolean(context.env.FIREBASE_PROJECT_ID),
       }),
       publicLobbies: async (_root, _args, context) =>
-        context.lobby.listPublicLobbies(context.identity?.uid),
+        context.lobby.listPublicLobbies(requireIdentity(context).uid),
       lobby: async (_root, args: { id: string }, context) =>
         domainResult(
           await context.lobby.getLobbyRoom(args.id, requireIdentity(context)),
@@ -231,7 +235,7 @@ export const schema = createSchema<GraphQLContext>({
         },
         context,
       ) => {
-        const identity = requireIdentity(context)
+        const identity = requireLobbyCreatorIdentity(context)
         const input = createLobbyInputSchema.parse({
           ...args.input,
           visibility: mapVisibility(args.input.visibility),

@@ -98,6 +98,42 @@ const LobbyCard = ({
   )
 }
 
+type MultiplayerAccessState = "checking" | "allowed" | "restricted" | "error"
+
+// Fail-closed: alles behalve een expliciete "allowed" van de server blokkeert
+// de multiplayer-UI. De server controleert toegang bij elk request opnieuw.
+const useMultiplayerAccess = (
+  onlineGames: OnlineGameService,
+  uid: string | null,
+  enabled: boolean,
+): MultiplayerAccessState => {
+  const [result, setResult] = useState<{
+    uid: string
+    state: MultiplayerAccessState
+  } | null>(null)
+  useEffect(() => {
+    if (!uid || !enabled) return
+    const controller = new AbortController()
+    onlineGames
+      .checkAccess(controller.signal)
+      .then(value => {
+        setResult({
+          uid,
+          state: value.canCreateLobby ? "allowed" : "restricted",
+        })
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return
+        setResult({ uid, state: "error" })
+      })
+    return () => {
+      controller.abort()
+    }
+  }, [enabled, onlineGames, uid])
+  if (!uid) return "restricted"
+  return result?.uid === uid ? result.state : "checking"
+}
+
 export const OnlineScreen = ({
   auth,
   onlineGames,
@@ -108,8 +144,13 @@ export const OnlineScreen = ({
   const arena = useArenaStatus()
   const arenaAvailable = arena.status === "online" || arena.status === "demo"
   const usesGraphQLQueries = onlineGames.kind === "cloudflare"
+  const signedInUid =
+    authState.status === "signed-in" ? authState.user.uid : null
+  const access = useMultiplayerAccess(onlineGames, signedInUid, arenaAvailable)
+  const canCreateLobby = access === "allowed"
+  const signedIn = authState.status === "signed-in"
   const publicLobbiesQuery = usePublicLobbiesQuery(undefined, {
-    skip: !usesGraphQLQueries || !arenaAvailable,
+    skip: !usesGraphQLQueries || !arenaAvailable || !signedIn,
     refetchOnFocus: true,
     pollingInterval: 30_000,
   })
@@ -157,13 +198,19 @@ export const OnlineScreen = ({
   )
 
   useEffect(() => {
-    if (!arenaAvailable || usesGraphQLQueries) return
+    if (!arenaAvailable || usesGraphQLQueries || !signedIn) return
     const controller = new AbortController()
     void loadLobbies(controller.signal)
     return () => {
       controller.abort()
     }
-  }, [arenaAvailable, authState.status, loadLobbies, usesGraphQLQueries])
+  }, [
+    arenaAvailable,
+    authState.status,
+    loadLobbies,
+    signedIn,
+    usesGraphQLQueries,
+  ])
 
   const graphqlLobbies = useMemo(
     () =>
@@ -487,7 +534,7 @@ export const OnlineScreen = ({
               ) : null}
             </section>
 
-            {authState.status === "signed-in" ? (
+            {signedIn ? (
               <div className="online-actions-grid">
                 <form
                   className="content-card online-form"
@@ -516,67 +563,88 @@ export const OnlineScreen = ({
                   </button>
                 </form>
 
-                <form
-                  className="content-card online-form"
-                  onSubmit={submitCreate}
-                >
-                  <span className="eyebrow">Nieuwe tafel</span>
-                  <h2>Game aanmaken</h2>
-                  <label>
-                    Naam
-                    <input
-                      value={createInput.title}
-                      maxLength={100}
-                      onChange={event => {
-                        setCreateInput(current => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }}
-                    />
-                  </label>
-                  <label>
-                    Aantal spelers
-                    <select
-                      value={createInput.maxPlayers}
-                      onChange={event => {
-                        setCreateInput(current => ({
-                          ...current,
-                          maxPlayers: Number(event.target.value),
-                        }))
-                      }}
-                    >
-                      {[2, 3, 4, 5, 6].map(count => (
-                        <option key={count} value={count}>
-                          {count}
-                          {count === 4 ? " (Commander-standaard)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Zichtbaarheid
-                    <select
-                      value={createInput.visibility}
-                      onChange={event => {
-                        const visibility = event.target
-                          .value as CreateLobbyInput["visibility"]
-                        setCreateInput(current => ({ ...current, visibility }))
-                      }}
-                    >
-                      <option value="public">Openbaar</option>
-                      <option value="private">Privé</option>
-                      <option value="invite-only">Alleen uitnodiging</option>
-                    </select>
-                  </label>
-                  <button
-                    className="button button--primary"
-                    type="submit"
-                    disabled={creating || !createInput.title.trim()}
+                {canCreateLobby ? (
+                  <form
+                    className="content-card online-form"
+                    onSubmit={submitCreate}
                   >
-                    {creating ? "Maken…" : "Lobby maken"}
-                  </button>
-                </form>
+                    <span className="eyebrow">Nieuwe tafel</span>
+                    <h2>Game aanmaken</h2>
+                    <label>
+                      Naam
+                      <input
+                        value={createInput.title}
+                        maxLength={100}
+                        onChange={event => {
+                          setCreateInput(current => ({
+                            ...current,
+                            title: event.target.value,
+                          }))
+                        }}
+                      />
+                    </label>
+                    <label>
+                      Aantal spelers
+                      <select
+                        value={createInput.maxPlayers}
+                        onChange={event => {
+                          setCreateInput(current => ({
+                            ...current,
+                            maxPlayers: Number(event.target.value),
+                          }))
+                        }}
+                      >
+                        {[2, 3, 4, 5, 6].map(count => (
+                          <option key={count} value={count}>
+                            {count}
+                            {count === 4 ? " (Commander-standaard)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Zichtbaarheid
+                      <select
+                        value={createInput.visibility}
+                        onChange={event => {
+                          const visibility = event.target
+                            .value as CreateLobbyInput["visibility"]
+                          setCreateInput(current => ({
+                            ...current,
+                            visibility,
+                          }))
+                        }}
+                      >
+                        <option value="public">Openbaar</option>
+                        <option value="private">Privé</option>
+                        <option value="invite-only">Alleen uitnodiging</option>
+                      </select>
+                    </label>
+                    <button
+                      className="button button--primary"
+                      type="submit"
+                      disabled={creating || !createInput.title.trim()}
+                    >
+                      {creating ? "Maken…" : "Lobby maken"}
+                    </button>
+                  </form>
+                ) : access === "checking" ? null : (
+                  <section
+                    className="content-card online-form"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <span className="eyebrow">Bèta</span>
+                    <h2>Online multiplayer is momenteel in bèta.</h2>
+                    <p>
+                      {access === "error"
+                        ? "De bètastatus kon niet worden gecontroleerd, dus nieuwe lobby’s zijn nu uitgeschakeld. "
+                        : "Nieuwe lobby’s aanmaken is nog niet beschikbaar. Binnenkort kun je hier zelf tafels openen! "}
+                      Je kunt wel deelnemen aan bestaande lobby’s met een code
+                      of via de lijst hieronder.
+                    </p>
+                  </section>
+                )}
               </div>
             ) : null}
 
@@ -586,52 +654,54 @@ export const OnlineScreen = ({
               </p>
             ) : null}
 
-            <section
-              className="lobby-section"
-              aria-labelledby="public-lobbies-title"
-            >
-              <div className="section-heading">
-                <div>
-                  <span className="eyebrow">Openbare tafels</span>
-                  <h2 id="public-lobbies-title">Lobby’s</h2>
+            {signedIn ? (
+              <section
+                className="lobby-section"
+                aria-labelledby="public-lobbies-title"
+              >
+                <div className="section-heading">
+                  <div>
+                    <span className="eyebrow">Openbare tafels</span>
+                    <h2 id="public-lobbies-title">Lobby’s</h2>
+                  </div>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => {
+                      if (usesGraphQLQueries) void publicLobbiesQuery.refetch()
+                      else void loadLobbies()
+                    }}
+                  >
+                    Vernieuwen
+                  </button>
                 </div>
-                <button
-                  className="button button--secondary"
-                  type="button"
-                  onClick={() => {
-                    if (usesGraphQLQueries) void publicLobbiesQuery.refetch()
-                    else void loadLobbies()
-                  }}
-                >
-                  Vernieuwen
-                </button>
-              </div>
-              {lobbyStatus === "loading" ? (
-                <p aria-live="polite">Lobby’s laden…</p>
-              ) : lobbyStatus === "error" ? (
-                <div className="empty-state" role="alert">
-                  <strong>Lobby’s konden niet worden geladen.</strong>
-                  {lobbyError ? <span>{lobbyError}</span> : null}
-                  <span>Offline spelen blijft volledig beschikbaar.</span>
-                </div>
-              ) : lobbyStatus === "empty" ? (
-                <div className="empty-state">
-                  <strong>Er zijn nog geen openbare lobby’s.</strong>
-                  <span>Maak de eerste tafel of neem deel met een code.</span>
-                </div>
-              ) : (
-                <div className="lobby-list">
-                  {lobbies.map(lobby => (
-                    <LobbyCard
-                      key={lobby.id}
-                      lobby={lobby}
-                      signedIn={authState.status === "signed-in"}
-                      onOpen={openLobby}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+                {lobbyStatus === "loading" ? (
+                  <p aria-live="polite">Lobby’s laden…</p>
+                ) : lobbyStatus === "error" ? (
+                  <div className="empty-state" role="alert">
+                    <strong>Lobby’s konden niet worden geladen.</strong>
+                    {lobbyError ? <span>{lobbyError}</span> : null}
+                    <span>Offline spelen blijft volledig beschikbaar.</span>
+                  </div>
+                ) : lobbyStatus === "empty" ? (
+                  <div className="empty-state">
+                    <strong>Er zijn nog geen openbare lobby’s.</strong>
+                    <span>Maak de eerste tafel of neem deel met een code.</span>
+                  </div>
+                ) : (
+                  <div className="lobby-list">
+                    {lobbies.map(lobby => (
+                      <LobbyCard
+                        key={lobby.id}
+                        lobby={lobby}
+                        signedIn={authState.status === "signed-in"}
+                        onOpen={openLobby}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
           </>
         )}
       </section>

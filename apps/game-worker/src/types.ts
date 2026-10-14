@@ -221,6 +221,7 @@ export type Env = {
   FIREBASE_ALLOWED_APP_IDS?: string
   APP_CHECK_ENFORCEMENT?: string
   APP_ENV?: string
+  LOBBY_CREATION_MODE?: string
   ALLOWED_ORIGIN?: string
   REALTIME_DEBUG?: string
   RELEASE_VERSION?: string

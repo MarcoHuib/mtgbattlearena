@@ -188,7 +188,7 @@ test("toont auth, 2–6 spelerkeuze en opent een aparte hostwachtkamer", async (
   expect(
     await screen.findByRole("heading", { name: "Niet ingelogd" }),
   ).toBeInTheDocument()
-  expect(await screen.findByText("Casual Commander")).toBeInTheDocument()
+  expect(screen.queryByText("Casual Commander")).not.toBeInTheDocument()
   expect(screen.queryByLabelText("Aantal spelers")).not.toBeInTheDocument()
   expect(screen.queryByLabelText("Gamecode")).not.toBeInTheDocument()
 
@@ -198,8 +198,9 @@ test("toont auth, 2–6 spelerkeuze en opent een aparte hostwachtkamer", async (
   expect(
     await screen.findByRole("heading", { name: /Ingelogd als player/ }),
   ).toBeInTheDocument()
+  expect(await screen.findByText("Casual Commander")).toBeInTheDocument()
 
-  const playerCount = screen.getByLabelText("Aantal spelers")
+  const playerCount = await screen.findByLabelText("Aantal spelers")
   expect(
     within(playerCount)
       .getAllByRole("option")
@@ -312,6 +313,7 @@ test("toont een bruikbare mobiele netwerkfout bij inloggen", async () => {
 test("toont afzonderlijke lege en foutstatussen zonder offline te blokkeren", async () => {
   window.history.replaceState({}, "", "/online")
   const auth = new MockAuthService()
+  await auth.signInWithEmail("tester@example.com")
   const empty = renderWithProviders(
     <App services={{ auth, onlineGames: new EmptyOnlineGameService() }} />,
   )
@@ -329,6 +331,60 @@ test("toont afzonderlijke lege en foutstatussen zonder offline te blokkeren", as
   expect(
     screen.getByText("Offline spelen blijft volledig beschikbaar."),
   ).toBeInTheDocument()
+})
+
+class RestrictedOnlineGameService extends MockOnlineGameService {
+  readonly listCalls = vi.fn()
+
+  override checkAccess() {
+    return Promise.resolve({ canCreateLobby: false, mode: "beta" as const })
+  }
+
+  override listPublicLobbies(): Promise<OnlineLobby[]> {
+    this.listCalls()
+    return Promise.resolve([])
+  }
+}
+
+class BrokenAccessOnlineGameService extends MockOnlineGameService {
+  override checkAccess(): Promise<never> {
+    return Promise.reject(new Error("niet bereikbaar"))
+  }
+}
+
+test("andere gebruiker ziet lobby’s en kan deelnemen, maar niet aanmaken", async () => {
+  window.history.replaceState({}, "", "/online")
+  const auth = new MockAuthService()
+  await auth.signInWithEmail("other@example.com")
+  const onlineGames = new RestrictedOnlineGameService()
+  renderWithProviders(<App services={{ auth, onlineGames }} />)
+
+  expect(
+    await screen.findByText("Online multiplayer is momenteel in bèta."),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText("Gamecode")).toBeInTheDocument()
+  expect(
+    screen.queryByRole("button", { name: "Lobby maken" }),
+  ).not.toBeInTheDocument()
+  expect(onlineGames.listCalls).toHaveBeenCalled()
+})
+
+test("een mislukte toegangscheck schakelt alleen lobbycreatie uit (fail-closed)", async () => {
+  window.history.replaceState({}, "", "/online")
+  const auth = new MockAuthService()
+  await auth.signInWithEmail("tester@example.com")
+  renderWithProviders(
+    <App
+      services={{ auth, onlineGames: new BrokenAccessOnlineGameService() }}
+    />,
+  )
+  expect(
+    await screen.findByText("Online multiplayer is momenteel in bèta."),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText("Gamecode")).toBeInTheDocument()
+  expect(
+    screen.queryByRole("button", { name: "Lobby maken" }),
+  ).not.toBeInTheDocument()
 })
 
 test("toont serverstatus alleen in de hoofdbalk en blokkeert online acties bij uitval", async () => {

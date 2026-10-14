@@ -2,6 +2,7 @@ import {
   arenaHealthSchema,
   lobbyListSchema,
   lobbyRoomSchema,
+  multiplayerAccessSchema,
   onlineLobbySchema,
   type AuthService,
   type AuthState,
@@ -9,6 +10,7 @@ import {
   type CreateLobbyInput,
   type JoinLobbyResult,
   type OnlineGameService,
+  type MultiplayerAccess,
   type OnlineLobby,
 } from "./types"
 import { createFirebaseAuthPort, readFirebaseConfig } from "./firebaseAuth"
@@ -271,6 +273,10 @@ export class MockOnlineGameService implements OnlineGameService {
     })
   }
 
+  checkAccess(): Promise<MultiplayerAccess> {
+    return Promise.resolve({ canCreateLobby: true, mode: "public" })
+  }
+
   async listPublicLobbies(signal?: AbortSignal) {
     await wait()
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
@@ -417,6 +423,12 @@ export class CloudflareOnlineGameService implements OnlineGameService {
   async checkHealth(signal?: AbortSignal) {
     return arenaHealthSchema.parse(
       await this.request("/api/online/health", { signal }, false),
+    )
+  }
+
+  async checkAccess(signal?: AbortSignal) {
+    return multiplayerAccessSchema.parse(
+      await this.request("/api/online/access", { signal }, "optional"),
     )
   }
 

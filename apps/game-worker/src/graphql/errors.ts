@@ -1,5 +1,10 @@
 import { GraphQLError } from "graphql"
 import { z } from "zod"
+import {
+  LOBBY_CREATION_RESTRICTED_CODE,
+  LOBBY_CREATION_RESTRICTED_MESSAGE,
+  canCreateLobby,
+} from "../multiplayer-access"
 import type { GraphQLContext } from "./context"
 import type { RpcResult, VerifiedIdentity } from "../types"
 
@@ -10,6 +15,19 @@ export const requireIdentity = (context: GraphQLContext): VerifiedIdentity => {
     })
   }
   return context.identity
+}
+
+/** Alleen voor lobbycreatie: authenticatie plus creator-allowlist (fail-closed). */
+export const requireLobbyCreatorIdentity = (
+  context: GraphQLContext,
+): VerifiedIdentity => {
+  const identity = requireIdentity(context)
+  if (!canCreateLobby(identity, context.env)) {
+    throw new GraphQLError(LOBBY_CREATION_RESTRICTED_MESSAGE, {
+      extensions: { code: LOBBY_CREATION_RESTRICTED_CODE },
+    })
+  }
+  return identity
 }
 
 export const domainResult = <T>(result: RpcResult<T>): T => {
@@ -48,6 +66,7 @@ export const maskGraphQLError = (error: unknown) => {
       [
         "UNAUTHENTICATED",
         "FORBIDDEN",
+        LOBBY_CREATION_RESTRICTED_CODE,
         "NOT_FOUND",
         "VALIDATION_ERROR",
         "CONFLICT",
